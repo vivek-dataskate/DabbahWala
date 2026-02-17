@@ -1,0 +1,23 @@
+from fastapi import FastAPI
+
+from app.routers import campaigns, delivery, events, lifecycle, opportunities, reports, sms, telnyx
+
+app = FastAPI(
+    title="DabbahWala Marketing System",
+    description="Lifecycle-driven marketing orchestration API",
+    version="0.1.0",
+)
+
+app.include_router(events.router, prefix="/api/events", tags=["events"])
+app.include_router(lifecycle.router, prefix="/api/lifecycle", tags=["lifecycle"])
+app.include_router(campaigns.router, prefix="/api/campaigns", tags=["campaigns"])
+app.include_router(sms.router, prefix="/api/sms", tags=["sms"])
+app.include_router(telnyx.router, prefix="/api/telnyx", tags=["telnyx"])
+app.include_router(delivery.router, prefix="/api/delivery", tags=["delivery"])
+app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
+app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opportunities"])
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
