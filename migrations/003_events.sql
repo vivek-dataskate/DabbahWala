@@ -1,6 +1,7 @@
 -- 003_events.sql
 -- Raw event intake: every open, click, order, call, SMS lands here
--- This is the "Data Intake" layer of the pipeline
+
+SET search_path TO dabbahwala;
 
 CREATE TABLE events (
     id          BIGSERIAL PRIMARY KEY,

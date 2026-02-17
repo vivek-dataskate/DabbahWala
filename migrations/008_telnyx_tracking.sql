@@ -1,8 +1,8 @@
 -- 008_telnyx_tracking.sql
 -- SMS messages, voice calls with transcripts, and delivery status
--- All linked to contacts for agent analysis and opportunity detection
 
--- SMS messages (inbound and outbound, including delivery staff comms)
+SET search_path TO dabbahwala;
+
 CREATE TABLE telnyx_messages (
     id              BIGSERIAL PRIMARY KEY,
     contact_id      BIGINT NOT NULL REFERENCES contacts(id),
@@ -10,9 +10,9 @@ CREATE TABLE telnyx_messages (
     from_number     TEXT NOT NULL,
     to_number       TEXT NOT NULL,
     body            TEXT,
-    telnyx_msg_id   TEXT,                       -- Telnyx message ID for tracking
-    status          TEXT,                        -- sent, delivered, failed
-    is_delivery_staff BOOLEAN DEFAULT false,     -- true if from delivery person
+    telnyx_msg_id   TEXT,
+    status          TEXT,
+    is_delivery_staff BOOLEAN DEFAULT false,
     metadata        JSONB DEFAULT '{}',
     sent_at         TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -21,7 +21,6 @@ CREATE INDEX idx_telnyx_msg_contact ON telnyx_messages (contact_id, sent_at DESC
 CREATE INDEX idx_telnyx_msg_delivery ON telnyx_messages (is_delivery_staff, sent_at DESC)
     WHERE is_delivery_staff = true;
 
--- Voice calls with transcripts
 CREATE TABLE telnyx_calls (
     id                BIGSERIAL PRIMARY KEY,
     contact_id        BIGINT NOT NULL REFERENCES contacts(id),
@@ -30,8 +29,8 @@ CREATE TABLE telnyx_calls (
     to_number         TEXT NOT NULL,
     duration_sec      INT,
     recording_url     TEXT,
-    transcript        TEXT,                       -- full call transcript for agent analysis
-    summary           TEXT,                       -- agent-generated call summary
+    transcript        TEXT,
+    summary           TEXT,
     is_delivery_staff BOOLEAN DEFAULT false,
     metadata          JSONB DEFAULT '{}',
     started_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -40,13 +39,12 @@ CREATE TABLE telnyx_calls (
 
 CREATE INDEX idx_telnyx_call_contact ON telnyx_calls (contact_id, started_at DESC);
 
--- Delivery status tracking
 CREATE TABLE delivery_status (
     id            BIGSERIAL PRIMARY KEY,
     contact_id    BIGINT NOT NULL REFERENCES contacts(id),
-    order_ref     TEXT,                           -- reference to the order
+    order_ref     TEXT,
     status        delivery_status_type NOT NULL,
-    updated_by    TEXT,                           -- delivery person name/ID
+    updated_by    TEXT,
     notes         TEXT,
     location      TEXT,
     metadata      JSONB DEFAULT '{}',

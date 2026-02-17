@@ -1,6 +1,7 @@
 -- 007_campaign_queue.sql
 -- Pending campaign moves for n8n to execute on Instantly
--- Part of the "Execution" layer: decisions translated into platform actions
+
+SET search_path TO dabbahwala;
 
 CREATE TABLE campaign_queue (
     id            BIGSERIAL PRIMARY KEY,

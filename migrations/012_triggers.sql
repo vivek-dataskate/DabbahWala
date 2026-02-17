@@ -1,7 +1,8 @@
 -- 012_triggers.sql
 -- Auto-update triggers for the contacts table
 
--- Trigger: auto-update updated_at on contacts
+SET search_path TO dabbahwala;
+
 CREATE OR REPLACE FUNCTION trigger_set_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql

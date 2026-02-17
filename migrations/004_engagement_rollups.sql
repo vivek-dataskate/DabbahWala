@@ -1,7 +1,7 @@
 -- 004_engagement_rollups.sql
 -- Pre-computed 7-day rolling metrics per contact
--- This is the "Evidence" layer: raw events aggregated into actionable metrics
--- Refreshed before each rule evaluation cycle
+
+SET search_path TO dabbahwala;
 
 CREATE TABLE engagement_rollups (
     contact_id    BIGINT PRIMARY KEY REFERENCES contacts(id),

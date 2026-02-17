@@ -1,8 +1,9 @@
 -- 011_fn_lifecycle_api.sql
 -- Functions that FastAPI/n8n call to interact with the lifecycle system
--- This is the API surface between the outside world and Postgres
 
--- EVENT INGESTION: called when webhooks arrive
+SET search_path TO dabbahwala;
+
+-- EVENT INGESTION
 CREATE OR REPLACE FUNCTION ingest_event(
     p_contact_email TEXT,
     p_event_type event_type,
@@ -10,24 +11,22 @@ CREATE OR REPLACE FUNCTION ingest_event(
 )
 RETURNS BIGINT
 LANGUAGE plpgsql
+SET search_path TO dabbahwala
 AS $$
 DECLARE
     v_contact_id BIGINT;
     v_event_id BIGINT;
 BEGIN
-    -- Find contact by email
     SELECT id INTO v_contact_id FROM contacts WHERE email = p_contact_email;
 
     IF v_contact_id IS NULL THEN
         RAISE EXCEPTION 'Contact not found: %', p_contact_email;
     END IF;
 
-    -- Insert the event
     INSERT INTO events (contact_id, event_type, metadata, occurred_at)
     VALUES (v_contact_id, p_event_type, p_metadata, now())
     RETURNING id INTO v_event_id;
 
-    -- Update denormalized order fields if this is an order event
     IF p_event_type = 'order_placed' THEN
         UPDATE contacts SET
             total_orders = total_orders + 1,
@@ -36,7 +35,6 @@ BEGIN
         WHERE id = v_contact_id;
     END IF;
 
-    -- Handle optout events immediately
     IF p_event_type IN ('unsubscribe', 'sms_stop') THEN
         UPDATE contacts SET
             lifecycle_segment = 'optout',
@@ -48,7 +46,6 @@ BEGIN
         WHERE id = v_contact_id
           AND lifecycle_segment != 'optout';
 
-        -- Log the optout decision
         INSERT INTO decision_log (contact_id, rule_id, prev_lifecycle, new_lifecycle, changes_applied)
         SELECT v_contact_id, r.id,
                (SELECT lifecycle_segment FROM contacts WHERE id = v_contact_id),
@@ -63,30 +60,25 @@ END;
 $$;
 
 
--- FULL LIFECYCLE CYCLE: refresh rollups then evaluate rules
+-- FULL LIFECYCLE CYCLE
 CREATE OR REPLACE FUNCTION run_lifecycle_cycle()
 RETURNS TABLE(contacts_updated INT, campaigns_queued INT)
 LANGUAGE plpgsql
+SET search_path TO dabbahwala
 AS $$
 DECLARE
     v_updated INT;
     v_queued INT;
 BEGIN
-    -- Step 1: Refresh evidence
     PERFORM refresh_engagement_rollups();
-
-    -- Step 2: Evaluate rules (inference → decision)
     SELECT evaluate_rules() INTO v_updated;
-
-    -- Step 3: Count pending campaign moves
     SELECT count(*) INTO v_queued FROM campaign_queue WHERE status = 'pending';
-
     RETURN QUERY SELECT v_updated, v_queued;
 END;
 $$;
 
 
--- GET PENDING CAMPAIGN MOVES: n8n reads these to execute on Instantly
+-- GET PENDING CAMPAIGN MOVES
 CREATE OR REPLACE FUNCTION get_pending_campaign_moves()
 RETURNS TABLE(
     queue_id BIGINT,
@@ -96,6 +88,7 @@ RETURNS TABLE(
     to_campaign campaign_name
 )
 LANGUAGE sql
+SET search_path TO dabbahwala
 AS $$
     SELECT cq.id, c.email, c.phone, cq.from_campaign, cq.to_campaign
     FROM campaign_queue cq
@@ -105,10 +98,11 @@ AS $$
 $$;
 
 
--- MARK CAMPAIGN EXECUTED: n8n confirms move was done in Instantly
+-- MARK CAMPAIGN EXECUTED
 CREATE OR REPLACE FUNCTION mark_campaign_executed(p_queue_id BIGINT)
 RETURNS void
 LANGUAGE plpgsql
+SET search_path TO dabbahwala
 AS $$
 BEGIN
     UPDATE campaign_queue
@@ -118,7 +112,7 @@ END;
 $$;
 
 
--- GET PENDING SMS: contacts needing SMS based on flags + sms_level
+-- GET PENDING SMS
 CREATE OR REPLACE FUNCTION get_pending_sms()
 RETURNS TABLE(
     contact_id BIGINT,
@@ -128,6 +122,7 @@ RETURNS TABLE(
     lifecycle lifecycle_segment
 )
 LANGUAGE sql
+SET search_path TO dabbahwala
 AS $$
     SELECT c.id, c.email, c.phone, c.sms_level, c.lifecycle_segment
     FROM contacts c
@@ -138,13 +133,13 @@ AS $$
 $$;
 
 
--- MARK SMS SENT: n8n confirms SMS was sent via Telnyx
+-- MARK SMS SENT
 CREATE OR REPLACE FUNCTION mark_sms_sent(p_contact_id BIGINT)
 RETURNS void
 LANGUAGE plpgsql
+SET search_path TO dabbahwala
 AS $$
 BEGIN
-    -- Insert sms_sent event for rollup tracking
     INSERT INTO events (contact_id, event_type, occurred_at)
     VALUES (p_contact_id, 'sms_sent', now());
 END;

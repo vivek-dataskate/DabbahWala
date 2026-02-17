@@ -9,7 +9,12 @@ _pool = None
 
 
 def get_connection():
-    return psycopg2.connect(DATABASE_URL)
+    conn = psycopg2.connect(DATABASE_URL)
+    # Set search_path so all queries resolve to the dabbahwala schema
+    with conn.cursor() as cur:
+        cur.execute("SET search_path TO dabbahwala")
+    conn.commit()
+    return conn
 
 
 @contextmanager

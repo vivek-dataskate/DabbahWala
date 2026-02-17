@@ -1,10 +1,12 @@
 -- 009_fn_refresh_rollups.sql
 -- Aggregates raw events into 7-day rolling windows per contact
--- Called before rule evaluation to ensure evidence is current
+
+SET search_path TO dabbahwala;
 
 CREATE OR REPLACE FUNCTION refresh_engagement_rollups()
 RETURNS void
 LANGUAGE plpgsql
+SET search_path TO dabbahwala
 AS $$
 BEGIN
     INSERT INTO engagement_rollups (contact_id, opens_7d, clicks_7d, sms_sent_7d, sms_clicks_7d, orders_7d, updated_at)

@@ -1,10 +1,12 @@
 -- 010_fn_rule_engine.sql
 -- Core rule engine: evaluates all active rules against contacts
--- This is the "Inference → Decision" layer
+
+SET search_path TO dabbahwala;
 
 CREATE OR REPLACE FUNCTION evaluate_rules(p_contact_id BIGINT DEFAULT NULL)
 RETURNS INT
 LANGUAGE plpgsql
+SET search_path TO dabbahwala
 AS $$
 DECLARE
     v_rule RECORD;
@@ -15,12 +17,6 @@ DECLARE
     v_prev_campaign campaign_name;
     v_new_campaign campaign_name;
     v_updated_count INT := 0;
-    v_contact_cursor CURSOR FOR
-        SELECT c.*, r.opens_7d, r.clicks_7d, r.sms_sent_7d, r.sms_clicks_7d, r.orders_7d
-        FROM contacts c
-        LEFT JOIN engagement_rollups r ON r.contact_id = c.id
-        WHERE c.lifecycle_segment != 'optout'
-          AND (p_contact_id IS NULL OR c.id = p_contact_id);
 BEGIN
     -- First: auto-clear expired cooling states
     UPDATE contacts
@@ -55,8 +51,8 @@ BEGIN
         LOOP
             -- Dynamically evaluate the rule predicate
             EXECUTE format(
-                'SELECT EXISTS(SELECT 1 FROM contacts c '
-                'LEFT JOIN engagement_rollups r ON r.contact_id = c.id '
+                'SELECT EXISTS(SELECT 1 FROM dabbahwala.contacts c '
+                'LEFT JOIN dabbahwala.engagement_rollups r ON r.contact_id = c.id '
                 'WHERE c.id = $1 AND (%s))',
                 v_rule.predicate_sql
             ) INTO v_matched USING v_contact.id;
@@ -142,7 +138,7 @@ BEGIN
                     v_updated_count := v_updated_count + 1;
                 END IF;
 
-                -- First matching rule wins — stop checking more rules for this contact
+                -- First matching rule wins
                 EXIT;
             END IF;
         END LOOP;

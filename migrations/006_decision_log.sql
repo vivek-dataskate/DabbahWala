@@ -1,6 +1,7 @@
 -- 006_decision_log.sql
 -- Audit trail: every state transition recorded
--- This is the "Feedback" layer: agents and humans can review why decisions were made
+
+SET search_path TO dabbahwala;
 
 CREATE TABLE decision_log (
     id              BIGSERIAL PRIMARY KEY,
@@ -8,7 +9,7 @@ CREATE TABLE decision_log (
     rule_id         INT REFERENCES rules(id),
     prev_lifecycle  lifecycle_segment,
     new_lifecycle   lifecycle_segment,
-    changes_applied JSONB NOT NULL,            -- full diff of what changed
+    changes_applied JSONB NOT NULL,
     decided_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

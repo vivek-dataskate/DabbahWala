@@ -1,6 +1,7 @@
 -- 014_seed_campaign_routing.sql
 -- Default mapping from lifecycle_segment to Instantly campaign
--- Used by the rule engine when a lifecycle change doesn't specify a campaign
+
+SET search_path TO dabbahwala;
 
 CREATE TABLE campaign_routing (
     lifecycle_segment  lifecycle_segment PRIMARY KEY,
@@ -14,4 +15,3 @@ INSERT INTO campaign_routing (lifecycle_segment, default_campaign) VALUES
     ('new_customer', 'NEW_CUSTOMER_ONBOARDING'),
     ('lapsed_customer', 'PROMO_AGGRESSIVE'),
     ('reactivation_candidate', 'REACTIVATION');
--- cooling and optout intentionally omitted (no campaign = removed from all)

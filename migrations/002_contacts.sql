@@ -1,6 +1,8 @@
 -- 002_contacts.sql
 -- Master contacts table: single source of truth for lifecycle state + channel flags
 
+SET search_path TO dabbahwala;
+
 CREATE TABLE contacts (
     id                     BIGSERIAL PRIMARY KEY,
     email                  TEXT UNIQUE,

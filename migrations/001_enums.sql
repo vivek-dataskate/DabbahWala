@@ -1,7 +1,10 @@
 -- 001_enums.sql
--- Type definitions for the DabbahWala marketing system
+-- Create dedicated schema and type definitions for the DabbahWala marketing system
 
-CREATE TYPE lifecycle_segment AS ENUM (
+CREATE SCHEMA IF NOT EXISTS dabbahwala;
+SET search_path TO dabbahwala;
+
+CREATE TYPE dabbahwala.lifecycle_segment AS ENUM (
     'cold',
     'engaged',
     'active_customer',
@@ -12,7 +15,7 @@ CREATE TYPE lifecycle_segment AS ENUM (
     'optout'
 );
 
-CREATE TYPE campaign_name AS ENUM (
+CREATE TYPE dabbahwala.campaign_name AS ENUM (
     'NURTURE_SLOW',
     'PROMO_STANDARD',
     'PROMO_AGGRESSIVE',
@@ -20,7 +23,7 @@ CREATE TYPE campaign_name AS ENUM (
     'REACTIVATION'
 );
 
-CREATE TYPE event_type AS ENUM (
+CREATE TYPE dabbahwala.event_type AS ENUM (
     'email_open',
     'email_click',
     'sms_sent',
@@ -33,7 +36,7 @@ CREATE TYPE event_type AS ENUM (
     'delivery_update'
 );
 
-CREATE TYPE delivery_status_type AS ENUM (
+CREATE TYPE dabbahwala.delivery_status_type AS ENUM (
     'assigned',
     'picked_up',
     'in_transit',
@@ -41,13 +44,13 @@ CREATE TYPE delivery_status_type AS ENUM (
     'failed'
 );
 
-CREATE TYPE opportunity_action AS ENUM (
+CREATE TYPE dabbahwala.opportunity_action AS ENUM (
     'send_sms',
     'field_sales_call',
     'send_email'
 );
 
-CREATE TYPE opportunity_status AS ENUM (
+CREATE TYPE dabbahwala.opportunity_status AS ENUM (
     'pending',
     'dispatched',
     'completed',
