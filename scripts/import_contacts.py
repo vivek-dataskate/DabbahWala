@@ -17,10 +17,15 @@ import psycopg2
 
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://localhost:5432/dabbahwala")
 
+# Render uses postgres:// but psycopg2 needs postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
 
 def import_contacts(csv_path: str):
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
+    cur.execute("SET search_path TO dabbahwala")
 
     imported = 0
     skipped = 0
@@ -54,6 +59,7 @@ def import_contacts(csv_path: str):
             except Exception as e:
                 print(f"Error importing {email}: {e}")
                 conn.rollback()
+                cur.execute("SET search_path TO dabbahwala")
                 skipped += 1
                 continue
 

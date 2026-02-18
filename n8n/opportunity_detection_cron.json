@@ -1,0 +1,303 @@
+{
+  "name": "DabbahWala — Opportunity Detection Cron",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 2
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 2 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/lifecycle/run",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "run-lifecycle",
+      "name": "Run Lifecycle Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/detect",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "detect-signal1",
+      "name": "Detect: Engaged No Order",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 160]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/detect/new-customer-no-repeat",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "detect-signal2",
+      "name": "Detect: New Customer No Repeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/detect/lapsed-reengaged",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "detect-signal3",
+      "name": "Detect: Lapsed Reengaged",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 440]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/detect/reorder-intent",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "detect-signal4",
+      "name": "Detect: Reorder Intent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 580]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge all detection results\nconst signal1 = $('Detect: Engaged No Order').first().json;\nconst signal2 = $('Detect: New Customer No Repeat').first().json;\nconst signal3 = $('Detect: Lapsed Reengaged').first().json;\nconst signal4 = $('Detect: Reorder Intent').first().json;\n\nconst allCandidates = [\n  ...(signal1.candidates || []),\n  ...(signal2.candidates || []),\n  ...(signal3.candidates || []),\n  ...(signal4.candidates || [])\n];\n\nreturn [{ json: {\n  total_candidates: allCandidates.length,\n  signal1_count: signal1.count || 0,\n  signal2_count: signal2.count || 0,\n  signal3_count: signal3.count || 0,\n  signal4_count: signal4.count || 0,\n  candidates: allCandidates\n}}];"
+      },
+      "id": "merge-results",
+      "name": "Merge All Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-candidates",
+              "leftValue": "={{ $json.total_candidates }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-candidates",
+      "name": "Has Candidates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "candidates",
+        "options": {}
+      },
+      "id": "split-candidates",
+      "name": "Split Candidates",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [1400, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_id\": {{ $json.id }},\n  \"action\": \"{{ $json.suggested_action || 'send_sms' }}\",\n  \"priority\": \"{{ $json.suggested_priority || 'warm' }}\",\n  \"reason\": \"{{ $json.signal }}: {{ ($json.first_name || '') }} {{ ($json.last_name || '') }} — opens={{ $json.opens_7d || 0 }}, orders={{ $json.total_orders || 0 }}\",\n  \"confidence_score\": {{ $json.suggested_priority === 'hot' ? 0.85 : 0.65 }}\n}",
+        "options": {}
+      },
+      "id": "create-opportunity",
+      "name": "Create Opportunity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1620, 240]
+    },
+    {
+      "parameters": {},
+      "id": "no-candidates",
+      "name": "No Candidates — Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1400, 400]
+    }
+  ],
+  "connections": {
+    "Every 2 Hours": {
+      "main": [
+        [
+          {
+            "node": "Run Lifecycle Cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Lifecycle Cycle": {
+      "main": [
+        [
+          {
+            "node": "Detect: Engaged No Order",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Detect: New Customer No Repeat",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Detect: Lapsed Reengaged",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Detect: Reorder Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect: Engaged No Order": {
+      "main": [
+        [
+          {
+            "node": "Merge All Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect: New Customer No Repeat": {
+      "main": [
+        [
+          {
+            "node": "Merge All Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect: Lapsed Reengaged": {
+      "main": [
+        [
+          {
+            "node": "Merge All Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect: Reorder Intent": {
+      "main": [
+        [
+          {
+            "node": "Merge All Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Signals": {
+      "main": [
+        [
+          {
+            "node": "Has Candidates?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Candidates?": {
+      "main": [
+        [
+          {
+            "node": "Split Candidates",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Candidates — Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Candidates": {
+      "main": [
+        [
+          {
+            "node": "Create Opportunity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Step 3 — Opportunities",
+      "id": "step3"
+    }
+  ],
+  "pinData": {}
+}

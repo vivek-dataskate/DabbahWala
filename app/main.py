@@ -20,4 +20,10 @@ app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opp
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    try:
+        from app.db import get_cursor
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT 1")
+        return {"status": "ok", "db": "connected"}
+    except Exception as e:
+        return {"status": "degraded", "db": str(e)}
