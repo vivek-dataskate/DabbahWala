@@ -27,3 +27,28 @@ def health():
         return {"status": "ok", "db": "connected"}
     except Exception as e:
         return {"status": "degraded", "db": str(e)}
+
+
+@app.post("/admin/migrate/{migration_number}")
+def run_migration(migration_number: int, secret: str = ""):
+    """Run a specific migration file by number. Requires admin secret."""
+    import os
+    admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+    if secret != admin_secret:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    import glob
+    matches = glob.glob(f"migrations/{migration_number:03d}_*.sql")
+    if not matches:
+        return {"error": f"No migration file found for {migration_number:03d}"}
+
+    migration_file = matches[0]
+    with open(migration_file) as f:
+        sql = f.read()
+
+    from app.db import get_cursor
+    with get_cursor(commit=True) as cur:
+        cur.execute(sql)
+
+    return {"status": "ok", "migration": migration_file, "executed": True}
