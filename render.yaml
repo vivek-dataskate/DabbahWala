@@ -1,0 +1,37 @@
+# render.yaml — Render Blueprint for one-click deploy
+# Usage: Connect this repo to Render, it auto-detects this file.
+# Docs: https://docs.render.com/blueprint-spec
+
+services:
+  - type: web
+    name: dabbahwala-api
+    runtime: python
+    region: oregon
+    plan: starter
+    buildCommand: ./scripts/render_build.sh
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: dabbahwala-db
+          property: connectionString
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: AIRTABLE_API_KEY
+        sync: false  # set manually in Render dashboard
+      - key: AIRTABLE_BASE_ID
+        sync: false
+      - key: AIRTABLE_FIELD_SALES_TABLE
+        value: Field Sales Tasks
+      - key: TELNYX_API_KEY
+        sync: false
+
+databases:
+  - name: dabbahwala-db
+    plan: starter
+    region: oregon
+    postgresMajorVersion: 16
+    ipAllowList: []  # only internal access
