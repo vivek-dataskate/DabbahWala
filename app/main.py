@@ -52,3 +52,44 @@ def run_migration(migration_number: int, secret: str = ""):
         cur.execute(sql)
 
     return {"status": "ok", "migration": migration_file, "executed": True}
+
+
+@app.post("/admin/query")
+def run_query(secret: str = "", sql: str = ""):
+    """Run a read-only SQL query. Requires admin secret."""
+    import os
+    admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+    if secret != admin_secret:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if not sql.strip():
+        return {"error": "No SQL provided"}
+
+    from app.db import get_cursor
+    with get_cursor(commit=False) as cur:
+        cur.execute(sql)
+        try:
+            rows = cur.fetchall()
+            return {"status": "ok", "rows": rows, "count": len(rows)}
+        except Exception:
+            return {"status": "ok", "rows": [], "count": 0}
+
+
+@app.post("/admin/exec")
+def run_exec(secret: str = "", sql: str = ""):
+    """Run a DDL/DML SQL statement. Requires admin secret."""
+    import os
+    admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+    if secret != admin_secret:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    if not sql.strip():
+        return {"error": "No SQL provided"}
+
+    from app.db import get_cursor
+    with get_cursor(commit=True) as cur:
+        cur.execute(sql)
+
+    return {"status": "ok", "executed": True}
