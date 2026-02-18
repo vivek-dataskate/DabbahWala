@@ -1,0 +1,308 @@
+{
+  "name": "DabbahWala — Airtable Outcome Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_FIELD_SALES_TABLE}}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "AND({Status} != 'New', {Status} != '', {Synced to Postgres} != TRUE())"
+            },
+            {
+              "name": "fields[]",
+              "value": "Postgres Opportunity ID"
+            },
+            {
+              "name": "fields[]",
+              "value": "Status"
+            },
+            {
+              "name": "fields[]",
+              "value": "Outcome Notes"
+            },
+            {
+              "name": "fields[]",
+              "value": "Synced to Postgres"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-updated-airtable",
+      "name": "Fetch Updated Airtable Records",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "AIRTABLE_CREDENTIAL_ID",
+          "name": "Airtable API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-records",
+              "leftValue": "={{ $json.records?.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-updates",
+      "name": "Has Updates?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "records",
+        "options": {}
+      },
+      "id": "split-records",
+      "name": "Split Records",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [880, 240]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map Airtable status to API status + outcome\nconst airtableStatus = $input.item.json.fields['Status'];\nconst opportunityId = $input.item.json.fields['Postgres Opportunity ID'];\nconst outcomeNotes = $input.item.json.fields['Outcome Notes'] || '';\nconst airtableRecordId = $input.item.json.id;\n\nlet apiStatus = 'completed';\nlet outcome = null;\n\nswitch (airtableStatus?.toLowerCase()) {\n  case 'ordered':\n  case 'converted':\n    apiStatus = 'completed';\n    outcome = 'ordered';\n    break;\n  case 'not interested':\n  case 'not_interested':\n  case 'declined':\n    apiStatus = 'completed';\n    outcome = 'not_interested';\n    break;\n  case 'no answer':\n  case 'no_answer':\n  case 'unreachable':\n    apiStatus = 'completed';\n    outcome = 'no_answer';\n    break;\n  case 'in progress':\n  case 'in_progress':\n  case 'contacted':\n    apiStatus = 'dispatched';\n    outcome = null;\n    break;\n  default:\n    apiStatus = 'completed';\n    outcome = airtableStatus?.toLowerCase() || 'no_answer';\n}\n\nreturn {\n  json: {\n    opportunity_id: opportunityId,\n    airtable_record_id: airtableRecordId,\n    api_status: apiStatus,\n    outcome: outcome,\n    outcome_notes: outcomeNotes\n  }\n};"
+      },
+      "id": "map-status",
+      "name": "Map Airtable Status → API Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 240]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-outcome",
+              "leftValue": "={{ $json.outcome }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-outcome",
+      "name": "Has Final Outcome?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1320, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/{{ $json.opportunity_id }}/outcome",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"status\": \"{{ $json.api_status }}\",\n  \"outcome\": \"{{ $json.outcome }}\"\n}",
+        "options": {}
+      },
+      "id": "post-outcome",
+      "name": "Post Outcome to Postgres",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 180]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_FIELD_SALES_TABLE}}/{{ $('Map Airtable Status → API Status').item.json.airtable_record_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"fields\": {\n    \"Synced to Postgres\": true\n  }\n}",
+        "options": {}
+      },
+      "id": "mark-synced",
+      "name": "Mark Synced in Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 180],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "AIRTABLE_CREDENTIAL_ID",
+          "name": "Airtable API Key"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "skip-in-progress",
+      "name": "In Progress — Skip Sync",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1540, 340]
+    },
+    {
+      "parameters": {},
+      "id": "no-updates",
+      "name": "No Updates — Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [880, 400]
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Updated Airtable Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Updated Airtable Records": {
+      "main": [
+        [
+          {
+            "node": "Has Updates?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Updates?": {
+      "main": [
+        [
+          {
+            "node": "Split Records",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Updates — Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Records": {
+      "main": [
+        [
+          {
+            "node": "Map Airtable Status → API Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Airtable Status → API Status": {
+      "main": [
+        [
+          {
+            "node": "Has Final Outcome?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Final Outcome?": {
+      "main": [
+        [
+          {
+            "node": "Post Outcome to Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "In Progress — Skip Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post Outcome to Postgres": {
+      "main": [
+        [
+          {
+            "node": "Mark Synced in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Step 3 — Opportunities",
+      "id": "step3"
+    }
+  ],
+  "pinData": {}
+}
