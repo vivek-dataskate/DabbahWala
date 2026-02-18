@@ -1,0 +1,57 @@
+{
+  "n8n_instance": "https://digitalworker.dataskate.io",
+  "api_url": "https://dabbahwala-latest.onrender.com",
+
+  "credentials": {
+    "airtable": {
+      "n8n_credential_id": "hJpO8jdlT4Rmkjtx",
+      "n8n_credential_name": "Airtable API Key",
+      "note": "API key stored in .env as AIRTABLE_API_KEY",
+      "base_id": "appuy2VTIao6XVpIW",
+      "field_sales_table": "Field Sales Tasks"
+    },
+    "telnyx": {
+      "n8n_credential_id": "XnntvX8AXpdR97oQ",
+      "n8n_credential_name": "Telnyx API Key",
+      "note": "API key stored in .env as TELNYX_API_KEY",
+      "from_number": "+18444322224",
+      "messaging_profile_id": "400191f9-0057-41f5-9f10-375fb3fe1a70"
+    },
+    "n8n": {
+      "note": "API key stored in .env as N8N_API_KEY"
+    }
+  },
+
+  "workflows": {
+    "lifecycle_cycle_cron": {
+      "id": "Wp3g7LJJ7Ts530cD",
+      "name": "DabbahWala — Lifecycle Cycle Runner",
+      "schedule": "Every hour"
+    },
+    "sms_dispatch": {
+      "id": "GNvg3xSKVlf8JEsA",
+      "name": "DabbahWala — SMS Dispatch via Telnyx",
+      "schedule": "Every 10 minutes"
+    },
+    "opportunity_dispatcher": {
+      "id": "2sblrfxwa4YtVYOs",
+      "name": "DabbahWala — Opportunity Dispatcher",
+      "schedule": "Every 5 minutes"
+    },
+    "airtable_outcome_sync": {
+      "id": "EpbdsHnMZAApxl19",
+      "name": "DabbahWala — Airtable Outcome Sync",
+      "schedule": "Every 15 minutes"
+    },
+    "opportunity_detection_cron": {
+      "id": "1S4dixHhCbMPbf8S",
+      "name": "DabbahWala — Opportunity Detection Cron",
+      "schedule": "Every 2 hours"
+    },
+    "daily_report_generator": {
+      "id": "apR06lXjkNIuweAx",
+      "name": "DabbahWala — Daily Report Generator",
+      "schedule": "Daily at 11 PM"
+    }
+  }
+}
