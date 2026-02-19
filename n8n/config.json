@@ -96,12 +96,51 @@
       "file": "marketing_query_form.json",
       "note": "Routes query to POST /api/agents/cycle/run-for-contact, stores in Airtable Team Inputs"
     },
+    "daily_report_generator": {
+      "id": "apR06lXjkNIuweAx",
+      "name": "DabbahWala — Daily Report Generator",
+      "schedule": "Daily at 11 PM"
+    },
+    "airtable_playbook_sync": {
+      "id": "EVwS9TSfk7c8avtZ",
+      "name": "DabbahWala — Airtable Playbook Sync",
+      "schedule": "Every 15 minutes",
+      "active": true
+    },
+    "daily_order_upload": {
+      "id": "8F4wigbdVaAE8WsV",
+      "name": "DabbahWala — Daily Order Upload",
+      "schedule": "Daily at 1 PM EST",
+      "active": true
+    },
+    "hourly_intelligence_cycle": {
+      "id": "TOBTV4lcSx7sUNXX",
+      "name": "DabbahWala — Hourly Intelligence Cycle",
+      "schedule": "Every hour",
+      "active": true
+    },
+    "marketing_query_form": {
+      "id": "gwJPYPHlhHmPxeRu",
+      "name": "DabbahWala — Marketing Query Form",
+      "schedule": "On-demand (form submission)",
+      "active": true,
+      "form_url": "https://digitalworker.dataskate.io/form/marketing-query-form"
+    },
     "google_docs_sync": {
-      "id": "mztwpch8WMxd63WA",
+      "id": "KMTKHGoHbhI4C2WS",
       "name": "DabbahWala — Google Docs Sync",
       "schedule": "Every 30 minutes",
-      "file": "google_docs_sync.json",
-      "note": "Syncs ground team & marketing team Google Docs to Airtable Team Content table"
+      "active": false,
+      "note": "Inactive until Google Drive + Google Docs OAuth2 credentials are configured in n8n. Folder ID is hardcoded in workflow."
+    }
+  },
+
+  "google_docs": {
+    "note": "Set up Google Drive + Google Docs OAuth2 credentials in n8n. Folder ID is hardcoded in workflow.",
+    "folder_id": "1O0ES9uiDL6AWf9QMMYiyRUWGtymDjPF5",
+    "classification": {
+      "ad_copy": "Title contains: ad copy, social media, facebook, instagram, social post",
+      "ground_note": "Title contains: field note, ground, delivery note, driver (or default)"
     }
   }
 }

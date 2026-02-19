@@ -1,10 +1,17 @@
+"""
+Daily order processing endpoint.
+n8n uploads CSV data -> this endpoint processes orders, creates contacts,
+records orders, fires events, and detects opportunities.
+"""
 import csv
 import io
 import json
+import re
+from collections import defaultdict
 from datetime import datetime
-from typing import Optional
+from difflib import SequenceMatcher
 
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from app.db import get_cursor
@@ -12,152 +19,360 @@ from app.db import get_cursor
 router = APIRouter()
 
 
-class DailyOrder(BaseModel):
-    contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
-    order_id_external: Optional[str] = None
-    order_date: Optional[str] = None  # YYYY-MM-DD; defaults to today
-    source: str = "Website"
-    total_amount: float = 0.0
-    order_type: Optional[str] = None
-    delivery_slot: Optional[str] = None
-    notes: Optional[str] = None
-
-
-class DailyOrderBatch(BaseModel):
-    orders: list[DailyOrder]
-
-
-def _resolve_email(phone: Optional[str], email: Optional[str]) -> Optional[str]:
-    if email:
-        return email.strip().lower()
+def normalize_phone(phone) -> str:
     if not phone:
-        return None
-    normalized = "".join(c for c in phone if c.isdigit() or c == "+")
-    with get_cursor(commit=False) as cur:
-        cur.execute(
-            "SELECT email FROM contacts WHERE phone = %s OR phone = %s LIMIT 1",
-            (phone, normalized),
-        )
-        row = cur.fetchone()
-    return row["email"] if row else None
+        return ''
+    digits = re.sub(r'\D', '', str(phone))
+    return digits[-10:] if len(digits) >= 10 else ''
 
 
-@router.post("/process")
-def process_daily_orders(payload: DailyOrderBatch):
+def normalize_name(name: str) -> str:
+    name = name.strip().lower()
+    name = re.sub(r'[^\w\s]', '', name)
+    name = re.sub(r'\s+', ' ', name)
+    return name
+
+
+def normalize_dish(name: str) -> str:
+    """Normalize dish name for matching: lowercase, strip, collapse spaces."""
+    name = name.strip()
+    name = re.sub(r'\s+', ' ', name)
+    return name
+
+
+def _load_menu_lookup(cur) -> tuple:
+    """Load alias table + master menu items into lookup dicts.
+    Returns (alias_map, master_norm_map, master_set).
     """
-    Batch-ingest daily order data as order_placed events.
-    Called by the Daily Order Upload n8n workflow every day at 1 PM.
-    After ingestion the agent cycle (POST /api/agents/cycle/run-all) should be
-    triggered separately so the inference/decision agents can process new orders.
+    # alias table: csv_name -> canonical_name
+    alias_map = {}
+    try:
+        cur.execute("SELECT alias, canonical_name FROM menu_item_aliases")
+        for r in cur.fetchall():
+            alias_map[r['alias']] = r['canonical_name']
+            alias_map[r['alias'].strip()] = r['canonical_name']
+    except Exception:
+        pass  # table may not exist yet
+
+    # master menu items: normalized -> actual name
+    cur.execute("SELECT id, item_name, category, is_veg, avg_price FROM menu_items WHERE is_active = true")
+    master_rows = cur.fetchall()
+    master_set = {r['item_name'] for r in master_rows}
+    master_norm = {}
+    for r in master_rows:
+        norm = r['item_name'].strip().lower()
+        master_norm[norm] = r['item_name']
+
+    return alias_map, master_norm, master_set
+
+
+def resolve_dish_name(raw_name: str, alias_map: dict, master_norm: dict, master_set: set) -> str:
+    """Resolve a CSV dish name to a canonical master menu item.
+    Priority: exact match -> alias -> normalized match -> fuzzy match -> return cleaned name.
     """
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    ingested = 0
-    skipped = []
+    cleaned = normalize_dish(raw_name)
 
-    for order in payload.orders:
-        email = _resolve_email(order.contact_phone, order.contact_email)
-        if not email:
-            skipped.append({
-                "phone": order.contact_phone,
-                "reason": "contact not found",
-            })
-            continue
+    # 1. Exact match in master
+    if cleaned in master_set:
+        return cleaned
 
-        metadata = {
-            "source": order.source,
-            "total_amount": order.total_amount,
-            "order_id_external": order.order_id_external or "",
-            "order_date": order.order_date or today,
-            "order_type": order.order_type or "",
-            "delivery_slot": order.delivery_slot or "",
-            "notes": order.notes or "",
-        }
+    # 2. Alias lookup (exact)
+    if cleaned in alias_map:
+        return alias_map[cleaned]
 
-        try:
-            with get_cursor() as cur:
-                cur.execute(
-                    "SELECT ingest_event(%s, %s::event_type, %s::jsonb)",
-                    (email, "order_placed", json.dumps(metadata)),
-                )
-            ingested += 1
-        except Exception as e:
-            skipped.append({"email": email, "reason": str(e)[:120]})
+    # 3. Normalized (case-insensitive) match
+    norm = cleaned.lower()
+    if norm in master_norm:
+        return master_norm[norm]
 
-    return {
-        "ingested": ingested,
-        "skipped": len(skipped),
-        "skipped_detail": skipped,
-        "date": today,
-    }
+    # 4. Fuzzy match against master (threshold 0.85)
+    best_score = 0
+    best_match = None
+    for master_name in master_set:
+        score = SequenceMatcher(None, norm, master_name.lower()).ratio()
+        if score > best_score and score >= 0.85:
+            best_score = score
+            best_match = master_name
+    if best_match:
+        return best_match
+
+    # 5. No match — return cleaned name (will be created as new item)
+    return cleaned
 
 
-# Column name aliases accepted from uploaded CSVs
-_COL_ALIASES = {
-    "email":            ["email", "contact_email", "customer_email"],
-    "phone":            ["phone", "contact_phone", "customer_phone", "mobile"],
-    "order_id_external":["order_id", "order_id_external", "external_id", "shipday_id", "id"],
-    "order_date":       ["order_date", "date", "order_date_str"],
-    "source":           ["source", "order_source", "platform"],
-    "total_amount":     ["total_amount", "total", "amount", "order_total", "price"],
-    "order_type":       ["order_type", "type", "subscription_type"],
-    "delivery_slot":    ["delivery_slot", "slot", "time_slot"],
-    "notes":            ["notes", "note", "comments"],
-}
+class DailyOrderResult(BaseModel):
+    date: str
+    total_orders: int
+    total_items: int
+    total_revenue: float
+    new_contacts: int
+    existing_contacts: int
+    opportunities_created: int
+    lifecycle_updated: int
+    campaigns_queued: int
+    menu_items_matched: int
+    menu_items_created: int
 
 
-def _find_col(row_keys: list, field: str) -> Optional[str]:
-    lower = {k.strip().lower(): k for k in row_keys}
-    for alias in _COL_ALIASES[field]:
-        if alias.lower() in lower:
-            return lower[alias.lower()]
-    return None
-
-
-@router.post("/upload-csv")
-async def upload_csv(file: UploadFile = File(...)):
+@router.post("/process", response_model=DailyOrderResult)
+async def process_daily_orders(file: UploadFile = File(...)):
     """
-    Upload a CSV of daily orders. Columns are matched flexibly (see _COL_ALIASES).
-    Each row is converted to a DailyOrder and processed via process_daily_orders.
+    Upload a processing-data-YYYY-MM-DD.csv and process all orders.
+    Creates new contacts, records orders + items, fires events, detects opportunities.
     """
     content = await file.read()
-    text = content.decode("utf-8-sig")  # strip BOM if present
-    reader = csv.DictReader(io.StringIO(text))
+    reader = csv.DictReader(io.StringIO(content.decode('utf-8')))
+    rows = list(reader)
 
-    orders: list[DailyOrder] = []
-    parse_errors: list[dict] = []
+    if not rows:
+        raise HTTPException(status_code=400, detail="Empty CSV file")
 
-    for i, row in enumerate(reader, start=2):  # row 1 = header
-        keys = list(row.keys())
+    # Group by Order Number
+    orders_grouped = defaultdict(list)
+    for row in rows:
+        order_num = row.get('Order Number', '').strip()
+        if order_num:
+            orders_grouped[order_num].append(row)
 
-        def get(field: str) -> str:
-            col = _find_col(keys, field)
-            return row.get(col, "").strip() if col else ""
+    # Build contact + menu lookups
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT id, email, phone, first_name, last_name, total_orders, "
+                     "last_order_at, lifecycle_segment, primary_source FROM contacts "
+                     "WHERE phone IS NOT NULL AND phone != ''")
+        phone_lookup = {}
+        for r in cur.fetchall():
+            ph = normalize_phone(r.get('phone', ''))
+            if ph:
+                phone_lookup[ph] = dict(r)
 
-        total_str = get("total_amount")
-        try:
-            total = float(total_str) if total_str else 0.0
-        except ValueError:
-            total = 0.0
-            parse_errors.append({"row": i, "issue": f"invalid total_amount '{total_str}', defaulted to 0"})
+        cur.execute("SELECT id, email, phone, first_name, last_name FROM contacts "
+                     "WHERE first_name IS NOT NULL")
+        name_lookup = {}
+        for r in cur.fetchall():
+            full = f"{r.get('first_name', '')} {r.get('last_name', '')}".strip().lower()
+            if full:
+                name_lookup[full] = dict(r)
 
-        orders.append(DailyOrder(
-            contact_email=get("email") or None,
-            contact_phone=get("phone") or None,
-            order_id_external=get("order_id_external") or None,
-            order_date=get("order_date") or None,
-            source=get("source") or "Website",
-            total_amount=total,
-            order_type=get("order_type") or None,
-            delivery_slot=get("delivery_slot") or None,
-            notes=get("notes") or None,
-        ))
+        alias_map, master_norm, master_set = _load_menu_lookup(cur)
 
-    if not orders:
-        today = datetime.utcnow().strftime("%Y-%m-%d")
-        return {"ingested": 0, "skipped": 0, "skipped_detail": [], "date": today,
-                "message": "No data rows found in CSV"}
+    new_contact_count = 0
+    existing_contact_count = 0
+    order_count = 0
+    item_count = 0
+    opportunity_count = 0
+    menu_matched = 0
+    menu_created = 0
+    order_date_str = ''
 
-    result = process_daily_orders(DailyOrderBatch(orders=orders))
-    result["parse_errors"] = parse_errors
-    return result
+    with get_cursor(commit=True) as cur:
+        for order_num, item_rows in orders_grouped.items():
+            first = item_rows[0]
+            phone = normalize_phone(first.get('Customer Phone Number', ''))
+            name = first.get('Customer Name', '').strip()
+            address = first.get('Customer Address', '').strip()
+            date_raw = first.get('Date', '').strip()
+            plan_name = first.get('Plan Name', '').strip()
+            delivery_slot = first.get('Delivery Slot Name', '').strip()
+            order_type = first.get('Order Type', '').strip()
+
+            try:
+                order_date = datetime.strptime(date_raw, '%d/%m/%Y').strftime('%Y-%m-%d')
+            except Exception:
+                order_date = datetime.now().strftime('%Y-%m-%d')
+            order_date_str = order_date
+
+            is_sub = 'plan' in plan_name.lower() or 'subscription' in order_type.lower() or 'scheduled' in order_type.lower()
+
+            # Match contact
+            contact = None
+            name_norm = normalize_name(name)
+
+            if phone and phone in phone_lookup:
+                contact = phone_lookup[phone]
+            elif name_norm in name_lookup:
+                contact = name_lookup[name_norm]
+            else:
+                # Fuzzy match
+                best_score = 0
+                for full_name, c in name_lookup.items():
+                    if not name_norm or not full_name or name_norm[0] != full_name[0]:
+                        continue
+                    score = SequenceMatcher(None, name_norm, full_name).ratio()
+                    if score > best_score and score > 0.80:
+                        best_score = score
+                        contact = c
+
+            contact_id = None
+            if contact:
+                contact_id = contact['id']
+                existing_contact_count += 1
+
+                # Detect opportunities
+                lifecycle = contact.get('lifecycle_segment', 'cold')
+                prev_orders = contact.get('total_orders', 0)
+
+                if lifecycle in ('lapsed_customer', 'reactivation_candidate'):
+                    first_name = name.split()[0] if name else 'there'
+                    cur.execute(
+                        "SELECT create_opportunity(%s, 'send_sms'::opportunity_action, 'hot', %s, %s, 0.90)",
+                        (contact_id,
+                         f"Lapsed customer '{name}' placed a new order!",
+                         f"Welcome back {first_name}! We're thrilled to cook for you again. Enjoy your meal!")
+                    )
+                    opportunity_count += 1
+
+                if prev_orders == 0:
+                    first_name = name.split()[0] if name else 'there'
+                    cur.execute(
+                        "SELECT create_opportunity(%s, 'send_sms'::opportunity_action, 'warm', %s, %s, 0.80)",
+                        (contact_id,
+                         f"First order from '{name}'. Potential subscription conversion.",
+                         f"Hi {first_name}, hope you loved today's meal! Save with a weekly subscription. Reply SUBSCRIBE for details.")
+                    )
+                    opportunity_count += 1
+
+                if contact.get('primary_source') == 'Food Delivery Apps':
+                    first_name = name.split()[0] if name else 'there'
+                    cur.execute(
+                        "SELECT create_opportunity(%s, 'send_sms'::opportunity_action, 'hot', %s, %s, 0.90)",
+                        (contact_id,
+                         f"App customer '{name}' ordering direct!",
+                         f"Thanks for ordering direct, {first_name}! You save on fees and get priority delivery.")
+                    )
+                    opportunity_count += 1
+            else:
+                # Create new contact
+                name_parts = name.split(None, 1)
+                first_n = name_parts[0] if name_parts else ''
+                last_n = name_parts[1] if len(name_parts) > 1 else ''
+                cur.execute(
+                    "INSERT INTO contacts (phone, first_name, last_name, address, "
+                    "lifecycle_segment, primary_source) "
+                    "VALUES (%s, %s, %s, %s, 'new_customer', 'Website') RETURNING id",
+                    (phone, first_n, last_n, address)
+                )
+                result = cur.fetchone()
+                contact_id = result['id']
+                new_contact_count += 1
+                # Add to lookup for subsequent orders
+                if phone:
+                    phone_lookup[phone] = {'id': contact_id, 'total_orders': 0,
+                                            'lifecycle_segment': 'new_customer'}
+
+            # Insert order — resolve dish names against master menu
+            items = []
+            total_amount = 0
+            for row in item_rows:
+                raw_dish = row.get('Dish Name', '').strip()
+                qty = int(row.get('Quantity', 1) or 1)
+                price = float(row.get('Unit Price', 0) or 0)
+                if raw_dish:
+                    canonical = resolve_dish_name(raw_dish, alias_map, master_norm, master_set)
+                    items.append((canonical, qty, price, qty * price))
+                    total_amount += qty * price
+
+            cur.execute(
+                "INSERT INTO orders (contact_id, order_id_external, order_date, source, "
+                "total_amount, order_type, delivery_slot, customer_name_raw) "
+                "VALUES (%s, %s, %s, 'Website', %s, %s, %s, %s) RETURNING id",
+                (contact_id, order_num, order_date, total_amount,
+                 'SUBSCRIPTION' if is_sub else 'ONE_TIME', delivery_slot, name)
+            )
+            order_row = cur.fetchone()
+            order_db_id = order_row['id']
+            order_count += 1
+
+            # Insert items with resolved canonical names
+            for dish, qty, price, line_total in items:
+                if dish in master_set:
+                    menu_matched += 1
+                else:
+                    # New item not in master — create with price from CSV
+                    cur.execute(
+                        "INSERT INTO menu_items (item_name, avg_price) VALUES (%s, %s) "
+                        "ON CONFLICT (item_name) DO NOTHING", (dish, price)
+                    )
+                    master_set.add(dish)
+                    menu_created += 1
+
+                cur.execute(
+                    "INSERT INTO order_items (order_id, menu_item_id, item_name, quantity, unit_price, line_total) "
+                    "VALUES (%s, (SELECT id FROM menu_items WHERE item_name = %s LIMIT 1), %s, %s, %s, %s)",
+                    (order_db_id, dish, dish, qty, price, line_total)
+                )
+                item_count += 1
+
+            # Fire order_placed event + update contact
+            if contact_id:
+                meta = json.dumps({
+                    'source': 'Website', 'total_amount': total_amount,
+                    'order_type': 'SUBSCRIPTION' if is_sub else 'ONE_TIME',
+                    'order_id_external': order_num
+                })
+                cur.execute(
+                    "INSERT INTO events (contact_id, event_type, metadata, occurred_at) "
+                    "VALUES (%s, 'order_placed', %s::jsonb, %s)",
+                    (contact_id, meta, f"{order_date}T12:00:00Z")
+                )
+                cur.execute(
+                    "UPDATE contacts SET total_orders = total_orders + 1, "
+                    "last_order_at = %s, updated_at = now() WHERE id = %s",
+                    (order_date, contact_id)
+                )
+
+    # Run lifecycle cycle
+    lifecycle_updated = 0
+    campaigns_queued = 0
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute("SELECT * FROM run_lifecycle_cycle()")
+            row = cur.fetchone()
+            lifecycle_updated = row.get('contacts_updated', 0)
+            campaigns_queued = row.get('campaigns_queued', 0)
+    except Exception:
+        pass
+
+    return DailyOrderResult(
+        date=order_date_str,
+        total_orders=order_count,
+        total_items=item_count,
+        total_revenue=round(sum(
+            sum(float(r.get('Unit Price', 0) or 0) * int(r.get('Quantity', 1) or 1)
+                for r in item_rows)
+            for item_rows in orders_grouped.values()
+        ), 2),
+        new_contacts=new_contact_count,
+        existing_contacts=existing_contact_count,
+        opportunities_created=opportunity_count,
+        lifecycle_updated=lifecycle_updated,
+        campaigns_queued=campaigns_queued,
+        menu_items_matched=menu_matched,
+        menu_items_created=menu_created,
+    )
+
+
+@router.get("/summary/{date}")
+def get_daily_summary(date: str):
+    """Get summary of orders for a specific date (YYYY-MM-DD)."""
+    with get_cursor(commit=False) as cur:
+        cur.execute(
+            "SELECT count(*) as total_orders, "
+            "coalesce(sum(total_amount), 0) as revenue, "
+            "count(DISTINCT contact_id) as unique_customers "
+            "FROM orders WHERE order_date = %s", (date,)
+        )
+        summary = dict(cur.fetchone())
+
+        cur.execute(
+            "SELECT oi.item_name, sum(oi.quantity) as qty "
+            "FROM order_items oi JOIN orders o ON o.id = oi.order_id "
+            "WHERE o.order_date = %s "
+            "GROUP BY oi.item_name ORDER BY qty DESC LIMIT 10", (date,)
+        )
+        top_items = [dict(r) for r in cur.fetchall()]
+
+        return {
+            "date": date,
+            **summary,
+            "top_items": top_items,
+        }
