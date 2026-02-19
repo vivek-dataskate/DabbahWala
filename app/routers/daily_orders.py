@@ -393,6 +393,7 @@ async def process_daily_orders(
             name = _col(first, 'Customer Name', 'Name', 'Customer', 'customer_name').strip()
             address = _col(first, 'Customer Address', 'Address', 'address').strip()
             date_raw = _col(first, 'Date', 'Order Date', 'date', 'order_date').strip()
+            delivery_date_raw = _col(first, 'Delivery Date', 'delivery_date', 'DeliveryDate').strip()
             plan_name = _col(first, 'Plan Name', 'plan_name', 'Plan').strip()
             delivery_slot = _col(first, 'Delivery Slot Name', 'Delivery Slot', 'delivery_slot').strip()
             order_type = _col(first, 'Order Type', 'order_type', 'Type').strip()
@@ -402,6 +403,13 @@ async def process_daily_orders(
             except Exception:
                 order_date = datetime.now().strftime('%Y-%m-%d')
             order_date_str = order_date
+
+            # delivery_date: use explicit column if present, otherwise fall back to order_date
+            # (for daily CSV uploads the Date column IS the delivery date)
+            try:
+                delivery_date = datetime.strptime(delivery_date_raw, '%d/%m/%Y').strftime('%Y-%m-%d') if delivery_date_raw else order_date
+            except Exception:
+                delivery_date = order_date
 
             is_sub = 'plan' in plan_name.lower() or 'subscription' in order_type.lower() or 'scheduled' in order_type.lower()
 
@@ -657,10 +665,10 @@ async def process_daily_orders(
                     total_amount += qty * price
 
             cur.execute(
-                "INSERT INTO orders (contact_id, order_id_external, order_date, source, "
+                "INSERT INTO orders (contact_id, order_id_external, order_date, delivery_date, source, "
                 "total_amount, order_type, delivery_slot, customer_name_raw) "
-                "VALUES (%s, %s, %s, 'Website', %s, %s, %s, %s) RETURNING id",
-                (contact_id, order_num, order_date, total_amount,
+                "VALUES (%s, %s, %s, %s, 'Website', %s, %s, %s, %s) RETURNING id",
+                (contact_id, order_num, order_date, delivery_date, total_amount,
                  'SUBSCRIPTION' if is_sub else 'ONE_TIME', delivery_slot, name)
             )
             order_row = cur.fetchone()
