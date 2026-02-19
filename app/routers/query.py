@@ -30,6 +30,9 @@ CATEGORIES = {
     "daily_summary": "Today's or recent order/activity summary",
     "order_analytics": "Top dishes, revenue trends, order patterns",
     "communication_history": "SMS/call history for a specific customer",
+    "ground_team_notes": "Browse recent field notes from the ground team",
+    "ad_copies": "Browse recent social media ad copies",
+    "submit_input": "Submit a new observation, note, or question",
     "free_form": "Ask any question about the marketing system",
 }
 
@@ -38,6 +41,9 @@ class QueryRequest(BaseModel):
     category: str
     question: str = ""
     contact_email: str | None = None
+    # Used by submit_input category
+    author: str | None = None
+    input_type: str | None = None  # ground_note, ad_copy, observation, question
 
 
 class QueryResponse(BaseModel):
@@ -522,6 +528,116 @@ def _handle_communication_history(question: str, contact_email: str | None) -> t
 
 
 # ---------------------------------------------------------------------------
+# Tier 1 handlers — team content (ground notes, ad copies, submissions)
+# ---------------------------------------------------------------------------
+
+def _handle_ground_team_notes(question: str) -> tuple[str, dict]:
+    """Browse and search ground team field notes."""
+    with get_cursor(commit=False) as cur:
+        if question and len(question) > 3:
+            cur.execute(
+                "SELECT * FROM search_team_content('ground_note', %s, 15, 0)",
+                (question,)
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM get_recent_team_content('ground_note', 30, 15)"
+            )
+        results = [dict(r) for r in cur.fetchall()]
+
+    if not results:
+        return "No ground team notes found. Notes synced from Google Docs will appear here.", {}
+
+    lines = ["## Ground Team Field Notes", ""]
+    for r in results:
+        date_str = r.get("created_at", "")
+        if hasattr(date_str, "strftime"):
+            date_str = date_str.strftime("%b %d, %Y")
+        author = r.get("author", "Team")
+        title = r.get("title", "Untitled")
+        body = r.get("body_preview", r.get("body", ""))[:300]
+
+        lines.extend([
+            f"### {title}",
+            f"**By**: {author} | **Date**: {date_str}",
+            body,
+            "",
+        ])
+
+    return "\n".join(lines), {"count": len(results)}
+
+
+def _handle_ad_copies(question: str) -> tuple[str, dict]:
+    """Browse and search social media ad copies."""
+    with get_cursor(commit=False) as cur:
+        if question and len(question) > 3:
+            cur.execute(
+                "SELECT * FROM search_team_content('ad_copy', %s, 15, 0)",
+                (question,)
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM get_recent_team_content('ad_copy', 30, 15)"
+            )
+        results = [dict(r) for r in cur.fetchall()]
+
+    if not results:
+        return "No ad copies found. Ad copies synced from Google Docs will appear here.", {}
+
+    lines = ["## Social Media Ad Copies", ""]
+    for r in results:
+        date_str = r.get("created_at", "")
+        if hasattr(date_str, "strftime"):
+            date_str = date_str.strftime("%b %d, %Y")
+        title = r.get("title", "Untitled")
+        body = r.get("body_preview", r.get("body", ""))[:500]
+
+        lines.extend([
+            f"### {title}",
+            f"**Date**: {date_str}",
+            body,
+            "",
+        ])
+
+    return "\n".join(lines), {"count": len(results)}
+
+
+def _handle_submit_input(
+    question: str,
+    author: str | None,
+    input_type: str | None,
+) -> tuple[str, dict]:
+    """Store a user-submitted observation/note."""
+    if not question or len(question.strip()) < 5:
+        return "Please provide the content of your observation, note, or question (at least 5 characters).", {}
+
+    actual_type = input_type or "observation"
+    actual_author = author or "Anonymous"
+    title = (
+        f"{actual_type.replace('_', ' ').title()} — "
+        f"{datetime.now().strftime('%b %d %Y')}"
+    )
+
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO team_content
+               (content_type, title, body, author, source)
+               VALUES (%s, %s, %s, %s, 'form_submission')
+               RETURNING id""",
+            (actual_type, title, question.strip(), actual_author)
+        )
+        row = cur.fetchone()
+
+    return (
+        f"Your {actual_type.replace('_', ' ')} has been saved (ID: {row['id']}).\n\n"
+        f"**Author**: {actual_author}\n"
+        f"**Type**: {actual_type}\n"
+        f"**Content**: {question[:200]}{'...' if len(question) > 200 else ''}\n\n"
+        f"This will also be synced to Airtable for the team to review."
+    ), {"id": row["id"], "type": actual_type, "author": actual_author}
+
+
+# ---------------------------------------------------------------------------
 # Tier 2: Free-form — Claude with real data context
 # ---------------------------------------------------------------------------
 
@@ -594,6 +710,35 @@ async def _handle_free_form(question: str) -> tuple[str, dict]:
         if rules:
             context_parts.append(f"Active Playbook Rules: {json.dumps(rules)}")
 
+        # Recent team content (ground notes + ad copies)
+        try:
+            cur.execute("""
+                SELECT content_type, title, LEFT(body, 300) as body_preview,
+                       author, created_at
+                FROM team_content
+                WHERE is_active = true
+                  AND created_at > now() - interval '14 days'
+                ORDER BY created_at DESC
+                LIMIT 10
+            """)
+            team_items = [dict(r) for r in cur.fetchall()]
+            if team_items:
+                team_context = []
+                for t in team_items:
+                    team_context.append({
+                        "type": t["content_type"],
+                        "title": t["title"],
+                        "preview": t["body_preview"],
+                        "author": t.get("author", "Unknown"),
+                        "date": str(t["created_at"])[:10],
+                    })
+                context_parts.append(
+                    f"Recent Team Content (ground notes, ad copies — last 14 days): "
+                    f"{json.dumps(team_context, default=str)}"
+                )
+        except Exception:
+            pass  # team_content table may not exist yet
+
     data_context = "\n".join(context_parts)
 
     system_prompt = f"""You are the DabbahWala marketing intelligence assistant. You answer questions
@@ -603,6 +748,10 @@ DabbahWala is a fresh, home-style Indian food delivery service in Atlanta.
 We have ~4,000 contacts, run email campaigns via Instantly, SMS via Telnyx,
 and track lifecycle stages (cold, engaged, active_customer, new_customer,
 lapsed_customer, reactivation_candidate, cooling, optout).
+
+We also have a ground team that records field notes about deliveries and customer
+interactions, plus a social media team that creates daily ad copies. This team
+content is included below when available — reference it by title and author.
 
 REAL DATA FROM THE SYSTEM:
 {data_context}
@@ -666,6 +815,12 @@ async def handle_query(req: QueryRequest):
         answer, data = _handle_order_analytics(question)
     elif category == "communication_history":
         answer, data = _handle_communication_history(question, email)
+    elif category == "ground_team_notes":
+        answer, data = _handle_ground_team_notes(question)
+    elif category == "ad_copies":
+        answer, data = _handle_ad_copies(question)
+    elif category == "submit_input":
+        answer, data = _handle_submit_input(question, req.author, req.input_type)
     elif category == "free_form":
         answer, data = await _handle_free_form(question)
     else:
