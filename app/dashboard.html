@@ -531,61 +531,78 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="panel-title">About Me — How This System Works</div>
   <div class="panel-desc">Ask anything about <strong>how this system works</strong> — from high-level business purpose and marketing strategy, to functional processes (lifecycle rules, re-engagement flows, escalation logic), to technical details (agent pipeline, n8n workflows, integrations).<br><span style="color:#e63946;font-size:0.82rem;font-weight:600">Not for live data lookups — use the Query tab for specific customer, order, or campaign records.</span></div>
 
-  <div style="margin-bottom:14px">
-    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:8px">Example questions — click to ask</div>
-    <div style="display:flex;flex-wrap:wrap;gap:7px">
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the purpose of this system and how does it achieve it?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">Why is a 4-layer AI pipeline better than a single AI call?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system re-engage lapsed customers?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What happens when a delivery fails or is delayed?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system decide whether to send SMS vs email?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What triggers an escalation to Airtable?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How do contacts progress through lifecycle stages?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the offer strategy and how are offers personalised?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the Intelligence Cycle differ from the Agent Pipeline?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What happens end-to-end when a new order is placed?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system prevent over-messaging contacts?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How are daily reports generated and what do they cover?</button>
+  <div style="display:flex;gap:24px;align-items:flex-start">
+
+    <!-- LEFT: chat input + history -->
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+      <div class="chat-input-row">
+        <textarea id="cb-question" placeholder="Type your question about the system and press Enter or click Ask…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+        <button class="btn" id="cb-btn" onclick="sendChat()">Ask</button>
+      </div>
+      <div id="cb-error" style="margin-top:10px"></div>
+      <div id="cb-history" class="chat-history"></div>
     </div>
-  </div>
 
-  <div style="margin-bottom:14px">
-    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:8px">Technical deep-dives — click to ask</div>
-    <div style="display:flex;flex-wrap:wrap;gap:7px">
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What database tables power the lifecycle engine and how are they structured?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the FastAPI router layer decide which agent or handler to invoke?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the end-to-end data flow between Shipday, n8n, and this system?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How are natural-language queries translated into safe SQL and executed?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What retry and error-handling logic exists inside the agent pipeline?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the RAG / vector-store layer retrieve context for the chatbot?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">Which PostgreSQL indexes are used and why were they chosen?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How are API endpoints authenticated and what security controls are in place?</button>
-    </div>
-  </div>
+    <!-- RIGHT: categorised chips -->
+    <div style="width:320px;flex-shrink:0;overflow-y:auto;max-height:600px">
 
-  <div style="margin-bottom:14px">
-    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:8px">Agents, MCP &amp; Architecture — click to ask</div>
-    <div style="display:flex;flex-wrap:wrap;gap:7px">
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What agents exist in this system and what is each one responsible for?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the MCP (Model Context Protocol) layer work and what tools does it expose?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How do agents communicate with each other — shared state, queues, or direct calls?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the overall system architecture — monolith, microservices, or event-driven?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the orchestrator agent decide which specialist agent to delegate to?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How is agent memory or context maintained across multiple turns or sessions?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What guardrails prevent agents from taking harmful or unintended actions?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How are agent tool calls logged, traced, and debugged in production?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the role of n8n in the architecture and how does it integrate with the agents?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How would you add a new agent or MCP tool to this system?</button>
-    </div>
-  </div>
+      <div style="margin-bottom:18px">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#6c63ff;letter-spacing:0.05em;margin-bottom:7px">Functionality</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <button class="suggestion-chip" onclick="askSuggestion(this)">Why is a 4-layer AI pipeline better than a single AI call?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the FastAPI router layer decide which agent or handler to invoke?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the MCP layer work and what tools does it expose?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How are natural-language queries translated into safe SQL and executed?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the RAG / vector-store layer retrieve context for the chatbot?</button>
+        </div>
+      </div>
 
-  <div class="chat-input-row">
-    <textarea id="cb-question" placeholder="Type your question about the system and press Enter or click Ask…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
-    <button class="btn" id="cb-btn" onclick="sendChat()">Ask</button>
-  </div>
+      <div style="margin-bottom:18px">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#2a9d8f;letter-spacing:0.05em;margin-bottom:7px">Business Process</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <button class="suggestion-chip" onclick="askSuggestion(this)">What happens end-to-end when a new order is placed?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">What happens when a delivery fails or is delayed?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How do contacts progress through lifecycle stages?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system re-engage lapsed customers?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">What triggers an escalation to Airtable?</button>
+        </div>
+      </div>
 
-  <div id="cb-error" style="margin-top:10px"></div>
-  <div id="cb-history" class="chat-history"></div>
+      <div style="margin-bottom:18px">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#e76f51;letter-spacing:0.05em;margin-bottom:7px">Goal Oriented</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <button class="suggestion-chip" onclick="askSuggestion(this)">What is the purpose of this system and how does it achieve it?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">What is the offer strategy and how are offers personalised?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system decide whether to send SMS vs email?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system prevent over-messaging contacts?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How are daily reports generated and what do they cover?</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:18px">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#457b9d;letter-spacing:0.05em;margin-bottom:7px">Technical</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <button class="suggestion-chip" onclick="askSuggestion(this)">What is the overall system architecture — monolith, microservices, or event-driven?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">What database tables power the lifecycle engine and how are they structured?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">Which PostgreSQL indexes are used and why were they chosen?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How are API endpoints authenticated and what security controls are in place?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How are agent tool calls logged, traced, and debugged in production?</button>
+        </div>
+      </div>
+
+      <div style="margin-bottom:18px">
+        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#c77dff;letter-spacing:0.05em;margin-bottom:7px">Agents &amp; MCP</div>
+        <div style="display:flex;flex-direction:column;gap:5px">
+          <button class="suggestion-chip" onclick="askSuggestion(this)">What agents exist in this system and what is each one responsible for?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How do agents communicate — shared state, queues, or direct calls?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the orchestrator agent decide which specialist agent to delegate to?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How is agent memory or context maintained across multiple turns or sessions?</button>
+          <button class="suggestion-chip" onclick="askSuggestion(this)">How would you add a new agent or MCP tool to this system?</button>
+        </div>
+      </div>
+
+    </div><!-- /right -->
+  </div><!-- /flex row -->
 </div>
 
 <script>
