@@ -3,16 +3,19 @@ Daily order processing endpoint.
 n8n uploads CSV data -> this endpoint processes orders, creates contacts,
 records orders, fires events, and detects opportunities.
 """
+import asyncio
 import csv
 import io
 import json
 import logging
+import os
 import re
 from collections import defaultdict
 from datetime import datetime
 from difflib import SequenceMatcher
 
-from fastapi import APIRouter, HTTPException, UploadFile, File
+import httpx
+from fastapi import APIRouter, Form, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from app.db import get_cursor
@@ -52,6 +55,153 @@ def normalize_dish(name: str) -> str:
     name = name.strip()
     name = re.sub(r'\s+', ' ', name)
     return name
+
+
+def _parse_delivery_slot(slot: str) -> tuple:
+    """Parse '9:30 AM - 12:30 PM' into ('09:30', '12:30') for Shipday.
+
+    Returns (pickup_time, delivery_time) in HH:MM 24-hour format.
+    """
+    def _to_24h(t: str) -> str:
+        t = t.strip()
+        for fmt in ('%I:%M %p', '%I %p', '%H:%M'):
+            try:
+                return datetime.strptime(t, fmt).strftime('%H:%M')
+            except ValueError:
+                pass
+        return t
+
+    parts = [p.strip() for p in slot.split(' - ', 1)]
+    if len(parts) == 2:
+        return _to_24h(parts[0]), _to_24h(parts[1])
+    if len(parts) == 1 and parts[0]:
+        return _to_24h(parts[0]), ''
+    return '', ''
+
+
+async def _push_orders_to_shipday(orders_grouped: dict,
+                                   restaurant_name: str = "DabbahWala",
+                                   restaurant_address: str = "") -> dict:
+    """Push every unique order to the Shipday Orders API concurrently.
+
+    Returns a summary dict with per-order results and a link to the dashboard.
+    """
+    api_key = os.environ.get("SHIPDAY_API_KEY", "")
+    if not api_key:
+        logger.warning("SHIPDAY_API_KEY not set — skipping Shipday push")
+        return {"skipped": True, "reason": "SHIPDAY_API_KEY not configured"}
+
+    headers = {
+        "Authorization": f"Basic {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    # Build one payload per unique order
+    items_to_push = []
+    for order_num, item_rows in orders_grouped.items():
+        first = item_rows[0]
+        customer_name = _col(first, 'Customer Name', 'Name', 'Customer', 'customer_name').strip()
+        phone = _col(first, 'Customer Phone Number', 'Phone', 'Customer Phone', 'phone').strip()
+        address = _col(first, 'Customer Address', 'Address', 'address').strip()
+        date_raw = _col(first, 'Date', 'Order Date', 'date', 'order_date').strip()
+        delivery_slot = _col(first, 'Delivery Slot Name', 'Delivery Slot', 'delivery_slot').strip()
+        delivery_instr = _col(first, 'Delivery Instructions', 'Delivery Instruction',
+                              'delivery_instructions').strip()
+
+        try:
+            delivery_date = datetime.strptime(date_raw, '%d/%m/%Y').strftime('%Y-%m-%d')
+        except Exception:
+            delivery_date = datetime.now().strftime('%Y-%m-%d')
+
+        pickup_time, delivery_time = _parse_delivery_slot(delivery_slot)
+
+        order_items = []
+        for row in item_rows:
+            dish = _col(row, 'Dish Name', 'Item Name', 'Product', 'dish_name', 'item_name', 'Item').strip()
+            qty = int(_col(row, 'Quantity', 'Qty', 'qty', 'quantity') or 1)
+            price = float(_col(row, 'Unit Price', 'Price', 'unit_price', 'price') or 0)
+            if dish:
+                order_items.append({"name": dish, "quantity": qty, "unitPrice": price})
+
+        payload: dict = {
+            "orderNumber": order_num,
+            "customerName": customer_name,
+            "customerAddress": address,
+            "customerPhoneNumber": phone,
+            "restaurantName": restaurant_name,
+        }
+        if restaurant_address:
+            payload["restaurantAddress"] = restaurant_address
+        if delivery_date:
+            payload["expectedDeliveryDate"] = delivery_date
+        if pickup_time:
+            payload["expectedPickupTime"] = pickup_time
+        if delivery_time:
+            payload["expectedDeliveryTime"] = delivery_time
+        if delivery_instr:
+            payload["deliveryInstruction"] = delivery_instr
+        if order_items:
+            payload["orderItems"] = order_items
+
+        items_to_push.append((order_num, customer_name, payload))
+
+    async def _push_one(client: httpx.AsyncClient, order_num: str,
+                        customer_name: str, payload: dict) -> dict:
+        try:
+            resp = await client.post("https://api.shipday.com/orders", json=payload)
+            resp.raise_for_status()
+            resp_data = resp.json()
+            shipday_id = resp_data.get("orderId") or resp_data.get("order_id")
+            logger.info("Shipday order created: order=%s shipday_id=%s", order_num, shipday_id)
+            return {
+                "order_number": order_num,
+                "customer_name": customer_name,
+                "status": "created",
+                "shipday_order_id": shipday_id,
+            }
+        except httpx.HTTPStatusError as e:
+            body = e.response.text[:300]
+            logger.error("Shipday create failed order=%s status=%d body=%s",
+                         order_num, e.response.status_code, body)
+            return {
+                "order_number": order_num,
+                "customer_name": customer_name,
+                "status": "failed",
+                "error": f"HTTP {e.response.status_code}: {body}",
+            }
+        except Exception as e:
+            logger.error("Shipday create error order=%s: %s", order_num, e)
+            return {
+                "order_number": order_num,
+                "customer_name": customer_name,
+                "status": "failed",
+                "error": str(e),
+            }
+
+    try:
+        async with httpx.AsyncClient(headers=headers, timeout=20.0) as client:
+            results = await asyncio.gather(
+                *[_push_one(client, on, cn, pl) for on, cn, pl in items_to_push]
+            )
+    except Exception as e:
+        logger.error("Shipday batch push failed: %s", e, exc_info=True)
+        return {"skipped": True, "reason": f"Shipday push error: {e}"}
+
+    results = list(results)
+    succeeded = sum(1 for r in results if r["status"] == "created")
+    failed = sum(1 for r in results if r["status"] == "failed")
+
+    logger.info(
+        "Shipday push complete: submitted=%d succeeded=%d failed=%d",
+        len(items_to_push), succeeded, failed,
+    )
+    return {
+        "submitted": len(items_to_push),
+        "succeeded": succeeded,
+        "failed": failed,
+        "orders": results,
+        "dashboard_url": "https://dispatch.shipday.com",
+    }
 
 
 def _load_menu_lookup(cur) -> tuple:
@@ -133,11 +283,15 @@ class DailyOrderResult(BaseModel):
     field_opportunities: list = []
     campaign_moves: list = []
     airtable_synced: int = 0
+    shipday_result: dict = {}
 
 
 @router.post("/process", response_model=DailyOrderResult)
 @router.post("/upload-csv", response_model=DailyOrderResult)
-async def process_daily_orders(file: UploadFile = File(...)):
+async def process_daily_orders(
+    file: UploadFile = File(...),
+    push_to_shipday: str = Form("false"),
+):
     """
     Upload a CSV of daily orders. Columns are matched flexibly.
     After ingestion:
@@ -625,6 +779,19 @@ async def process_daily_orders(file: UploadFile = File(...)):
                                task.get('first_name'), task.get('last_name'), e)
         logger.info("Airtable sync complete: %d/%d pushed", airtable_synced, len(airtable_tasks))
 
+    # Push orders to Shipday only when the caller explicitly opts in
+    _do_shipday = push_to_shipday.strip().lower() in ("true", "1", "yes")
+    if _do_shipday:
+        logger.info("Pushing %d orders to Shipday (opted-in)", len(orders_grouped))
+        shipday_result = await _push_orders_to_shipday(
+            orders_grouped,
+            restaurant_name=os.environ.get("SHIPDAY_RESTAURANT_NAME", "DabbahWala"),
+            restaurant_address=os.environ.get("SHIPDAY_RESTAURANT_ADDRESS", ""),
+        )
+    else:
+        logger.info("Shipday push skipped — push_to_shipday not set")
+        shipday_result = {}
+
     return DailyOrderResult(
         date=order_date_str,
         total_orders=order_count,
@@ -646,6 +813,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
         field_opportunities=field_opportunities,
         campaign_moves=campaign_moves,
         airtable_synced=airtable_synced,
+        shipday_result=shipday_result,
     )
 
 
