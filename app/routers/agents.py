@@ -860,8 +860,31 @@ class SingleContactRequest(BaseModel):
     contact_id: int
 
 
+class ContactEventRequest(BaseModel):
+    phone: Optional[str] = None
+    email: Optional[str] = None
+
+
 class ReportRequest(BaseModel):
     report_date: Optional[str] = None  # defaults to today
+
+
+def _lookup_contact_id(phone: Optional[str] = None, email: Optional[str] = None) -> Optional[int]:
+    """Find a contact by phone or email. Returns None if not found."""
+    with get_cursor(commit=False) as cur:
+        if phone:
+            # Normalise: strip spaces/dashes, keep leading +
+            normalized = "".join(c for c in phone if c.isdigit() or c == "+")
+            cur.execute(
+                "SELECT id FROM contacts WHERE phone = %s OR phone = %s LIMIT 1",
+                (phone, normalized),
+            )
+        elif email:
+            cur.execute("SELECT id FROM contacts WHERE email = %s LIMIT 1", (email,))
+        else:
+            return None
+        row = cur.fetchone()
+        return row["id"] if row else None
 
 
 @router.post("/cycle/run")
@@ -878,6 +901,23 @@ def run_agent_cycle(req: CycleRequest):
         except Exception as e:
             errors.append({"contact_id": cid, "error": str(e)})
     return {"processed": len(results), "errors": errors, "results": results}
+
+
+@router.post("/cycle/run-for-contact")
+def run_cycle_for_contact(req: ContactEventRequest):
+    """
+    Run the full agent cycle for a single contact identified by phone or email.
+    Called by the Telnyx inbound collector immediately after every new event,
+    so every piece of evidence is evaluated for opportunity in real time.
+    """
+    contact_id = _lookup_contact_id(phone=req.phone, email=req.email)
+    if not contact_id:
+        return {"status": "skipped", "reason": "Contact not found", "phone": req.phone, "email": req.email}
+    try:
+        result = _run_full_cycle(contact_id)
+        return {"status": "ok", **result}
+    except Exception as e:
+        return {"status": "error", "contact_id": contact_id, "error": str(e)}
 
 
 @router.post("/cycle/run-all")
