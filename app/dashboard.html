@@ -197,6 +197,11 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
       <optgroup label="📧 Campaigns">
         <option value="campaign_performance">Campaign Performance — Email campaign stats</option>
       </optgroup>
+      <optgroup label="📋 Team Content">
+        <option value="ground_team_notes">Ground Team Notes — Field notes from the team</option>
+        <option value="ad_copies">Ad Copies — Social media ad copy library</option>
+        <option value="submit_input">Submit Note / Observation — Add a team entry</option>
+      </optgroup>
       <optgroup label="🧠 AI">
         <option value="free_form">Ask Anything (AI) — Free-form question</option>
       </optgroup>
@@ -247,8 +252,13 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="panel-desc">Run the full inference → decision → orchestrator pipeline for a single contact. Returns their sentiment, intent, engagement score, and the recommended next action. Takes 20–40 seconds.</div>
 
   <div class="form-group">
-    <label>Customer email</label>
+    <label>Customer email <span class="hint">(or provide phone below)</span></label>
     <input id="a-email" type="email" placeholder="customer@example.com">
+  </div>
+
+  <div class="form-group">
+    <label>Phone number <span class="hint">(optional — used if email is blank)</span></label>
+    <input id="a-phone" type="tel" placeholder="+1234567890">
   </div>
 
   <button class="btn" id="a-btn" onclick="runAgent()">Run Inference &amp; Get Recommendation</button>
@@ -642,11 +652,19 @@ function resetSmsEditor() {
 const Q_DATE_CATS    = ['order_summary_by_order_date','order_summary_by_delivery_date','revenue_trends'];
 const Q_CONTACT_CATS = ['customer_lookup','communication_history'];
 const Q_HIDE_CONTACT = ['pipeline_snapshot','daily_summary','order_summary_by_order_date',
-                        'order_summary_by_delivery_date','order_analytics','revenue_trends','campaign_performance'];
+                        'order_summary_by_delivery_date','order_analytics','revenue_trends',
+                        'campaign_performance','ground_team_notes','ad_copies'];
 const Q_DATE_LABELS  = {
   order_summary_by_order_date:    'Order date range',
   order_summary_by_delivery_date: 'Delivery date range',
   revenue_trends:                 'Period (leave blank for last 12 weeks)',
+};
+const Q_PLACEHOLDERS = {
+  order_summary_by_order_date:    'Leave blank to use the date range above',
+  order_summary_by_delivery_date: 'Leave blank to use the date range above',
+  ground_team_notes:  'Search keyword (optional — leave blank for recent notes)',
+  ad_copies:          'Search keyword (optional — leave blank for recent copies)',
+  submit_input:       'Enter your observation, note, or question here…',
 };
 
 function onCategoryChange() {
@@ -661,6 +679,14 @@ function onCategoryChange() {
   document.getElementById('q-name-group').style.display      = hideContact  ? 'none'  : 'block';
   document.getElementById('q-email-hint').textContent        = needsEmail   ? '(required)' : '(optional)';
   if (needsDate) document.getElementById('q-daterange-label').textContent = Q_DATE_LABELS[cat] || 'Date range';
+
+  const nameLabel = document.querySelector('#q-name-group label');
+  if (nameLabel) nameLabel.innerHTML = cat === 'submit_input'
+    ? 'Your name <span class="hint">(optional — shown as author)</span>'
+    : 'Customer name <span class="hint">(optional)</span>';
+
+  document.getElementById('q-question').placeholder =
+    Q_PLACEHOLDERS[cat] || 'e.g. How many lapsed customers came back this week?';
 }
 
 async function runQuery() {
@@ -675,7 +701,7 @@ async function runQuery() {
   try {
     const res  = await fetch('/api/query', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null, date_from: dateFrom || null, date_to: dateTo || null }),
+      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null, date_from: dateFrom || null, date_to: dateTo || null, author: cat === 'submit_input' ? (name || null) : null }),
     });
     const data = await res.json();
     if (!res.ok) { setError('q-result', data.detail || JSON.stringify(data)); return; }
@@ -686,13 +712,14 @@ async function runQuery() {
 // ─── agent ───────────────────────────────────────────────────────────────────
 async function runAgent() {
   const email = document.getElementById('a-email').value.trim();
-  if (!email) { setError('a-result', 'Please enter a customer email.'); return; }
+  const phone = document.getElementById('a-phone').value.trim();
+  if (!email && !phone) { setError('a-result', 'Please enter a customer email or phone number.'); return; }
   setLoading('a-result', 'Running inference → decision → orchestration… (20–40 s)');
   setBtn('a-btn', true, 'Running…');
   try {
     const res  = await fetch('/api/agents/cycle/run-for-contact', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email: email || null, phone: phone || null }),
     });
     const data = await res.json();
     setBtn('a-btn', false, 'Run Inference & Get Recommendation');
