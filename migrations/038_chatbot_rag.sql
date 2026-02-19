@@ -1,4 +1,4 @@
--- 036_chatbot_rag.sql
+-- 038_chatbot_rag.sql
 -- RAG chatbot: documentation chunks + interaction history
 
 -- Document chunks from markdown files (knowledge base)
