@@ -161,6 +161,12 @@
           }
         },
         "fieldsToMergeOn": "Doc ID"
+      },
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "hJpO8jdlT4Rmkjtx",
+          "name": "Airtable API Key"
+        }
       }
     },
     {
