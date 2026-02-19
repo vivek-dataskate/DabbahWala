@@ -5,6 +5,8 @@
 -- For daily CSV uploads, delivery_date = the date in the CSV row.
 -- Backfilled from order_date for all existing rows.
 
+SET search_path TO dabbahwala;
+
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_date DATE;
 
 -- Backfill: assume delivery_date = order_date for all existing records
