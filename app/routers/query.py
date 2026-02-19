@@ -31,6 +31,7 @@ CATEGORIES = {
     "who_to_contact": "Which customers should we reach out to today",
     "daily_summary": "Today's or recent order/activity summary",
     "order_analytics": "Top dishes, revenue trends, order patterns",
+    "order_summary_by_delivery_date": "Orders grouped and summarized by delivery date",
     "communication_history": "SMS/call history for a specific customer",
     "ground_team_notes": "Browse recent field notes from the ground team",
     "ad_copies": "Browse recent social media ad copies",
@@ -491,6 +492,101 @@ def _handle_order_analytics(question: str) -> tuple[str, dict]:
         "total_orders": avg_row["total_orders"],
         "repeat_rate": repeat_row["repeat_customers"] / max(repeat_row["total_customers"], 1),
     }
+    return "\n".join(lines), data
+
+
+def _handle_order_summary_by_delivery_date(question: str) -> tuple[str, dict]:
+    """Orders grouped by delivery date with per-date counts, revenue, and top items."""
+    # Parse a specific date from the question if provided (e.g. "2024-01-15" or "Jan 15")
+    target_date: date | None = None
+    for fmt in ("%Y-%m-%d", "%b %d %Y", "%B %d %Y", "%m/%d/%Y"):
+        try:
+            target_date = datetime.strptime(question.strip(), fmt).date()
+            break
+        except ValueError:
+            pass
+
+    with get_cursor(commit=False) as cur:
+        if target_date:
+            # Single date detail
+            cur.execute("""
+                SELECT
+                    o.order_date::date AS delivery_date,
+                    count(DISTINCT o.id) AS order_count,
+                    count(DISTINCT o.contact_id) AS unique_customers,
+                    coalesce(sum(o.total_amount), 0) AS revenue,
+                    coalesce(avg(o.total_amount), 0) AS avg_order_value
+                FROM orders o
+                WHERE o.order_date::date = %s
+                GROUP BY delivery_date
+            """, (target_date,))
+            day_rows = [dict(r) for r in cur.fetchall()]
+
+            cur.execute("""
+                SELECT oi.item_name, sum(oi.quantity) AS qty, sum(oi.line_total) AS revenue
+                FROM order_items oi
+                JOIN orders o ON o.id = oi.order_id
+                WHERE o.order_date::date = %s
+                GROUP BY oi.item_name
+                ORDER BY qty DESC
+                LIMIT 10
+            """, (target_date,))
+            items = [dict(r) for r in cur.fetchall()]
+        else:
+            # Last 30 days grouped by date
+            cur.execute("""
+                SELECT
+                    o.order_date::date AS delivery_date,
+                    count(DISTINCT o.id) AS order_count,
+                    count(DISTINCT o.contact_id) AS unique_customers,
+                    coalesce(sum(o.total_amount), 0) AS revenue,
+                    coalesce(avg(o.total_amount), 0) AS avg_order_value
+                FROM orders o
+                WHERE o.order_date > now() - interval '30 days'
+                GROUP BY delivery_date
+                ORDER BY delivery_date DESC
+            """)
+            day_rows = [dict(r) for r in cur.fetchall()]
+            items = []
+
+    if not day_rows:
+        label = str(target_date) if target_date else "the last 30 days"
+        return f"No orders found for {label}.", {}
+
+    if target_date:
+        d = day_rows[0]
+        lines = [
+            f"## Orders for {target_date.strftime('%A, %B %d, %Y')}",
+            "",
+            f"- **Orders**: {d['order_count']}",
+            f"- **Unique Customers**: {d['unique_customers']}",
+            f"- **Revenue**: ${float(d['revenue']):.2f}",
+            f"- **Avg Order Value**: ${float(d['avg_order_value']):.2f}",
+        ]
+        if items:
+            lines.extend(["", "### Items Ordered"])
+            for it in items:
+                lines.append(f"- **{it['item_name']}**: {it['qty']} qty  (${float(it.get('revenue') or 0):.2f})")
+        data = {"date": str(target_date), "summary": d, "items": items}
+    else:
+        total_orders = sum(r["order_count"] for r in day_rows)
+        total_revenue = sum(float(r["revenue"]) for r in day_rows)
+        lines = [
+            "## Orders by Delivery Date (Last 30 Days)",
+            "",
+            f"**Total Orders**: {total_orders}  |  **Total Revenue**: ${total_revenue:.2f}",
+            "",
+            "| Date | Orders | Customers | Revenue | Avg |",
+            "|------|--------|-----------|---------|-----|",
+        ]
+        for r in day_rows:
+            lines.append(
+                f"| {r['delivery_date']} | {r['order_count']} | "
+                f"{r['unique_customers']} | ${float(r['revenue']):.2f} | "
+                f"${float(r['avg_order_value']):.2f} |"
+            )
+        data = {"days": [dict(r) for r in day_rows], "total_orders": total_orders, "total_revenue": total_revenue}
+
     return "\n".join(lines), data
 
 
@@ -971,6 +1067,8 @@ async def handle_query(req: QueryRequest):
             answer, data = _handle_daily_summary(question)
         elif category == "order_analytics":
             answer, data = _handle_order_analytics(question)
+        elif category == "order_summary_by_delivery_date":
+            answer, data = _handle_order_summary_by_delivery_date(question)
         elif category == "communication_history":
             answer, data = _handle_communication_history(question, email, phone, name)
         elif category == "ground_team_notes":
