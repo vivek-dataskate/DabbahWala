@@ -6,7 +6,8 @@ from pydantic import BaseModel
 
 # --- Event ingestion ---
 class EventIngest(BaseModel):
-    contact_email: str
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None  # fallback if email unknown (e.g. Shipday)
     event_type: str
     metadata: dict = {}
 
@@ -70,7 +71,8 @@ class TelnyxCallIn(BaseModel):
 
 # --- Delivery status ---
 class DeliveryStatusIn(BaseModel):
-    contact_email: str
+    contact_email: Optional[str] = None
+    contact_phone: Optional[str] = None  # fallback if email unknown (e.g. Shipday)
     order_ref: Optional[str] = None
     status: str
     updated_by: Optional[str] = None

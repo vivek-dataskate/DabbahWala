@@ -205,7 +205,12 @@ def _run_intent_agent(client: anthropic.Anthropic, contact: dict, events: list, 
         "You are the Intent Inference Agent for DabbahWala food delivery. "
         "Analyse email engagement events and communication history to classify purchase intent. "
         "Look for signals: multiple opens without ordering, questions about menu/prices, "
-        "re-engagement after absence, reorder language in call transcripts."
+        "re-engagement after absence, reorder language in call transcripts.\n"
+        "Delivery events are strong buying signals:\n"
+        "  - 'delivered' or 'order_placed' in recent events = customer is ACTIVELY ordering; classify as ready_to_order\n"
+        "  - 'delivery_failed' = customer had a bad experience; weight this heavily against purchase readiness\n"
+        "  - 'out_for_delivery' / 'driver_assigned' = order in progress; do NOT classify as ready_to_order yet\n"
+        "  - No delivery events + long gap since last order = likely lapsed; use email engagement to calibrate."
     )
     user = (
         f"Customer: {contact.get('first_name', '')} {contact.get('last_name', '')} | "
@@ -464,12 +469,21 @@ def _run_orchestrator(
     decision: dict,
     goal: Optional[dict],
     recent_actions: list,
+    delivery_context: Optional[dict] = None,
 ) -> dict:
     system = (
         "You are the Orchestrator Agent for DabbahWala food delivery marketing. "
         "You receive recommendations from 4 specialist decision agents and must choose the single best next action. "
-        "You are goal-oriented: every decision must move the customer closer to the stated goal. "
-        "Guardrails you must enforce:\n"
+        "You are goal-oriented: every decision must move the customer closer to placing their NEXT order.\n\n"
+        "DELIVERY-AWARE RULES (check these first — they override other signals):\n"
+        "  - If latest delivery event is 'delivered': this is the prime reorder window. "
+        "Send a warm thank-you SMS with a gentle reorder nudge — UNLESS already messaged in the last 24h.\n"
+        "  - If latest delivery event is 'delivery_failed' or 'delivery_returned': action must be "
+        "'escalate_airtable' with urgency=high so the team can recover the relationship BEFORE any selling.\n"
+        "  - If latest delivery event is 'out_for_delivery', 'driver_assigned', or 'delivery_arrived': "
+        "action must be 'none' — do not interrupt an order in progress with marketing.\n"
+        "  - If no delivery event in last 7 days: use intent/engagement signals as normal.\n\n"
+        "GENERAL GUARDRAILS:\n"
         "  - Never contact a customer more than once every 24 hours via the same channel\n"
         "  - Maximum 3 SMS per week per customer\n"
         "  - Escalation to Airtable takes priority over automated channels\n"
@@ -481,6 +495,7 @@ def _run_orchestrator(
         f"Customer: {contact.get('first_name', '')} {contact.get('last_name', '')} | "
         f"Stage: {contact.get('lifecycle_segment', 'unknown')} | "
         f"Phone: {contact.get('phone', 'N/A')} | Email: {contact.get('email', 'N/A')}\n\n"
+        f"Latest delivery signal: {json.dumps(delivery_context, indent=2, default=str)}\n\n"
         f"Active goal: {json.dumps(goal, indent=2, default=str)}\n\n"
         f"Decision agent recommendations:\n{json.dumps(decision, indent=2, default=str)}\n\n"
         f"Recent actions (last 48h):\n{json.dumps(recent_actions, indent=2, default=str)}"
@@ -563,6 +578,15 @@ def _run_full_cycle(contact_id: int) -> dict:
     recent_actions = _fetch_recent_actions(contact_id, hours=48)
     goal_id = goal["id"] if goal else None
 
+    # Extract latest delivery event to give orchestrator direct delivery context
+    delivery_event_types = {
+        "delivered", "out_for_delivery", "driver_assigned", "delivery_arrived",
+        "delivery_failed", "delivery_returned", "order_accepted",
+    }
+    latest_delivery = next(
+        (e for e in events if e.get("event_type") in delivery_event_types), None
+    )
+
     # Layer 1 — inference (run all 3)
     sentiment = _run_sentiment_agent(client, contact, comms)
     intent = _run_intent_agent(client, contact, events, comms)
@@ -591,8 +615,8 @@ def _run_full_cycle(contact_id: int) -> dict:
         "decision_id": decision_id,
     }
 
-    # Layer 3 — orchestrator
-    orch_result = _run_orchestrator(client, contact, decision_summary, goal, recent_actions)
+    # Layer 3 — orchestrator (receives delivery context directly so it can apply delivery rules)
+    orch_result = _run_orchestrator(client, contact, decision_summary, goal, recent_actions, latest_delivery)
     orch_log_id = _store_orchestration(contact_id, decision_id, goal_id, orch_result)
 
     chosen_action = orch_result.get("chosen_action", "none")
