@@ -31,7 +31,9 @@ CATEGORIES = {
     "who_to_contact": "Which customers should we reach out to today",
     "daily_summary": "Today's or recent order/activity summary",
     "order_analytics": "Top dishes, revenue trends, order patterns",
+    "order_summary_by_order_date": "Orders grouped by order date with revenue and source breakdown",
     "order_summary_by_delivery_date": "Orders grouped and summarized by delivery date",
+    "revenue_trends": "Weekly and monthly revenue totals with trend analysis",
     "communication_history": "SMS/call history for a specific customer",
     "ground_team_notes": "Browse recent field notes from the ground team",
     "ad_copies": "Browse recent social media ad copies",
@@ -49,6 +51,9 @@ class QueryRequest(BaseModel):
     # Used by submit_input category
     author: str | None = None
     input_type: str | None = None  # ground_note, ad_copy, observation, question
+    # Used by date-range categories
+    date_from: str | None = None
+    date_to: str | None = None
 
 
 class QueryResponse(BaseModel):
@@ -495,68 +500,67 @@ def _handle_order_analytics(question: str) -> tuple[str, dict]:
     return "\n".join(lines), data
 
 
-def _handle_order_summary_by_delivery_date(question: str) -> tuple[str, dict]:
-    """Orders grouped by delivery date with per-date counts, revenue, and top items."""
-    # Parse a specific date from the question if provided (e.g. "2024-01-15" or "Jan 15")
-    target_date: date | None = None
-    for fmt in ("%Y-%m-%d", "%b %d %Y", "%B %d %Y", "%m/%d/%Y"):
+def _parse_date_range(date_from: str | None, date_to: str | None) -> tuple[date | None, date | None]:
+    """Parse date_from / date_to strings (YYYY-MM-DD) into date objects."""
+    def _p(s: str | None) -> date | None:
+        if not s:
+            return None
         try:
-            target_date = datetime.strptime(question.strip(), fmt).date()
-            break
+            return datetime.strptime(s.strip(), "%Y-%m-%d").date()
         except ValueError:
-            pass
+            return None
+    return _p(date_from), _p(date_to)
+
+
+def _handle_order_summary_by_delivery_date(
+    question: str, date_from: str | None = None, date_to: str | None = None
+) -> tuple[str, dict]:
+    """Orders grouped by delivery date with per-date counts, revenue, and top items."""
+    d_from, d_to = _parse_date_range(date_from, date_to)
+    # Default: last 30 days
+    if not d_from:
+        d_from = date.today() - timedelta(days=30)
+    if not d_to:
+        d_to = date.today()
+
+    single_day = d_from == d_to
 
     with get_cursor(commit=False) as cur:
-        if target_date:
-            # Single date detail
-            cur.execute("""
-                SELECT
-                    o.order_date::date AS delivery_date,
-                    count(DISTINCT o.id) AS order_count,
-                    count(DISTINCT o.contact_id) AS unique_customers,
-                    coalesce(sum(o.total_amount), 0) AS revenue,
-                    coalesce(avg(o.total_amount), 0) AS avg_order_value
-                FROM orders o
-                WHERE o.order_date::date = %s
-                GROUP BY delivery_date
-            """, (target_date,))
-            day_rows = [dict(r) for r in cur.fetchall()]
+        cur.execute("""
+            SELECT
+                o.order_date::date AS delivery_date,
+                count(DISTINCT o.id) AS order_count,
+                count(DISTINCT o.contact_id) AS unique_customers,
+                coalesce(sum(o.total_amount), 0) AS revenue,
+                coalesce(avg(o.total_amount), 0) AS avg_order_value
+            FROM orders o
+            WHERE o.order_date::date BETWEEN %s AND %s
+            GROUP BY delivery_date
+            ORDER BY delivery_date DESC
+        """, (d_from, d_to))
+        day_rows = [dict(r) for r in cur.fetchall()]
 
+        items = []
+        if single_day:
             cur.execute("""
                 SELECT oi.item_name, sum(oi.quantity) AS qty, sum(oi.line_total) AS revenue
-                FROM order_items oi
-                JOIN orders o ON o.id = oi.order_id
+                FROM order_items oi JOIN orders o ON o.id = oi.order_id
                 WHERE o.order_date::date = %s
-                GROUP BY oi.item_name
-                ORDER BY qty DESC
-                LIMIT 10
-            """, (target_date,))
+                GROUP BY oi.item_name ORDER BY qty DESC LIMIT 10
+            """, (d_from,))
             items = [dict(r) for r in cur.fetchall()]
-        else:
-            # Last 30 days grouped by date
-            cur.execute("""
-                SELECT
-                    o.order_date::date AS delivery_date,
-                    count(DISTINCT o.id) AS order_count,
-                    count(DISTINCT o.contact_id) AS unique_customers,
-                    coalesce(sum(o.total_amount), 0) AS revenue,
-                    coalesce(avg(o.total_amount), 0) AS avg_order_value
-                FROM orders o
-                WHERE o.order_date > now() - interval '30 days'
-                GROUP BY delivery_date
-                ORDER BY delivery_date DESC
-            """)
-            day_rows = [dict(r) for r in cur.fetchall()]
-            items = []
 
     if not day_rows:
-        label = str(target_date) if target_date else "the last 30 days"
+        label = str(d_from) if single_day else f"{d_from} to {d_to}"
         return f"No orders found for {label}.", {}
 
-    if target_date:
+    total_orders = sum(r["order_count"] for r in day_rows)
+    total_revenue = sum(float(r["revenue"]) for r in day_rows)
+
+    if single_day:
         d = day_rows[0]
         lines = [
-            f"## Orders for {target_date.strftime('%A, %B %d, %Y')}",
+            f"## Orders for {d_from.strftime('%A, %B %d, %Y')}",
             "",
             f"- **Orders**: {d['order_count']}",
             f"- **Unique Customers**: {d['unique_customers']}",
@@ -567,12 +571,9 @@ def _handle_order_summary_by_delivery_date(question: str) -> tuple[str, dict]:
             lines.extend(["", "### Items Ordered"])
             for it in items:
                 lines.append(f"- **{it['item_name']}**: {it['qty']} qty  (${float(it.get('revenue') or 0):.2f})")
-        data = {"date": str(target_date), "summary": d, "items": items}
     else:
-        total_orders = sum(r["order_count"] for r in day_rows)
-        total_revenue = sum(float(r["revenue"]) for r in day_rows)
         lines = [
-            "## Orders by Delivery Date (Last 30 Days)",
+            f"## Orders by Delivery Date ({d_from} → {d_to})",
             "",
             f"**Total Orders**: {total_orders}  |  **Total Revenue**: ${total_revenue:.2f}",
             "",
@@ -585,8 +586,147 @@ def _handle_order_summary_by_delivery_date(question: str) -> tuple[str, dict]:
                 f"{r['unique_customers']} | ${float(r['revenue']):.2f} | "
                 f"${float(r['avg_order_value']):.2f} |"
             )
-        data = {"days": [dict(r) for r in day_rows], "total_orders": total_orders, "total_revenue": total_revenue}
 
+    data = {"days": day_rows, "total_orders": total_orders, "total_revenue": total_revenue}
+    return "\n".join(lines), data
+
+
+def _handle_order_summary_by_order_date(
+    question: str, date_from: str | None = None, date_to: str | None = None
+) -> tuple[str, dict]:
+    """Orders grouped by order placement date with revenue and source breakdown."""
+    d_from, d_to = _parse_date_range(date_from, date_to)
+    if not d_from:
+        d_from = date.today() - timedelta(days=30)
+    if not d_to:
+        d_to = date.today()
+
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT
+                order_date::date AS order_day,
+                count(DISTINCT id) AS order_count,
+                count(DISTINCT contact_id) AS unique_customers,
+                coalesce(sum(total_amount), 0) AS revenue,
+                coalesce(avg(total_amount), 0) AS avg_order_value
+            FROM orders
+            WHERE order_date::date BETWEEN %s AND %s
+            GROUP BY order_day
+            ORDER BY order_day DESC
+        """, (d_from, d_to))
+        day_rows = [dict(r) for r in cur.fetchall()]
+
+        cur.execute("""
+            SELECT source, count(*) AS cnt, coalesce(sum(total_amount), 0) AS revenue
+            FROM orders
+            WHERE order_date::date BETWEEN %s AND %s
+            GROUP BY source ORDER BY cnt DESC
+        """, (d_from, d_to))
+        sources = [dict(r) for r in cur.fetchall()]
+
+    if not day_rows:
+        return f"No orders found between {d_from} and {d_to}.", {}
+
+    total_orders = sum(r["order_count"] for r in day_rows)
+    total_revenue = sum(float(r["revenue"]) for r in day_rows)
+
+    lines = [
+        f"## Orders by Order Date ({d_from} → {d_to})",
+        "",
+        f"**Total Orders**: {total_orders}  |  **Total Revenue**: ${total_revenue:.2f}",
+        "",
+        "| Date | Orders | Customers | Revenue | Avg |",
+        "|------|--------|-----------|---------|-----|",
+    ]
+    for r in day_rows:
+        lines.append(
+            f"| {r['order_day']} | {r['order_count']} | "
+            f"{r['unique_customers']} | ${float(r['revenue']):.2f} | "
+            f"${float(r['avg_order_value']):.2f} |"
+        )
+
+    if sources:
+        lines.extend(["", "### By Source"])
+        for s in sources:
+            lines.append(f"- **{s['source'] or 'Unknown'}**: {s['cnt']} orders  (${float(s['revenue']):.2f})")
+
+    data = {"days": day_rows, "sources": sources, "total_orders": total_orders, "total_revenue": total_revenue}
+    return "\n".join(lines), data
+
+
+def _handle_revenue_trends(
+    question: str, date_from: str | None = None, date_to: str | None = None
+) -> tuple[str, dict]:
+    """Weekly revenue totals with week-over-week trend."""
+    d_from, d_to = _parse_date_range(date_from, date_to)
+    if not d_from:
+        d_from = date.today() - timedelta(weeks=12)
+    if not d_to:
+        d_to = date.today()
+
+    with get_cursor(commit=False) as cur:
+        # Weekly totals
+        cur.execute("""
+            SELECT
+                date_trunc('week', order_date)::date AS week_start,
+                count(DISTINCT id) AS orders,
+                count(DISTINCT contact_id) AS customers,
+                coalesce(sum(total_amount), 0) AS revenue,
+                coalesce(avg(total_amount), 0) AS avg_order
+            FROM orders
+            WHERE order_date::date BETWEEN %s AND %s
+            GROUP BY week_start
+            ORDER BY week_start DESC
+        """, (d_from, d_to))
+        weeks = [dict(r) for r in cur.fetchall()]
+
+        # Monthly totals
+        cur.execute("""
+            SELECT
+                date_trunc('month', order_date)::date AS month_start,
+                count(DISTINCT id) AS orders,
+                coalesce(sum(total_amount), 0) AS revenue
+            FROM orders
+            WHERE order_date::date BETWEEN %s AND %s
+            GROUP BY month_start
+            ORDER BY month_start DESC
+        """, (d_from, d_to))
+        months = [dict(r) for r in cur.fetchall()]
+
+    if not weeks:
+        return f"No revenue data found between {d_from} and {d_to}.", {}
+
+    total_revenue = sum(float(w["revenue"]) for w in weeks)
+    total_orders = sum(w["orders"] for w in weeks)
+
+    lines = [
+        f"## Revenue Trends ({d_from} → {d_to})",
+        "",
+        f"**Total Revenue**: ${total_revenue:.2f}  |  **Total Orders**: {total_orders}",
+        "",
+        "### Weekly Breakdown",
+        "| Week | Orders | Revenue | Avg Order | WoW |",
+        "|------|--------|---------|-----------|-----|",
+    ]
+
+    for i, w in enumerate(weeks):
+        prev_rev = float(weeks[i + 1]["revenue"]) if i + 1 < len(weeks) else None
+        curr_rev = float(w["revenue"])
+        wow = ""
+        if prev_rev and prev_rev > 0:
+            pct = (curr_rev - prev_rev) / prev_rev * 100
+            wow = f"{'▲' if pct >= 0 else '▼'} {abs(pct):.1f}%"
+        lines.append(
+            f"| {w['week_start']} | {w['orders']} | ${curr_rev:.2f} | "
+            f"${float(w['avg_order']):.2f} | {wow} |"
+        )
+
+    if months:
+        lines.extend(["", "### Monthly Summary"])
+        for m in months:
+            lines.append(f"- **{m['month_start'].strftime('%B %Y')}**: {m['orders']} orders, ${float(m['revenue']):.2f}")
+
+    data = {"weeks": weeks, "months": months, "total_revenue": total_revenue, "total_orders": total_orders}
     return "\n".join(lines), data
 
 
@@ -1053,6 +1193,8 @@ async def handle_query(req: QueryRequest):
     email = req.contact_email.strip().lower() if req.contact_email else None
     phone = req.contact_phone.strip() if req.contact_phone else None
     name = req.contact_name.strip() if req.contact_name else None
+    date_from = req.date_from
+    date_to = req.date_to
 
     try:
         if category == "customer_lookup":
@@ -1067,8 +1209,12 @@ async def handle_query(req: QueryRequest):
             answer, data = _handle_daily_summary(question)
         elif category == "order_analytics":
             answer, data = _handle_order_analytics(question)
+        elif category == "order_summary_by_order_date":
+            answer, data = _handle_order_summary_by_order_date(question, date_from, date_to)
         elif category == "order_summary_by_delivery_date":
-            answer, data = _handle_order_summary_by_delivery_date(question)
+            answer, data = _handle_order_summary_by_delivery_date(question, date_from, date_to)
+        elif category == "revenue_trends":
+            answer, data = _handle_revenue_trends(question, date_from, date_to)
         elif category == "communication_history":
             answer, data = _handle_communication_history(question, email, phone, name)
         elif category == "ground_team_notes":
