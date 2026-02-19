@@ -34,7 +34,7 @@ class CampaignMove(BaseModel):
 # --- SMS queue ---
 class SmsPending(BaseModel):
     contact_id: int
-    contact_email: str
+    contact_email: Optional[str] = None
     phone: str
     sms_level: int
     lifecycle: str

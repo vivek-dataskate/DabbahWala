@@ -13,7 +13,6 @@ import traceback
 from datetime import date, datetime, timedelta
 
 import anthropic
-import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -684,6 +683,8 @@ async def _handle_free_form(question: str) -> tuple[str, dict]:
     """Answer any question by giving Claude real data context."""
     if not ANTHROPIC_API_KEY:
         return "AI queries require ANTHROPIC_API_KEY to be configured.", {}
+    if not question.strip():
+        return "Please type a question before submitting.", {}
 
     # Gather context data for Claude
     context_parts = []
@@ -803,25 +804,14 @@ Rules:
 - Format with markdown (headers, lists, bold) for readability.
 - If the question is about a specific customer, say you need their email."""
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": CLAUDE_MODEL,
-                "max_tokens": 1500,
-                "system": system_prompt,
-                "messages": [{"role": "user", "content": question}],
-            },
-        )
-        if resp.status_code != 200:
-            return f"AI service error (status {resp.status_code}). Try a specific category instead.", {}
-        response_data = resp.json()
-        answer = response_data.get("content", [{}])[0].get("text", "No response generated.")
+    ai_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    resp = await ai_client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1500,
+        system=system_prompt,
+        messages=[{"role": "user", "content": question}],
+    )
+    answer = resp.content[0].text if resp.content else "No response generated."
 
     return answer, {"model": CLAUDE_MODEL, "data_sources": list(segments.keys())}
 
