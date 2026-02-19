@@ -52,15 +52,27 @@ def _project_root() -> Path:
     return Path(__file__).parent.parent.parent
 
 
+_SKIP_DIRS = {"data", ".git", "__pycache__", "node_modules", ".venv", "venv"}
+_BINARY_EXTENSIONS = {
+    ".pyc", ".png", ".jpg", ".jpeg", ".gif", ".ico",
+    ".pdf", ".zip", ".tar", ".gz", ".whl", ".egg",
+}
+
+
 def _load_md_files() -> list[dict]:
-    """Discover and load all .md files (project-wide) and all migrations/*.sql files."""
+    """Load every text file in the project, skipping the data/ folder and binaries."""
     base = _project_root()
     docs = []
 
-    # All markdown files recursively (skip hidden dirs and node_modules)
-    for path in sorted(base.rglob("*.md")):
-        parts = path.parts
-        if any(p.startswith(".") or p == "node_modules" for p in parts):
+    for path in sorted(base.rglob("*")):
+        if not path.is_file():
+            continue
+        # Skip unwanted directories
+        rel_parts = path.relative_to(base).parts
+        if any(p in _SKIP_DIRS or p.startswith(".") for p in rel_parts):
+            continue
+        # Skip binary file types
+        if path.suffix.lower() in _BINARY_EXTENSIONS:
             continue
         rel = str(path.relative_to(base))
         try:
@@ -69,18 +81,6 @@ def _load_md_files() -> list[dict]:
             logger.info("Loaded doc %s (%d chars)", rel, len(content))
         except Exception as exc:
             logger.warning("Cannot read %s: %s", rel, exc)
-
-    # All SQL migration files
-    migrations_dir = base / "migrations"
-    if migrations_dir.is_dir():
-        for path in sorted(migrations_dir.glob("*.sql")):
-            rel = str(path.relative_to(base))
-            try:
-                content = path.read_text(encoding="utf-8")
-                docs.append({"source": rel, "content": content})
-                logger.info("Loaded doc %s (%d chars)", rel, len(content))
-            except Exception as exc:
-                logger.warning("Cannot read %s: %s", rel, exc)
 
     return docs
 
