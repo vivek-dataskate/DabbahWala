@@ -1,20 +1,23 @@
 """
-Load customer and order data from Excel files into Supabase.
-Includes fuzzy matching to merge food delivery app customers with direct customers.
+Generate a bulk SQL file from DabbahWala Excel data.
+
+Replicates ALL the processing logic from load_data.py (fuzzy matching,
+lifecycle computation, menu-item classification, etc.) but instead of
+hitting the HTTP API, emits a single SQL file that can be piped directly
+into psql:
+
+    psql $DATABASE_URL < scripts/bulk_load.sql
 
 Usage:
-    python scripts/load_data.py                    # dry run (preview only)
-    python scripts/load_data.py --execute          # actually insert into DB
-    python scripts/load_data.py --execute --via-api # insert via Render admin API
+    python scripts/generate_sql.py
 """
-import argparse
+
 import json
 import os
 import re
 import sys
-import urllib.parse
-import urllib.request
 from collections import defaultdict
+from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 
 import pandas as pd
@@ -22,14 +25,13 @@ import pandas as pd
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-RENDER_URL = os.environ.get("DABBAHWALA_API_URL", "https://dabbahwala-latest.onrender.com")
-ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "")
 CUSTOMER_FILE = "data/DW Costumers-latest.xlsx"
 ORDER_FILE = "data/DabbahWala OrderData-2025.xlsx"
-FUZZY_THRESHOLD = 0.72  # similarity threshold for name matching
+OUTPUT_FILE = "scripts/bulk_load.sql"
+FUZZY_THRESHOLD = 0.72  # same as load_data.py
 
 # ---------------------------------------------------------------------------
-# Category classification for menu items
+# Category classification for menu items (identical to load_data.py)
 # ---------------------------------------------------------------------------
 CATEGORY_RULES = [
     (r'thali', 'thali'),
@@ -45,63 +47,46 @@ CATEGORY_RULES = [
     (r'burger|sandwich|wrap', 'snack'),
 ]
 
-VEG_KEYWORDS = ['veg', 'paneer', 'aloo', 'palak', 'saag', 'mutter', 'dal', 'idly', 'dosa',
-                 'curd', 'yogurt', 'raita', 'rice', 'roti', 'lassi', 'poori', 'sambar',
-                 'pungulu', 'upma', 'pesarattu', 'gobi']
-NON_VEG_KEYWORDS = ['non-veg', 'non veg', 'nonveg', 'chicken', 'goat', 'shrimp', 'mutton', 'egg',
-                     'fish', 'lamb', 'meat', 'tandoori chicken', 'butter chicken',
-                     'chicken tikka', 'chicken malai', 'chicken curry', 'chicken dum']
+VEG_KEYWORDS = [
+    'veg', 'paneer', 'aloo', 'palak', 'saag', 'mutter', 'dal', 'idly',
+    'dosa', 'curd', 'yogurt', 'raita', 'rice', 'roti', 'lassi', 'poori',
+    'sambar', 'pungulu', 'upma', 'pesarattu', 'gobi',
+]
+NON_VEG_KEYWORDS = [
+    'non-veg', 'non veg', 'nonveg', 'chicken', 'goat', 'shrimp', 'mutton', 'egg',
+    'fish', 'lamb', 'meat', 'tandoori chicken', 'butter chicken',
+    'chicken tikka', 'chicken malai', 'chicken curry', 'chicken dum',
+]
 
 
 def classify_item(name: str) -> tuple:
     """Return (category, is_veg) for a menu item name."""
     lower = name.lower()
-
-    # Category
     category = 'other'
     for pattern, cat in CATEGORY_RULES:
         if re.search(pattern, lower):
             category = cat
             break
-
-    # Veg/Non-veg
     is_veg = None
+    # Check non-veg first (longer matches before shorter to avoid 'veg' matching 'non veg')
     if any(kw in lower for kw in NON_VEG_KEYWORDS):
         is_veg = False
     elif any(kw in lower for kw in VEG_KEYWORDS):
         is_veg = True
-
     return category, is_veg
 
 
 # ---------------------------------------------------------------------------
-# Fuzzy matching
+# Fuzzy matching helpers (identical to load_data.py)
 # ---------------------------------------------------------------------------
 def normalize_name(name: str) -> str:
-    """Normalize a name for comparison."""
     name = name.strip().lower()
-    name = re.sub(r'[^\w\s]', '', name)  # remove punctuation
+    name = re.sub(r'[^\w\s]', '', name)
     name = re.sub(r'\s+', ' ', name)
     return name
 
 
-def extract_first_name(name: str) -> str:
-    """Extract first name/word from a full name."""
-    parts = name.strip().split()
-    return parts[0].lower() if parts else ''
-
-
 def fuzzy_match_name(app_name: str, customer_names: dict) -> tuple:
-    """
-    Try to match an abbreviated app name (e.g., 'Dilpreet S.') to a full customer name.
-    Returns (matched_email, confidence) or (None, 0).
-
-    Strategy:
-    1. Extract first name from app name
-    2. Find all customers whose first name matches exactly
-    3. If exactly one match -> high confidence
-    4. If multiple -> use last initial to disambiguate
-    """
     norm = normalize_name(app_name)
     parts = norm.split()
     if not parts:
@@ -114,20 +99,15 @@ def fuzzy_match_name(app_name: str, customer_names: dict) -> tuple:
 
     candidates = []
     for full_name, email in customer_names.items():
-        if not email or '@' not in email:  # skip customers with no valid email
+        if not email or '@' not in email:
             continue
         fn_parts = full_name.split()
         if not fn_parts:
             continue
         cust_first = fn_parts[0]
-
-        # First letter MUST match (avoids manish/anish type errors)
         if not cust_first or not first or cust_first[0] != first[0]:
             continue
-
-        # First name must match closely
         if cust_first == first or SequenceMatcher(None, cust_first, first).ratio() > 0.88:
-            # Check last initial if available
             if last_initial and len(fn_parts) > 1:
                 cust_last_initial = fn_parts[-1][0] if fn_parts[-1] else ''
                 if cust_last_initial == last_initial:
@@ -140,22 +120,17 @@ def fuzzy_match_name(app_name: str, customer_names: dict) -> tuple:
     if not candidates:
         return None, 0
 
-    # Sort by confidence
     candidates.sort(key=lambda x: -x[2])
     best = candidates[0]
-
-    # Only return if above threshold
     if best[2] >= FUZZY_THRESHOLD:
         return best[1], best[2]
-
     return None, 0
 
 
 # ---------------------------------------------------------------------------
-# Data loading
+# Data loading (identical to load_data.py)
 # ---------------------------------------------------------------------------
 def load_customers(filepath: str) -> pd.DataFrame:
-    """Load and normalize customer master."""
     df = pd.read_excel(filepath, sheet_name="Sheet5")
     df['email_norm'] = df['Email'].fillna('').astype(str).str.strip().str.lower()
     df['phone_norm'] = df['Phone Number'].fillna('').astype(str).apply(
@@ -166,7 +141,6 @@ def load_customers(filepath: str) -> pd.DataFrame:
 
 
 def load_orders(filepath: str) -> tuple:
-    """Load all order sheets, return (order_summaries, app_item_rows)."""
     xls = pd.ExcelFile(filepath)
     summaries = []
     items = []
@@ -174,11 +148,9 @@ def load_orders(filepath: str) -> tuple:
     for sheet in xls.sheet_names:
         df = pd.read_excel(xls, sheet_name=sheet)
         df.columns = ['Source'] + list(df.columns[1:])
-        # Normalize email column
         for c in df.columns:
             if c.lower().startswith('email'):
                 df.rename(columns={c: 'Email address'}, inplace=True)
-        # Skip sub-header row
         df = df.iloc[1:].reset_index(drop=True)
 
         for _, row in df.iterrows():
@@ -190,7 +162,6 @@ def load_orders(filepath: str) -> tuple:
             item_ordered = row.get('Item Ordered')
             is_app = source == 'Food Delivery Apps'
 
-            # Parse order_id and app_platform
             order_id_raw = str(row.get('OrderID', '')).strip() if pd.notna(row.get('OrderID')) else ''
             app_platform = None
             if is_app:
@@ -201,7 +172,6 @@ def load_orders(filepath: str) -> tuple:
                 if not app_platform:
                     app_platform = 'Unknown'
 
-            # Parse phone
             phone_raw = row.get('Phone number')
             phone = ''
             if pd.notna(phone_raw):
@@ -220,7 +190,6 @@ def load_orders(filepath: str) -> tuple:
             delivery_slot = str(row.get('Delivery Slot', '')).strip() if pd.notna(row.get('Delivery Slot')) else ''
 
             if is_app and pd.notna(item_ordered) and str(item_ordered).strip():
-                # App orders: each row is an item line
                 qty = row.get('Unnamed: 8', 1)
                 qty = int(qty) if pd.notna(qty) and str(qty) != 'Quantity' else 1
                 price = row.get('Unnamed: 9', 0)
@@ -241,7 +210,6 @@ def load_orders(filepath: str) -> tuple:
                     'address': address,
                 })
             else:
-                # Website orders: summary row
                 summaries.append({
                     'order_id_external': order_id_raw,
                     'order_date': order_date,
@@ -260,73 +228,57 @@ def load_orders(filepath: str) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# SQL execution helpers
+# SQL-safe string escaping
 # ---------------------------------------------------------------------------
-def exec_sql_api(sql: str, read=False):
-    """Execute SQL via Render admin API using JSON body."""
-    endpoint = "admin/query" if read else "admin/exec"
-    url = f"{RENDER_URL}/{endpoint}"
-    payload = json.dumps({"secret": ADMIN_SECRET, "sql": sql}).encode('utf-8')
-    req = urllib.request.Request(url, data=payload, method='POST',
-                                 headers={'Content-Type': 'application/json'})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            return json.loads(resp.read().decode())
-    except Exception as e:
-        return {"error": str(e)}
+def esc(value) -> str:
+    """Escape a value for embedding in a SQL string literal.
+    Returns the content *without* surrounding quotes.
+    """
+    if value is None:
+        return ''
+    s = str(value)
+    s = s.replace("'", "''")        # double single-quotes
+    s = s.replace('\\', '\\\\')     # escape backslashes
+    s = s.replace('\x00', '')       # strip NUL bytes
+    return s
 
 
-def exec_sql_batch_api(statements: list, label: str = ""):
-    """Execute multiple SQL statements via API, one at a time."""
-    success = 0
-    errors = 0
-    for i, sql in enumerate(statements):
-        if i % 100 == 0 and label:
-            print(f"  {label}: {i}/{len(statements)}...")
-        result = exec_sql_api(sql, read=False)
-        if 'error' in result:
-            errors += 1
-            if errors <= 3:
-                print(f"  ERROR: {result['error'][:200]}")
-        else:
-            success += 1
-    print(f"  {label}: {success} ok, {errors} errors out of {len(statements)}")
-    return success, errors
+def sql_str(value) -> str:
+    """Return a SQL-quoted string or NULL."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return 'NULL'
+    return f"'{esc(value)}'"
 
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--execute', action='store_true', help='Actually insert data')
-    parser.add_argument('--via-api', action='store_true', help='Use Render API instead of direct DB')
-    args = parser.parse_args()
-
     print("=" * 70)
-    print("DabbahWala Data Loader")
+    print("DabbahWala SQL Generator")
     print("=" * 70)
 
+    # -----------------------------------------------------------------------
     # 1. Load customer master
+    # -----------------------------------------------------------------------
     print("\n[1/6] Loading customer master...")
     customers = load_customers(CUSTOMER_FILE)
     print(f"  {len(customers)} customers loaded")
 
-    # Build lookup maps
     email_to_cust = {}
     phone_to_cust = {}
-    name_to_email = {}  # normalized name -> email (for fuzzy matching)
+    name_to_email = {}
 
     for _, row in customers.iterrows():
         email = row['email_norm']
         phone = row['phone_norm']
         name = row['name_norm']
         cust_name = str(row['Customer Name']).strip()
-        address = str(row['Address']).strip() if pd.notna(row['Address']) else ''
+        address = str(row['Address']).strip() if pd.notna(row.get('Address')) else ''
 
         if email:
             email_to_cust[email] = {
-                'name': cust_name, 'email': email, 'phone': phone, 'address': address
+                'name': cust_name, 'email': email, 'phone': phone, 'address': address,
             }
         if phone:
             phone_to_cust[phone] = email
@@ -335,12 +287,13 @@ def main():
 
     print(f"  {len(email_to_cust)} by email, {len(phone_to_cust)} by phone, {len(name_to_email)} by name")
 
+    # -----------------------------------------------------------------------
     # 2. Load orders
+    # -----------------------------------------------------------------------
     print("\n[2/6] Loading order data...")
     web_orders, app_items = load_orders(ORDER_FILE)
     print(f"  {len(web_orders)} website orders, {len(app_items)} app item rows")
 
-    # Group app items into orders
     app_orders_grouped = defaultdict(list)
     for item in app_items:
         key = (item['order_id_external'], item['order_date'], item['customer_name'])
@@ -348,16 +301,15 @@ def main():
 
     print(f"  {len(app_orders_grouped)} unique app orders (grouped)")
 
-    # 3. Match & merge
+    # -----------------------------------------------------------------------
+    # 3. Match & merge (identical logic to load_data.py)
+    # -----------------------------------------------------------------------
     print("\n[3/6] Matching orders to customers...")
 
-    # Track which contacts we'll create
-    contacts_by_email = {}  # email -> contact dict
     orders_to_insert = []
-    items_to_insert = []
-    menu_items_set = {}  # item_name -> {prices, category, is_veg}
+    menu_items_set = {}
 
-    # -- Process WEBSITE orders --
+    # -- Website orders --
     web_matched = 0
     web_new = 0
     for order in web_orders:
@@ -365,7 +317,6 @@ def main():
         phone = order['phone']
         name = order['customer_name']
 
-        # Try to find in customer master
         contact_email = None
         if email and email in email_to_cust:
             contact_email = email
@@ -377,19 +328,15 @@ def main():
         if contact_email and contact_email in email_to_cust:
             web_matched += 1
             cust = email_to_cust[contact_email]
-            # Update address if we have one from order
             if order['address'] and not cust.get('address'):
                 cust['address'] = order['address']
         else:
-            # Create new contact from order data
             web_new += 1
             if email:
                 contact_email = email
             else:
                 contact_email = f"no-email-{normalize_name(name).replace(' ', '-')}@placeholder.local"
-
             if contact_email not in email_to_cust:
-                name_parts = name.split(None, 1)
                 email_to_cust[contact_email] = {
                     'name': name,
                     'email': contact_email,
@@ -397,7 +344,6 @@ def main():
                     'address': order['address'],
                 }
 
-        # Track subscription type
         cust = email_to_cust.get(contact_email, {})
         existing_type = cust.get('subscription_type', '')
         new_type = order.get('order_type', '')
@@ -422,7 +368,7 @@ def main():
 
     print(f"  Website: {web_matched} matched, {web_new} new contacts")
 
-    # -- Process APP orders with fuzzy matching --
+    # -- App orders with fuzzy matching --
     app_matched_exact = 0
     app_matched_fuzzy = 0
     app_new = 0
@@ -433,7 +379,6 @@ def main():
         email = first_item['email']
         phone = first_item['phone']
 
-        # Try exact match first
         contact_email = None
         if email and email in email_to_cust:
             contact_email = email
@@ -445,7 +390,6 @@ def main():
             contact_email = name_to_email[normalize_name(cname)]
             app_matched_exact += 1
         else:
-            # Fuzzy match
             matched_email, confidence = fuzzy_match_name(cname, name_to_email)
             if matched_email:
                 contact_email = matched_email
@@ -467,7 +411,6 @@ def main():
                         'address': first_item.get('address', ''),
                     }
 
-        # Mark as app source
         cust = email_to_cust.get(contact_email, {})
         existing_source = cust.get('primary_source', '')
         if existing_source == 'Website':
@@ -504,13 +447,15 @@ def main():
         })
 
     print(f"  App orders: {app_matched_exact} exact match, {app_matched_fuzzy} fuzzy matched, {app_new} new")
-    print(f"  Fuzzy merges (app -> website customer):")
+    print(f"  Fuzzy merges:")
     for m in fuzzy_merges[:20]:
         print(f"    '{m['app_name']}' -> '{m['matched_to']}' ({m['email']}) conf={m['confidence']:.2f}")
     if len(fuzzy_merges) > 20:
         print(f"    ... and {len(fuzzy_merges) - 20} more")
 
-    # 4. Compute contact stats
+    # -----------------------------------------------------------------------
+    # 4. Compute contact stats & lifecycle (identical to load_data.py)
+    # -----------------------------------------------------------------------
     print("\n[4/6] Computing contact stats...")
     contact_order_counts = defaultdict(int)
     contact_last_order = {}
@@ -522,14 +467,6 @@ def main():
             if ce not in contact_last_order or od > contact_last_order[ce]:
                 contact_last_order[ce] = od
 
-    total_contacts = len(email_to_cust)
-    with_orders = len(contact_order_counts)
-    print(f"  {total_contacts} total contacts, {with_orders} with orders")
-    print(f"  {len(menu_items_set)} unique menu items")
-    print(f"  {len(orders_to_insert)} total orders to insert")
-
-    # Compute lifecycle segments
-    from datetime import datetime, timedelta
     now = datetime.now()
     for email, cust in email_to_cust.items():
         order_count = contact_order_counts.get(email, 0)
@@ -551,7 +488,6 @@ def main():
         cust['total_orders'] = order_count
         cust['last_order_at'] = last_order
 
-    # Lifecycle distribution
     lifecycle_dist = defaultdict(int)
     for cust in email_to_cust.values():
         lifecycle_dist[cust.get('lifecycle', 'cold')] += 1
@@ -559,82 +495,66 @@ def main():
     for seg, cnt in sorted(lifecycle_dist.items(), key=lambda x: -x[1]):
         print(f"    {seg}: {cnt}")
 
-    # 5. Summary
-    print("\n" + "=" * 70)
-    print("SUMMARY")
-    print("=" * 70)
-    print(f"Contacts to load:     {total_contacts}")
-    print(f"Menu items to load:   {len(menu_items_set)}")
-    print(f"Orders to load:       {len(orders_to_insert)}")
-    print(f"Order items to load:  {sum(len(o['items']) for o in orders_to_insert)}")
-    print(f"Fuzzy merges:         {len(fuzzy_merges)}")
+    total_contacts = len(email_to_cust)
+    print(f"\n  {total_contacts} total contacts, {len(contact_order_counts)} with orders")
+    print(f"  {len(menu_items_set)} unique menu items")
+    print(f"  {len(orders_to_insert)} total orders")
+    print(f"  {sum(len(o['items']) for o in orders_to_insert)} order items")
 
-    if not args.execute:
-        print("\n*** DRY RUN — pass --execute to actually insert data ***")
-        return
+    # -----------------------------------------------------------------------
+    # 5. Generate SQL
+    # -----------------------------------------------------------------------
+    print("\n[5/6] Generating SQL...")
+    lines = []
+    w = lines.append  # shorthand
 
-    # 6. Execute inserts
-    print("\n[5/6] Inserting data...")
+    w("-- =======================================================================")
+    w("-- DabbahWala bulk load - auto-generated by scripts/generate_sql.py")
+    w(f"-- Generated at {datetime.now().isoformat()}")
+    w("-- =======================================================================")
+    w("")
+    w("SET search_path TO dabbahwala;")
+    w("")
+    w("BEGIN;")
+    w("")
 
-    if not args.via_api:
-        print("ERROR: Direct DB not available in this environment. Use --via-api")
-        return
-
-    # Run migration first
-    print("  Running migration 024...")
-    result = exec_sql_api("SELECT 1", read=True)
-    if 'error' in result:
-        print(f"  DB connection failed: {result['error']}")
-        return
-
-    # Read and execute migration
-    with open("migrations/024_menu_orders.sql") as f:
-        migration_sql = f.read()
-    # Split by semicolons and execute each statement
-    for stmt in migration_sql.split(';'):
-        stmt = stmt.strip()
-        if stmt and not stmt.startswith('--'):
-            r = exec_sql_api(stmt, read=False)
-            if 'error' in r and 'already exists' not in str(r.get('error', '')):
-                print(f"  Migration warning: {r}")
-
-    print("  Migration 024 done.")
-
-    # Insert menu items
-    print("  Inserting menu items...")
-    menu_stmts = []
+    # --- Menu items ---
+    w("-- -----------------------------------------------------------------------")
+    w(f"-- Menu items ({len(menu_items_set)} rows)")
+    w("-- -----------------------------------------------------------------------")
     for item_name, info in menu_items_set.items():
         avg_p = sum(info['prices']) / len(info['prices']) if info['prices'] else 0
         cat = info['category']
-        is_veg = 'true' if info['is_veg'] else ('false' if info['is_veg'] is False else 'NULL')
-        esc_name = item_name.replace("'", "''")
-        menu_stmts.append(
-            f"INSERT INTO dabbahwala.menu_items (item_name, category, is_veg, avg_price) "
-            f"VALUES ('{esc_name}', '{cat}', {is_veg}, {avg_p:.2f}) "
-            f"ON CONFLICT (item_name) DO UPDATE SET avg_price = {avg_p:.2f}, category = '{cat}'"
+        is_veg_val = 'true' if info['is_veg'] else ('false' if info['is_veg'] is False else 'NULL')
+        w(
+            f"INSERT INTO menu_items (item_name, category, is_veg, avg_price) "
+            f"VALUES ('{esc(item_name)}', '{esc(cat)}', {is_veg_val}, {avg_p:.2f}) "
+            f"ON CONFLICT (item_name) DO UPDATE SET "
+            f"avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;"
         )
-    exec_sql_batch_api(menu_stmts, "menu_items")
+    w("")
 
-    # Insert contacts
-    print("  Inserting contacts...")
-    contact_stmts = []
+    # --- Contacts ---
+    w("-- -----------------------------------------------------------------------")
+    w(f"-- Contacts ({total_contacts} rows)")
+    w("-- -----------------------------------------------------------------------")
     for email, cust in email_to_cust.items():
         if '@placeholder.local' in email:
             email_val = 'NULL'
         else:
-            email_val = f"'{email.replace(chr(39), chr(39)+chr(39))}'"
+            email_val = f"'{esc(email)}'"
 
         name = cust.get('name', '')
         parts = name.split(None, 1)
-        first = parts[0].replace("'", "''") if parts else ''
-        last = parts[1].replace("'", "''") if len(parts) > 1 else ''
-        phone = cust.get('phone', '')
-        address = cust.get('address', '').replace("'", "''")
+        first = esc(parts[0]) if parts else ''
+        last = esc(parts[1]) if len(parts) > 1 else ''
+        phone = esc(cust.get('phone', ''))
+        address = esc(cust.get('address', ''))
         lifecycle = cust.get('lifecycle', 'cold')
         total_orders = cust.get('total_orders', 0)
         last_order = cust.get('last_order_at')
-        sub_type = cust.get('subscription_type', '')
-        primary_src = cust.get('primary_source', 'Website')
+        sub_type = esc(cust.get('subscription_type', ''))
+        primary_src = esc(cust.get('primary_source', 'Website'))
         merged = 'true' if cust.get('merged_from_app') else 'false'
 
         if last_order is not None and pd.notna(last_order):
@@ -642,119 +562,157 @@ def main():
         else:
             last_order_val = 'NULL'
 
-        contact_stmts.append(
-            f"INSERT INTO dabbahwala.contacts "
+        w(
+            f"INSERT INTO contacts "
             f"(email, phone, first_name, last_name, lifecycle_segment, total_orders, last_order_at, "
             f"address, subscription_type, primary_source, merged_from_app) "
             f"VALUES ({email_val}, '{phone}', '{first}', '{last}', '{lifecycle}', {total_orders}, "
             f"{last_order_val}, '{address}', '{sub_type}', '{primary_src}', {merged}) "
             f"ON CONFLICT (email) DO UPDATE SET "
-            f"phone = COALESCE(NULLIF(EXCLUDED.phone, ''), dabbahwala.contacts.phone), "
-            f"first_name = COALESCE(NULLIF(EXCLUDED.first_name, ''), dabbahwala.contacts.first_name), "
-            f"last_name = COALESCE(NULLIF(EXCLUDED.last_name, ''), dabbahwala.contacts.last_name), "
-            f"address = COALESCE(NULLIF(EXCLUDED.address, ''), dabbahwala.contacts.address), "
+            f"phone = COALESCE(NULLIF(EXCLUDED.phone, ''), contacts.phone), "
+            f"first_name = COALESCE(NULLIF(EXCLUDED.first_name, ''), contacts.first_name), "
+            f"last_name = COALESCE(NULLIF(EXCLUDED.last_name, ''), contacts.last_name), "
+            f"address = COALESCE(NULLIF(EXCLUDED.address, ''), contacts.address), "
             f"total_orders = EXCLUDED.total_orders, "
             f"last_order_at = EXCLUDED.last_order_at, "
             f"lifecycle_segment = EXCLUDED.lifecycle_segment, "
             f"subscription_type = EXCLUDED.subscription_type, "
-            f"primary_source = EXCLUDED.primary_source"
+            f"primary_source = EXCLUDED.primary_source;"
         )
-    exec_sql_batch_api(contact_stmts, "contacts")
+    w("")
 
-    # Build email -> contact_id map
-    print("  Fetching contact IDs...")
-    result = exec_sql_api("SELECT id, email FROM dabbahwala.contacts", read=True)
-    email_to_id = {}
-    if result.get('rows'):
-        for r in result['rows']:
-            if r['email']:
-                email_to_id[r['email'].lower()] = r['id']
-    print(f"  {len(email_to_id)} contacts in DB")
-
-    # Insert orders + order_items
-    print("  Inserting orders...")
-    order_count = 0
-    item_count = 0
-    for i, order in enumerate(orders_to_insert):
-        if i % 500 == 0:
-            print(f"  orders: {i}/{len(orders_to_insert)}...")
-
-        ce = order['contact_email']
-        cid = email_to_id.get(ce)
-        cid_val = str(cid) if cid else 'NULL'
-
-        odate = pd.Timestamp(order['order_date']).strftime('%Y-%m-%d') if pd.notna(order['order_date']) else '2025-01-01'
-        oid_ext = order['order_id_external'].replace("'", "''")
-        src = order['source'].replace("'", "''")
-        app_plat = f"'{order['app_platform']}'" if order.get('app_platform') else 'NULL'
-        total = order['total_amount']
-        otype = order.get('order_type', '').replace("'", "''")
-        dslot = order.get('delivery_slot', '').replace("'", "''")
-        cname_raw = order['customer_name_raw'].replace("'", "''")
-
-        sql = (
-            f"INSERT INTO dabbahwala.orders "
-            f"(contact_id, order_id_external, order_date, source, app_platform, "
-            f"total_amount, order_type, delivery_slot, customer_name_raw) "
-            f"VALUES ({cid_val}, '{oid_ext}', '{odate}', '{src}', {app_plat}, "
-            f"{total}, '{otype}', '{dslot}', '{cname_raw}') "
-            f"RETURNING id"
-        )
-        result = exec_sql_api(sql, read=True)
-        order_db_id = None
-        if result.get('rows'):
-            order_db_id = result['rows'][0]['id']
-            order_count += 1
-
-        # Insert order items
-        if order_db_id and order['items']:
-            for item in order['items']:
-                iname = item['item_name'].replace("'", "''")
-                qty = item['quantity']
-                uprice = item['unit_price']
-                ltotal = item['line_total']
-                isql = (
-                    f"INSERT INTO dabbahwala.order_items "
-                    f"(order_id, menu_item_id, item_name, quantity, unit_price, line_total) "
-                    f"VALUES ({order_db_id}, "
-                    f"(SELECT id FROM dabbahwala.menu_items WHERE item_name = '{iname}' LIMIT 1), "
-                    f"'{iname}', {qty}, {uprice}, {ltotal})"
-                )
-                r = exec_sql_api(isql, read=False)
-                if 'error' not in r:
-                    item_count += 1
-
-    print(f"  Orders inserted: {order_count}")
-    print(f"  Order items inserted: {item_count}")
-
-    # Also insert order_placed events for lifecycle engine
-    print("  Inserting order_placed events...")
-    event_stmts = []
+    # --- Orders ---
+    w("-- -----------------------------------------------------------------------")
+    w(f"-- Orders ({len(orders_to_insert)} rows)")
+    w("-- -----------------------------------------------------------------------")
     for order in orders_to_insert:
         ce = order['contact_email']
-        cid = email_to_id.get(ce)
-        if not cid:
+        odate = pd.Timestamp(order['order_date']).strftime('%Y-%m-%d') if pd.notna(order['order_date']) else '2025-01-01'
+        oid_ext = esc(order['order_id_external'])
+        src = esc(order['source'])
+        app_plat = f"'{esc(order['app_platform'])}'" if order.get('app_platform') else 'NULL'
+        total = order['total_amount']
+        otype = esc(order.get('order_type', ''))
+        dslot = esc(order.get('delivery_slot', ''))
+        cname_raw = esc(order['customer_name_raw'])
+
+        # Resolve contact_id via subquery on email
+        if '@placeholder.local' in ce:
+            # Placeholder contacts were inserted with email = NULL; we cannot
+            # look them up by email.  Match on first_name + last_name instead.
+            name = email_to_cust.get(ce, {}).get('name', '')
+            nparts = name.split(None, 1)
+            fn = esc(nparts[0]) if nparts else ''
+            ln = esc(nparts[1]) if len(nparts) > 1 else ''
+            contact_id_expr = (
+                f"(SELECT id FROM contacts WHERE first_name = '{fn}' "
+                f"AND last_name = '{ln}' LIMIT 1)"
+            )
+        else:
+            contact_id_expr = f"(SELECT id FROM contacts WHERE email = '{esc(ce)}' LIMIT 1)"
+
+        w(
+            f"INSERT INTO orders "
+            f"(contact_id, order_id_external, order_date, source, app_platform, "
+            f"total_amount, order_type, delivery_slot, customer_name_raw) "
+            f"VALUES ({contact_id_expr}, '{oid_ext}', '{odate}', '{src}', {app_plat}, "
+            f"{total}, '{otype}', '{dslot}', '{cname_raw}');"
+        )
+    w("")
+
+    # --- Order items ---
+    total_items = sum(len(o['items']) for o in orders_to_insert)
+    w("-- -----------------------------------------------------------------------")
+    w(f"-- Order items ({total_items} rows)")
+    w("-- -----------------------------------------------------------------------")
+    for order in orders_to_insert:
+        if not order['items']:
             continue
+        oid_ext = esc(order['order_id_external'])
+        cname_raw = esc(order['customer_name_raw'])
+        for item in order['items']:
+            iname = esc(item['item_name'])
+            qty = item['quantity']
+            uprice = item['unit_price']
+            ltotal = item['line_total']
+            w(
+                f"INSERT INTO order_items "
+                f"(order_id, menu_item_id, item_name, quantity, unit_price, line_total) "
+                f"VALUES ("
+                f"(SELECT id FROM orders WHERE order_id_external = '{oid_ext}' "
+                f"AND customer_name_raw = '{cname_raw}' LIMIT 1), "
+                f"(SELECT id FROM menu_items WHERE item_name = '{iname}' LIMIT 1), "
+                f"'{iname}', {qty}, {uprice}, {ltotal});"
+            )
+    w("")
+
+    # --- Events (order_placed) ---
+    w("-- -----------------------------------------------------------------------")
+    w("-- Events (order_placed)")
+    w("-- -----------------------------------------------------------------------")
+    event_count = 0
+    for order in orders_to_insert:
+        ce = order['contact_email']
         odate = pd.Timestamp(order['order_date']).strftime('%Y-%m-%dT00:00:00Z') if pd.notna(order['order_date']) else '2025-01-01T00:00:00Z'
+
         meta = json.dumps({
             'source': order['source'],
             'total_amount': order['total_amount'],
             'order_type': order.get('order_type', ''),
             'order_id_external': order['order_id_external'],
-        }).replace("'", "''")
-        event_stmts.append(
-            f"INSERT INTO dabbahwala.events (contact_id, event_type, metadata, occurred_at) "
-            f"VALUES ({cid}, 'order_placed', '{meta}', '{odate}')"
+        })
+        meta_esc = esc(meta)
+
+        if '@placeholder.local' in ce:
+            name = email_to_cust.get(ce, {}).get('name', '')
+            nparts = name.split(None, 1)
+            fn = esc(nparts[0]) if nparts else ''
+            ln = esc(nparts[1]) if len(nparts) > 1 else ''
+            contact_id_expr = (
+                f"(SELECT id FROM contacts WHERE first_name = '{fn}' "
+                f"AND last_name = '{ln}' LIMIT 1)"
+            )
+        else:
+            contact_id_expr = f"(SELECT id FROM contacts WHERE email = '{esc(ce)}' LIMIT 1)"
+
+        w(
+            f"INSERT INTO events (contact_id, event_type, metadata, occurred_at) "
+            f"SELECT {contact_id_expr}, 'order_placed', '{meta_esc}', '{odate}' "
+            f"WHERE {contact_id_expr} IS NOT NULL;"
         )
-    exec_sql_batch_api(event_stmts, "events")
+        event_count += 1
+    w("")
 
-    print("\n[6/6] Verifying...")
-    for table in ['contacts', 'menu_items', 'orders', 'order_items', 'events']:
-        r = exec_sql_api(f"SELECT COUNT(*) as cnt FROM dabbahwala.{table}", read=True)
-        cnt = r.get('rows', [{}])[0].get('cnt', '?')
-        print(f"  {table}: {cnt} rows")
+    w("COMMIT;")
+    w("")
+    w(f"-- Total statements: menu_items={len(menu_items_set)}, contacts={total_contacts}, "
+      f"orders={len(orders_to_insert)}, order_items={total_items}, events={event_count}")
 
-    print("\nDone!")
+    # -----------------------------------------------------------------------
+    # 6. Write file
+    # -----------------------------------------------------------------------
+    print(f"\n[6/6] Writing SQL to {OUTPUT_FILE}...")
+    sql_text = '\n'.join(lines) + '\n'
+    with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
+        f.write(sql_text)
+
+    line_count = len(lines)
+    byte_size = len(sql_text.encode('utf-8'))
+
+    print(f"\n{'=' * 70}")
+    print(f"DONE")
+    print(f"{'=' * 70}")
+    print(f"Output file:   {os.path.abspath(OUTPUT_FILE)}")
+    print(f"File size:     {byte_size:,} bytes ({byte_size / 1024:.1f} KB)")
+    print(f"Line count:    {line_count:,}")
+    print(f"")
+    print(f"Breakdown:")
+    print(f"  Menu items:   {len(menu_items_set)}")
+    print(f"  Contacts:     {total_contacts}")
+    print(f"  Orders:       {len(orders_to_insert)}")
+    print(f"  Order items:  {total_items}")
+    print(f"  Events:       {event_count}")
+    print(f"  Fuzzy merges: {len(fuzzy_merges)}")
 
 
 if __name__ == '__main__':
