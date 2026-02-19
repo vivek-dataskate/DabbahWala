@@ -604,6 +604,59 @@ async def history(limit: int = 20):
     return {"interactions": rows, "count": len(rows)}
 
 
+@router.get("/suggest")
+async def suggest(q: str = "", limit: int = 6):
+    """
+    Return past questions matching the typed text for autocomplete.
+    Searches chatbot_interactions (user history) then chatbot_canned_qa (chip questions).
+    """
+    q = q.strip()
+    if len(q) < 2:
+        return {"suggestions": []}
+
+    pattern = f"%{q}%"
+    results: list[str] = []
+
+    # 1. Past questions the user has actually asked
+    try:
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT question FROM chatbot_interactions
+                WHERE question ILIKE %s
+                ORDER BY question
+                LIMIT %s
+                """,
+                (pattern, limit),
+            )
+            results = [r["question"] for r in cur.fetchall()]
+    except Exception as exc:
+        logger.warning("Suggest history query failed: %s", exc)
+
+    # 2. Fill remaining slots from pre-cached chip questions
+    if len(results) < limit:
+        seen = {r.lower() for r in results}
+        try:
+            with get_cursor(commit=False) as cur:
+                cur.execute(
+                    """
+                    SELECT question FROM chatbot_canned_qa
+                    WHERE question ILIKE %s
+                    ORDER BY question
+                    LIMIT %s
+                    """,
+                    (pattern, (limit - len(results)) * 2),
+                )
+                for r in cur.fetchall():
+                    if r["question"].lower() not in seen and len(results) < limit:
+                        results.append(r["question"])
+                        seen.add(r["question"].lower())
+        except Exception as exc:
+            logger.warning("Suggest canned query failed: %s", exc)
+
+    return {"suggestions": results}
+
+
 @router.post("/reindex")
 async def reindex():
     """Force a full re-index of all documentation chunks and rebuild the chip answer cache."""
