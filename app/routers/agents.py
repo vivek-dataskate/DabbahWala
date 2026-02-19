@@ -394,7 +394,7 @@ def _run_sentiment_agent(
         len(outcomes),
     )
     system = (
-        "You are the Sentiment Inference Agent for DabbahWala, a food delivery business in the UAE. "
+        "You are the Sentiment Inference Agent for DabbahWala, a fresh, home-style Indian food delivery service based in Atlanta, GA (4015 Holcomb Bridge Rd, Norcross, GA 30071 — dabbahwala.com/contact-us). "
         "Your only job is to assess customer sentiment from their communication history. "
         "Be concise. Focus on tone, word choice, and responsiveness patterns.\n\n"
         "FEEDBACK LOOP — Previous Outcomes:\n"
