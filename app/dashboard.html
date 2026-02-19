@@ -759,7 +759,7 @@ const CAMPAIGN_COLOR = {
 async function uploadCSV() {
   const fileInput = document.getElementById('u-file');
   if (!fileInput.files.length) { setError('u-result', 'Please select a CSV file.'); return; }
-  setLoading('u-result', 'Uploading, ingesting orders, and running agent analysis… (may take 30–60 s)');
+  setLoading('u-result', 'Uploading, ingesting orders, pushing to Shipday, and running agent analysis… (may take 30–60 s)');
   setBtn('u-btn', true, 'Processing…');
   const formData = new FormData();
   formData.append('file', fileInput.files[0]);
@@ -874,6 +874,68 @@ async function uploadCSV() {
     if (data.note) html += `<p style="margin-top:12px;color:#888;font-size:0.83rem">ℹ️ ${esc(data.note)}</p>`;
     if (data.skipped_detail?.length) html += `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:0.83rem;color:#888">${data.skipped_detail.length} skipped rows</summary><pre style="font-size:0.78rem;margin-top:6px">${esc(JSON.stringify(data.skipped_detail,null,2))}</pre></details>`;
     if (data.parse_errors?.length)   html += `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.83rem;color:#888">${data.parse_errors.length} parse warnings</summary><pre style="font-size:0.78rem;margin-top:6px">${esc(JSON.stringify(data.parse_errors,null,2))}</pre></details>`;
+
+    // ── Shipday delivery push results ─────────────────────────────────────────
+    const sd = data.shipday_result || {};
+    if (sd.skipped) {
+      html += `<div style="margin-top:18px;background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:14px;font-size:0.87rem;color:#842029">
+        ⚠️ <strong>Shipday push skipped:</strong> ${esc(sd.reason || 'API key not configured')}
+      </div>`;
+    } else if (sd.submitted > 0) {
+      const allOk   = sd.failed === 0;
+      const sdBg    = allOk ? '#f0fff4' : '#fff9ed';
+      const sdBord  = allOk ? '#b7ebc0' : '#ffc107';
+      const sdTitle = allOk ? '#155724' : '#7d4e00';
+      html += `<div style="margin-top:18px;background:${sdBg};border:1.5px solid ${sdBord};border-radius:10px;padding:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div style="font-size:0.9rem;font-weight:700;color:${sdTitle}">
+            🚚 Shipday — ${sd.succeeded} of ${sd.submitted} orders created
+          </div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <a href="${esc(sd.dashboard_url || 'https://dispatch.shipday.com')}" target="_blank"
+               style="font-size:0.82rem;font-weight:600;color:#0d6efd;text-decoration:none;border:1px solid #0d6efd;padding:5px 12px;border-radius:6px">
+              Open Shipday Dashboard ↗
+            </a>
+            <a href="https://dispatch.shipday.com/live-tracking" target="_blank"
+               style="font-size:0.82rem;font-weight:600;color:#6f42c1;text-decoration:none;border:1px solid #6f42c1;padding:5px 12px;border-radius:6px">
+              Live Tracking ↗
+            </a>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+          <div class="stat-box" style="flex:1;min-width:80px;padding:10px"><div class="s-label">Submitted</div><div class="s-val" style="color:#555">${sd.submitted}</div></div>
+          <div class="stat-box" style="flex:1;min-width:80px;padding:10px"><div class="s-label">Created</div><div class="s-val green">${sd.succeeded}</div></div>
+          <div class="stat-box" style="flex:1;min-width:80px;padding:10px"><div class="s-label">Failed</div><div class="s-val red">${sd.failed || 0}</div></div>
+        </div>`;
+      const sdOrders = sd.orders || [];
+      if (sdOrders.length) {
+        html += `<div style="background:white;border:1px solid #dee2e6;border-radius:8px;overflow:auto;max-height:320px">
+          <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
+            <thead><tr style="background:#f4f4f7;position:sticky;top:0">
+              <th style="padding:8px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;color:#888;font-weight:700">#</th>
+              <th style="padding:8px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;color:#888;font-weight:700">Order</th>
+              <th style="padding:8px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;color:#888;font-weight:700">Customer</th>
+              <th style="padding:8px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;color:#888;font-weight:700">Status</th>
+            </tr></thead>
+            <tbody>`;
+        let sdIdx = 1;
+        for (const o of sdOrders) {
+          const ok = o.status === 'created';
+          const stColor = ok ? '#28a745' : '#dc3545';
+          const stLabel = ok
+            ? `✓ Created${o.shipday_order_id ? ' <span style="color:#888;font-weight:400">(ID: ' + esc(String(o.shipday_order_id)) + ')</span>' : ''}`
+            : `✗ ${esc(o.error || 'Failed')}`;
+          html += `<tr style="border-top:1px solid #f0f0f5">
+            <td style="padding:7px 12px;color:#bbb;font-size:0.78rem">${sdIdx++}</td>
+            <td style="padding:7px 12px;font-family:monospace;font-size:0.79rem;color:#555">${esc(o.order_number || '—')}</td>
+            <td style="padding:7px 12px;font-weight:500">${esc(o.customer_name || '—')}</td>
+            <td style="padding:7px 12px;color:${stColor};font-size:0.81rem">${stLabel}</td>
+          </tr>`;
+        }
+        html += `</tbody></table></div>`;
+      }
+      html += `</div>`;
+    }
 
     document.getElementById('u-result').innerHTML = html;
   } catch(e) {
