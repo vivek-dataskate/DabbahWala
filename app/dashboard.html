@@ -143,6 +143,7 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="tab" onclick="switchTab('tone')">✉️ Email Templates</div>
   <div class="tab" onclick="switchTab('upload')">📤 Upload CSV</div>
   <div class="tab" onclick="switchTab('reports')">📋 Reports</div>
+  <div class="tab" onclick="switchTab('broadcasts')">📣 Broadcasts</div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ QUERY -->
@@ -316,12 +317,111 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div id="r-result"></div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════ BROADCASTS -->
+<div id="panel-broadcasts" class="panel">
+  <div class="panel-title">Broadcast Messaging</div>
+  <div class="panel-desc">Send SMS and email to a large group in one action. Use <strong>Delay Alert</strong> when today's deliveries are running late. Use <strong>Promotional Blast</strong> for festivals, events, or promotions.</div>
+
+  <!-- ── Mode tabs ── -->
+  <div style="display:flex;gap:8px;margin-bottom:24px">
+    <button id="bc-tab-delay" class="btn" onclick="bcSwitchMode('delay')" style="background:#dc3545">⚡ Delay Alert</button>
+    <button id="bc-tab-promo" class="btn btn-gray" onclick="bcSwitchMode('promo')">🎉 Promotional Blast</button>
+    <button id="bc-tab-history" class="btn btn-gray" onclick="bcSwitchMode('history')">📋 History</button>
+  </div>
+
+  <!-- ── Delay Alert ── -->
+  <div id="bc-delay">
+    <div style="background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:16px;margin-bottom:20px;font-size:0.87rem;color:#842029">
+      Sends SMS <strong>and</strong> email to every customer who has an order on the selected date. Respects opt-outs only (does not require promo flags — this is an operational notification).
+    </div>
+
+    <div class="form-group">
+      <label>Delivery date affected <span class="hint">(defaults to today)</span></label>
+      <input type="date" id="bc-delay-date">
+    </div>
+
+    <div class="form-group">
+      <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
+      <textarea id="bc-delay-sms" rows="3" placeholder="Hi! Your DabbahWala delivery for today is running 45–60 min late due to heavy rain. We appreciate your patience!"></textarea>
+      <div id="bc-delay-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
+    </div>
+
+    <div class="form-group">
+      <label>Email subject</label>
+      <input type="text" id="bc-delay-subject" placeholder="Delivery update — your order is on its way">
+    </div>
+
+    <div class="form-group">
+      <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
+      <textarea id="bc-delay-body" rows="6" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;We wanted to let you know that your order is running a little late today due to heavy rain. Our drivers are on the way and your food will arrive as soon as possible. Thank you for your patience!&lt;/p&gt;&lt;p&gt;— Team DabbahWala&lt;/p&gt;"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Your name <span class="hint">(logged as created_by — optional)</span></label>
+      <input type="text" id="bc-delay-author" placeholder="e.g. Vivek">
+    </div>
+
+    <button class="btn" id="bc-delay-btn" onclick="sendDelayAlert()" style="background:#dc3545">Send Delay Alert Now</button>
+    <div id="bc-delay-result" style="margin-top:14px"></div>
+  </div>
+
+  <!-- ── Promotional Blast ── -->
+  <div id="bc-promo" style="display:none">
+    <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:10px;padding:16px;margin-bottom:20px;font-size:0.87rem;color:#0c5460">
+      Sends to all customers who have opted in to promotional SMS / email. Only contacts with <code>sms_promo_enabled</code> or <code>email_promo_enabled</code> will receive messages on their respective channels.
+    </div>
+
+    <div class="form-group">
+      <label>Title <span class="hint">(internal label for this broadcast)</span></label>
+      <input type="text" id="bc-promo-title" placeholder="e.g. Eid Special — 20% Off">
+    </div>
+
+    <div class="form-group">
+      <label>Channels</label>
+      <div style="display:flex;gap:20px;margin-top:4px">
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-sms" checked> SMS</label>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-email" checked> Email</label>
+      </div>
+    </div>
+
+    <div class="form-group" id="bc-promo-sms-group">
+      <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
+      <textarea id="bc-promo-sms" rows="3" placeholder="DabbahWala Eid special: 20% off all orders today! Use code EID20 at checkout. Reply STOP to opt out."></textarea>
+      <div id="bc-promo-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
+    </div>
+
+    <div class="form-group" id="bc-promo-email-group">
+      <label>Email subject</label>
+      <input type="text" id="bc-promo-subject" placeholder="Eid Mubarak! 20% off just for you 🎉">
+    </div>
+
+    <div class="form-group" id="bc-promo-body-group">
+      <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
+      <textarea id="bc-promo-body" rows="6" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;Eid Mubarak from all of us at DabbahWala! To celebrate, enjoy 20% off your next order. Use code &lt;strong&gt;EID20&lt;/strong&gt; at checkout.&lt;/p&gt;"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Your name <span class="hint">(optional)</span></label>
+      <input type="text" id="bc-promo-author" placeholder="e.g. Vivek">
+    </div>
+
+    <button class="btn" id="bc-promo-btn" onclick="sendPromo()">Queue Promotional Blast</button>
+    <div id="bc-promo-result" style="margin-top:14px"></div>
+  </div>
+
+  <!-- ── History ── -->
+  <div id="bc-history" style="display:none">
+    <button class="btn btn-gray" onclick="loadBroadcastHistory()" style="margin-bottom:16px">Refresh</button>
+    <div id="bc-history-result"></div>
+  </div>
+</div>
+
 <script>
 // ─── state ───────────────────────────────────────────────────────────────────
 let _toneDrafts = {};
 
 // ─── tabs ────────────────────────────────────────────────────────────────────
-const TAB_NAMES = ['query','agent','tone','upload','reports'];
+const TAB_NAMES = ['query','agent','tone','upload','reports','broadcasts'];
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
@@ -818,8 +918,205 @@ async function loadReport(type) {
   } catch(e) { setError('r-result', 'Network error: ' + e.message); }
 }
 
+// ─── broadcasts ───────────────────────────────────────────────────────────────
+function bcSwitchMode(mode) {
+  ['delay','promo','history'].forEach(m => {
+    document.getElementById('bc-' + m).style.display = m === mode ? 'block' : 'none';
+    const btn = document.getElementById('bc-tab-' + m);
+    if (btn) btn.style.background = m === mode ? (m === 'delay' ? '#dc3545' : '#1a1a2e') : '#6c757d';
+  });
+  if (mode === 'history') loadBroadcastHistory();
+}
+
+// SMS character counter
+function bcAttachCounter(textareaId, counterId) {
+  const ta = document.getElementById(textareaId);
+  const ct = document.getElementById(counterId);
+  if (!ta || !ct) return;
+  ta.addEventListener('input', () => {
+    const n = ta.value.length;
+    ct.textContent = n + ' / 160';
+    ct.style.color = n > 160 ? '#dc3545' : '#aaa';
+  });
+}
+
+// Update promo form based on channel selection
+function bcUpdatePromoFields() {
+  const sms   = document.getElementById('bc-promo-ch-sms').checked;
+  const email = document.getElementById('bc-promo-ch-email').checked;
+  document.getElementById('bc-promo-sms-group').style.display   = sms   ? '' : 'none';
+  document.getElementById('bc-promo-email-group').style.display = email ? '' : 'none';
+  document.getElementById('bc-promo-body-group').style.display  = email ? '' : 'none';
+}
+
+async function sendDelayAlert() {
+  const sms     = document.getElementById('bc-delay-sms').value.trim();
+  const subject = document.getElementById('bc-delay-subject').value.trim();
+  const body    = document.getElementById('bc-delay-body').value.trim();
+  const dateVal = document.getElementById('bc-delay-date').value;
+  const author  = document.getElementById('bc-delay-author').value.trim();
+
+  if (!sms)     { setError('bc-delay-result', 'SMS message is required.'); return; }
+  if (!subject) { setError('bc-delay-result', 'Email subject is required.'); return; }
+  if (!body)    { setError('bc-delay-result', 'Email body is required.'); return; }
+
+  setLoading('bc-delay-result', 'Creating delay alert and queueing recipients…');
+  setBtn('bc-delay-btn', true, 'Sending…');
+
+  try {
+    const payload = {
+      sms_message:   sms,
+      email_subject: subject,
+      email_body:    body,
+      created_by:    author || null,
+    };
+    if (dateVal) payload.target_date = dateVal;
+
+    const res  = await fetch('/api/broadcasts/delay-alert', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    setBtn('bc-delay-btn', false, 'Send Delay Alert Now');
+
+    if (!res.ok) { setError('bc-delay-result', data.detail || JSON.stringify(data)); return; }
+
+    document.getElementById('bc-delay-result').innerHTML = `
+      <div class="result-box" style="border-color:#c3e6cb;background:#f0fff4">
+        <p style="color:#155724;font-weight:600;margin-bottom:8px">Delay alert queued successfully!</p>
+        <div class="kv"><span class="k">Job ID</span><span class="v">${data.job_id}</span></div>
+        <div class="kv"><span class="k">Target date</span><span class="v">${data.target_date}</span></div>
+        <div class="kv"><span class="k">Total recipients</span><span class="v">${data.total_recipients}</span></div>
+        <p style="margin-top:10px;font-size:0.84rem;color:#555">n8n will dispatch all SMS and emails within the next 5 minutes. Switch to <strong>History</strong> to track progress.</p>
+      </div>`;
+  } catch(e) {
+    setBtn('bc-delay-btn', false, 'Send Delay Alert Now');
+    setError('bc-delay-result', 'Network error: ' + e.message);
+  }
+}
+
+async function sendPromo() {
+  const title   = document.getElementById('bc-promo-title').value.trim();
+  const smsOn   = document.getElementById('bc-promo-ch-sms').checked;
+  const emailOn = document.getElementById('bc-promo-ch-email').checked;
+  const sms     = document.getElementById('bc-promo-sms').value.trim();
+  const subject = document.getElementById('bc-promo-subject').value.trim();
+  const body    = document.getElementById('bc-promo-body').value.trim();
+  const author  = document.getElementById('bc-promo-author').value.trim();
+
+  if (!title)              { setError('bc-promo-result', 'Title is required.'); return; }
+  if (!smsOn && !emailOn)  { setError('bc-promo-result', 'Select at least one channel.'); return; }
+  if (smsOn   && !sms)     { setError('bc-promo-result', 'SMS message is required when SMS channel is selected.'); return; }
+  if (emailOn && !subject) { setError('bc-promo-result', 'Email subject is required when Email channel is selected.'); return; }
+  if (emailOn && !body)    { setError('bc-promo-result', 'Email body is required when Email channel is selected.'); return; }
+
+  setLoading('bc-promo-result', 'Creating broadcast job…');
+  setBtn('bc-promo-btn', true, 'Creating…');
+
+  try {
+    const channels = [];
+    if (smsOn)   channels.push('sms');
+    if (emailOn) channels.push('email');
+
+    // Step 1: create
+    const createRes = await fetch('/api/broadcasts/', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        title,
+        broadcast_type: 'promotional',
+        channels,
+        sms_message:    smsOn   ? sms     : null,
+        email_subject:  emailOn ? subject : null,
+        email_body:     emailOn ? body    : null,
+        target_type:    'all_customers',
+        created_by:     author || null,
+      }),
+    });
+    const createData = await createRes.json();
+    if (!createRes.ok) {
+      setBtn('bc-promo-btn', false, 'Queue Promotional Blast');
+      setError('bc-promo-result', createData.detail || JSON.stringify(createData));
+      return;
+    }
+
+    const jobId = createData.job_id;
+    document.getElementById('bc-promo-result').innerHTML =
+      `<div class="loading-msg"><span class="spinner"></span>Job created (id=${jobId}) — queueing recipients…</div>`;
+
+    // Step 2: queue
+    const queueRes  = await fetch(`/api/broadcasts/${jobId}/queue`, { method: 'POST' });
+    const queueData = await queueRes.json();
+    setBtn('bc-promo-btn', false, 'Queue Promotional Blast');
+
+    if (!queueRes.ok) { setError('bc-promo-result', queueData.detail || JSON.stringify(queueData)); return; }
+
+    document.getElementById('bc-promo-result').innerHTML = `
+      <div class="result-box" style="border-color:#bee5eb;background:#f0f8ff">
+        <p style="color:#0c5460;font-weight:600;margin-bottom:8px">Promotional blast queued!</p>
+        <div class="kv"><span class="k">Job ID</span><span class="v">${jobId}</span></div>
+        <div class="kv"><span class="k">Channels</span><span class="v">${channels.join(', ')}</span></div>
+        <div class="kv"><span class="k">Total recipients</span><span class="v">${queueData.total_recipients}</span></div>
+        <p style="margin-top:10px;font-size:0.84rem;color:#555">n8n will dispatch in batches of 50 every 5 minutes. Switch to <strong>History</strong> to track progress.</p>
+      </div>`;
+  } catch(e) {
+    setBtn('bc-promo-btn', false, 'Queue Promotional Blast');
+    setError('bc-promo-result', 'Network error: ' + e.message);
+  }
+}
+
+const BC_STATUS_COLOR = { draft:'#888', queued:'#0d6efd', sending:'#fd7e14', completed:'#28a745', failed:'#dc3545' };
+
+async function loadBroadcastHistory() {
+  setLoading('bc-history-result', 'Loading broadcast history…');
+  try {
+    const res  = await fetch('/api/broadcasts/?limit=20');
+    const data = await res.json();
+    if (!res.ok) { setError('bc-history-result', data.detail || JSON.stringify(data)); return; }
+    if (!data.length) {
+      document.getElementById('bc-history-result').innerHTML =
+        '<p style="color:#888;font-size:0.87rem">No broadcasts yet.</p>';
+      return;
+    }
+
+    let html = `<div style="display:flex;flex-direction:column;gap:12px">`;
+    for (const j of data) {
+      const color = BC_STATUS_COLOR[j.status] || '#888';
+      const pct   = j.total_recipients > 0
+        ? Math.round(((j.sent_sms + j.sent_email) / (j.total_recipients)) * 100)
+        : 0;
+      html += `
+        <div style="background:white;border:1.5px solid #e0e0ea;border-radius:10px;padding:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span style="font-weight:600;font-size:0.93rem">${esc(j.title)}</span>
+            <span style="background:${color}22;color:${color};padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:700">${esc(j.status)}</span>
+          </div>
+          <div style="display:flex;gap:20px;flex-wrap:wrap;font-size:0.82rem;color:#666">
+            <span>Type: <strong>${esc(j.broadcast_type)}</strong></span>
+            <span>Target: <strong>${esc(j.target_type)}</strong>${j.target_date ? ' · ' + esc(j.target_date) : ''}</span>
+            <span>Channels: <strong>${(j.channels||[]).join(', ')}</strong></span>
+            <span>Created: <strong>${new Date(j.created_at).toLocaleString()}</strong></span>
+          </div>
+          <div style="margin-top:10px;display:flex;gap:16px;font-size:0.83rem">
+            <span style="color:#28a745">✓ SMS: ${j.sent_sms}</span>
+            <span style="color:#17a2b8">✓ Email: ${j.sent_email}</span>
+            <span style="color:#dc3545">✗ Failed: ${j.failed_count}</span>
+            <span style="color:#888">Total: ${j.total_recipients}</span>
+            ${j.total_recipients > 0 ? `<span style="color:#888">(${pct}% done)</span>` : ''}
+          </div>
+        </div>`;
+    }
+    html += '</div>';
+    document.getElementById('bc-history-result').innerHTML = html;
+  } catch(e) { setError('bc-history-result', 'Network error: ' + e.message); }
+}
+
 // ─── init ─────────────────────────────────────────────────────────────────────
-document.getElementById('r-date').value = new Date().toISOString().slice(0,10);
+document.getElementById('r-date').value       = new Date().toISOString().slice(0,10);
+document.getElementById('bc-delay-date').value = new Date().toISOString().slice(0,10);
+bcAttachCounter('bc-delay-sms', 'bc-delay-sms-count');
+bcAttachCounter('bc-promo-sms', 'bc-promo-sms-count');
+document.getElementById('bc-promo-ch-sms').addEventListener('change', bcUpdatePromoFields);
+document.getElementById('bc-promo-ch-email').addEventListener('change', bcUpdatePromoFields);
 </script>
 </body>
 </html>
