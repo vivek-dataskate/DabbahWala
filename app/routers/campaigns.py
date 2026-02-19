@@ -1,3 +1,4 @@
+import copy
 import json
 import re
 from pathlib import Path
@@ -41,6 +42,59 @@ def mark_executed(queue_id: int):
 # ── Campaign email template editor ─────────────────────────────────────────────
 
 _DATA_DIR = Path(__file__).parent.parent.parent / "data" / "campaigns"
+
+# ── Branded HTML email wrapper ──────────────────────────────────────────────────
+# Applied at Instantly push time only. Local JSON stores raw inner <div> content
+# so the dashboard editor stays clean. We use string concat to preserve
+# {{merge_tags}} without Python f-string escaping issues.
+
+_TEMPLATE_HEADER = (
+    '<!DOCTYPE html><html lang="en">'
+    '<head><meta charset="UTF-8">'
+    '<meta name="viewport" content="width=device-width,initial-scale=1.0">'
+    '<meta http-equiv="X-UA-Compatible" content="IE=edge"></head>'
+    '<body style="margin:0;padding:0;background-color:#f7f2ed;">'
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f7f2ed">'
+    '<tr><td align="center" style="padding:28px 12px;">'
+    '<table role="presentation" style="max-width:580px;width:100%;" cellspacing="0" cellpadding="0" border="0">'
+    # ── Header bar ──
+    '<tr><td style="background-color:#1a1a1a;border-radius:8px 8px 0 0;padding:24px 40px;text-align:center;">'
+    '<div style="font-family:Georgia,\'Times New Roman\',serif;font-size:24px;font-weight:bold;'
+    'color:#ffffff;letter-spacing:1px;">DabbahWala</div>'
+    '<div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#b8956a;'
+    'letter-spacing:3px;text-transform:uppercase;margin-top:6px;">'
+    'Fresh &nbsp;&middot;&nbsp; Cooked to Order &nbsp;&middot;&nbsp; Delivered</div>'
+    '</td></tr>'
+    # ── Accent line ──
+    '<tr><td bgcolor="#c8581a" style="height:3px;font-size:0;line-height:0;">&nbsp;</td></tr>'
+    # ── Body ──
+    '<tr><td style="background-color:#ffffff;padding:40px 48px;border-radius:0;">'
+    '<div style="font-family:Georgia,\'Times New Roman\',serif;font-size:16px;'
+    'line-height:1.8;color:#252525;">'
+)
+
+_TEMPLATE_FOOTER = (
+    '</div>'
+    '</td></tr>'
+    # ── Footer ──
+    '<tr><td style="background-color:#f7f2ed;border-radius:0 0 8px 8px;'
+    'padding:20px 40px 16px;text-align:center;">'
+    '<p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;'
+    'color:#aaa;margin:0;line-height:1.8;">'
+    'DabbahWala &nbsp;&middot;&nbsp; Fresh meals, cooked to order<br>'
+    '<a href="{{unsubscribeLink}}" style="color:#aaa;text-decoration:underline;">Unsubscribe</a>'
+    '</p>'
+    '</td></tr>'
+    '</table>'
+    '</td></tr>'
+    '</table>'
+    '</body></html>'
+)
+
+
+def _wrap_body(inner_html: str) -> str:
+    """Wrap inner email body with the DabbahWala branded HTML template."""
+    return _TEMPLATE_HEADER + inner_html + _TEMPLATE_FOOTER
 
 _CAMPAIGN_META: dict[str, dict] = {
     "NURTURE_SLOW": {
@@ -179,18 +233,26 @@ def update_campaign_template(campaign_name: str, payload: TemplateUpdate):
     path = _DATA_DIR / meta["json_file"]
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
-    # Push to Instantly
+    # Push to Instantly — deep-copy seqs and wrap each email step body
+    # with the branded HTML template before sending (local JSON stays as raw inner HTML)
     instantly_status = "skipped"
     instantly_error = None
     if INSTANTLY_API_KEY:
         try:
+            seqs_to_push = copy.deepcopy(seqs)
+            for seq in seqs_to_push:
+                for step in seq.get("steps", []):
+                    if step.get("type") == "email":
+                        for variant in step.get("variants", []):
+                            if "body" in variant:
+                                variant["body"] = _wrap_body(variant["body"])
             resp = httpx.patch(
                 f"https://api.instantly.ai/api/v2/campaigns/{meta['instantly_id']}",
                 headers={
                     "Authorization": f"Bearer {INSTANTLY_API_KEY}",
                     "Content-Type": "application/json",
                 },
-                json={"sequences": seqs},
+                json={"sequences": seqs_to_push},
                 timeout=15,
             )
             if resp.status_code < 300:
