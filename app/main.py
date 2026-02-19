@@ -26,13 +26,17 @@ app.include_router(team_content.router, prefix="/api/team-content", tags=["team-
 
 @app.get("/health")
 def health():
+    from fastapi.responses import JSONResponse
     try:
         from app.db import get_cursor
         with get_cursor(commit=False) as cur:
             cur.execute("SELECT 1")
         return {"status": "ok", "db": "connected"}
     except Exception as e:
-        return {"status": "degraded", "db": str(e)}
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "db": str(e)},
+        )
 
 
 @app.post("/admin/migrate/{migration_number}")

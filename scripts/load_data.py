@@ -23,7 +23,7 @@ import pandas as pd
 # Config
 # ---------------------------------------------------------------------------
 RENDER_URL = os.environ.get("DABBAHWALA_API_URL", "https://dabbahwala-latest.onrender.com")
-ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "")
 CUSTOMER_FILE = "data/DW Costumers-latest.xlsx"
 ORDER_FILE = "data/DabbahWala OrderData-2025.xlsx"
 FUZZY_THRESHOLD = 0.72  # similarity threshold for name matching
@@ -48,7 +48,7 @@ CATEGORY_RULES = [
 VEG_KEYWORDS = ['veg', 'paneer', 'aloo', 'palak', 'saag', 'mutter', 'dal', 'idly', 'dosa',
                  'curd', 'yogurt', 'raita', 'rice', 'roti', 'lassi', 'poori', 'sambar',
                  'pungulu', 'upma', 'pesarattu', 'gobi']
-NON_VEG_KEYWORDS = ['non-veg', 'nonveg', 'chicken', 'goat', 'shrimp', 'mutton', 'egg',
+NON_VEG_KEYWORDS = ['non-veg', 'non veg', 'nonveg', 'chicken', 'goat', 'shrimp', 'mutton', 'egg',
                      'fish', 'lamb', 'meat', 'tandoori chicken', 'butter chicken',
                      'chicken tikka', 'chicken malai', 'chicken curry', 'chicken dum']
 

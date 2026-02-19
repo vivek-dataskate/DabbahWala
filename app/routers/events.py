@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter, HTTPException
 
 from app.db import get_cursor
@@ -12,7 +14,7 @@ def ingest_event(payload: EventIngest):
         try:
             cur.execute(
                 "SELECT ingest_event(%s, %s::event_type, %s::jsonb)",
-                (payload.contact_email, payload.event_type, str(payload.metadata).replace("'", '"')),
+                (payload.contact_email, payload.event_type, json.dumps(payload.metadata)),
             )
             row = cur.fetchone()
             return EventResponse(event_id=row["ingest_event"])
