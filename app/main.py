@@ -1,7 +1,8 @@
 import os
+import traceback
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from app.routers import agents, agent, campaigns, daily_orders, delivery, events, intelligence, lifecycle, opportunities, playbook, query, reports, sms, team_content, telnyx
 
@@ -10,6 +11,15 @@ app = FastAPI(
     description="Lifecycle-driven marketing orchestration API",
     version="0.1.0",
 )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    traceback.print_exc()
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc), "type": type(exc).__name__},
+    )
 
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(lifecycle.router, prefix="/api/lifecycle", tags=["lifecycle"])

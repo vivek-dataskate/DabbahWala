@@ -9,10 +9,12 @@ Called by n8n form workflow. Returns formatted text answers.
 """
 import json
 import os
+import traceback
 from datetime import date, datetime, timedelta
 
+import anthropic
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.db import get_cursor
@@ -837,7 +839,7 @@ def tone_drafts(req: ToneRequest):
 
     for tone_name, tone_desc in _TONES.items():
         resp = client.messages.create(
-            model=MODEL,
+            model=CLAUDE_MODEL,
             max_tokens=200,
             system=(
                 f"You write marketing SMS/WhatsApp messages for DabbahWala, a food delivery "
@@ -864,40 +866,44 @@ def tone_drafts(req: ToneRequest):
 async def handle_query(req: QueryRequest):
     """
     Process a marketing query. Routes to the appropriate handler based on category.
-    Called by n8n form workflow.
+    Called by n8n form workflow and the dashboard.
     """
     category = req.category.lower().strip()
     question = req.question.strip()
     email = req.contact_email.strip().lower() if req.contact_email else None
 
-    if category == "customer_lookup":
-        answer, data = _handle_customer_lookup(question, email)
-    elif category == "pipeline_snapshot":
-        answer, data = _handle_pipeline_snapshot(question)
-    elif category == "campaign_performance":
-        answer, data = _handle_campaign_performance(question)
-    elif category == "who_to_contact":
-        answer, data = _handle_who_to_contact(question)
-    elif category == "daily_summary":
-        answer, data = _handle_daily_summary(question)
-    elif category == "order_analytics":
-        answer, data = _handle_order_analytics(question)
-    elif category == "communication_history":
-        answer, data = _handle_communication_history(question, email)
-    elif category == "ground_team_notes":
-        answer, data = _handle_ground_team_notes(question)
-    elif category == "ad_copies":
-        answer, data = _handle_ad_copies(question)
-    elif category == "submit_input":
-        answer, data = _handle_submit_input(question, req.author, req.input_type)
-    elif category == "free_form":
-        answer, data = await _handle_free_form(question)
-    else:
-        answer = (
-            f"Unknown category: {category}. "
-            f"Available: {', '.join(CATEGORIES.keys())}"
-        )
-        data = {"available_categories": CATEGORIES}
+    try:
+        if category == "customer_lookup":
+            answer, data = _handle_customer_lookup(question, email)
+        elif category == "pipeline_snapshot":
+            answer, data = _handle_pipeline_snapshot(question)
+        elif category == "campaign_performance":
+            answer, data = _handle_campaign_performance(question)
+        elif category == "who_to_contact":
+            answer, data = _handle_who_to_contact(question)
+        elif category == "daily_summary":
+            answer, data = _handle_daily_summary(question)
+        elif category == "order_analytics":
+            answer, data = _handle_order_analytics(question)
+        elif category == "communication_history":
+            answer, data = _handle_communication_history(question, email)
+        elif category == "ground_team_notes":
+            answer, data = _handle_ground_team_notes(question)
+        elif category == "ad_copies":
+            answer, data = _handle_ad_copies(question)
+        elif category == "submit_input":
+            answer, data = _handle_submit_input(question, req.author, req.input_type)
+        elif category == "free_form":
+            answer, data = await _handle_free_form(question)
+        else:
+            answer = (
+                f"Unknown category: {category}. "
+                f"Available: {', '.join(CATEGORIES.keys())}"
+            )
+            data = {"available_categories": CATEGORIES}
+    except Exception as exc:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Query failed: {exc}")
 
     return QueryResponse(
         category=category,
