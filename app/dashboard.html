@@ -348,7 +348,7 @@ async function runQuery() {
     });
     const data = await res.json();
     if (!res.ok) { setError('q-result', data.detail || JSON.stringify(data)); return; }
-    setPreResult('q-result', data.formatted_answer);
+    setPreResult('q-result', data.answer);
   } catch(e) { setError('q-result', 'Network error: ' + e.message); }
 }
 
