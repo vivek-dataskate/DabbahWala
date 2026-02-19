@@ -115,6 +115,7 @@ class DailyOrderResult(BaseModel):
 
 
 @router.post("/process", response_model=DailyOrderResult)
+@router.post("/upload-csv", response_model=DailyOrderResult)
 async def process_daily_orders(file: UploadFile = File(...)):
     """
     Upload a CSV of daily orders. Columns are matched flexibly.

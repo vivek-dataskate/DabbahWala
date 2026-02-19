@@ -43,6 +43,8 @@ class QueryRequest(BaseModel):
     category: str
     question: str = ""
     contact_email: str | None = None
+    contact_phone: str | None = None
+    contact_name: str | None = None
     # Used by submit_input category
     author: str | None = None
     input_type: str | None = None  # ground_note, ad_copy, observation, question
@@ -492,27 +494,72 @@ def _handle_order_analytics(question: str) -> tuple[str, dict]:
     return "\n".join(lines), data
 
 
-def _handle_communication_history(question: str, contact_email: str | None) -> tuple[str, dict]:
-    if not contact_email:
-        return "Please provide a customer email address to look up their communication history.", {}
+def _handle_communication_history(
+    question: str,
+    contact_email: str | None,
+    contact_phone: str | None = None,
+    contact_name: str | None = None,
+) -> tuple[str, dict]:
+    if not contact_email and not contact_phone and not contact_name:
+        return (
+            "Please provide at least one of: phone number, email address, or customer name "
+            "to look up communication history.",
+            {},
+        )
 
     with get_cursor(commit=False) as cur:
-        # Find contact — include phone so we can report it
-        cur.execute(
-            "SELECT id, first_name, last_name, phone FROM contacts WHERE email = %s",
-            (contact_email,),
-        )
-        contact = cur.fetchone()
-        if not contact:
-            return f"No customer found with email: {contact_email}", {}
+        contact = None
+
+        if contact_phone:
+            raw_phone = contact_phone.strip()
+            cur.execute(
+                "SELECT id, first_name, last_name, email, phone FROM contacts WHERE phone = %s",
+                (raw_phone,),
+            )
+            contact = cur.fetchone()
+            if not contact:
+                return f"No customer found with phone number: {raw_phone}", {}
+
+        elif contact_email:
+            cur.execute(
+                "SELECT id, first_name, last_name, email, phone FROM contacts WHERE email = %s",
+                (contact_email,),
+            )
+            contact = cur.fetchone()
+            if not contact:
+                return f"No customer found with email: {contact_email}", {}
+
+        else:  # name search
+            name_q = contact_name.strip()
+            cur.execute("""
+                SELECT id, first_name, last_name, email, phone
+                FROM contacts
+                WHERE first_name ILIKE %s OR last_name ILIKE %s
+                ORDER BY last_name, first_name
+                LIMIT 10
+            """, (f"%{name_q}%", f"%{name_q}%"))
+            matches = cur.fetchall()
+            if not matches:
+                return f"No customer found with name matching '{name_q}'.", {}
+            if len(matches) > 1:
+                lines = [f"## {len(matches)} customers found for '{name_q}'", ""]
+                for m in matches:
+                    lines.append(
+                        f"- **{m['first_name']} {m['last_name']}** — "
+                        f"{m.get('email') or 'no email'} / {m.get('phone') or 'no phone'}"
+                    )
+                lines.append("\nPlease refine your search using an email or phone number.")
+                return "\n".join(lines), {"matches": [dict(m) for m in matches]}
+            contact = matches[0]
 
         cid = contact["id"]
         name = f"{contact['first_name'] or ''} {contact['last_name'] or ''}".strip()
         phone = (contact.get("phone") or "").strip() or None
+        email = contact.get("email") or ""
 
         if not phone:
             return (
-                f"No phone number on file for **{name}** ({contact_email}). "
+                f"No phone number on file for **{name}** ({email}). "
                 "Communication history via SMS/calls cannot be retrieved without a phone number.",
                 {"phone_resolved": False},
             )
@@ -541,7 +588,7 @@ def _handle_communication_history(question: str, contact_email: str | None) -> t
         """, (cid,))
         deliveries = [dict(r) for r in cur.fetchall()]
 
-    lines = [f"## Communication History: {name}", f"**Email**: {contact_email} | **Phone**: {phone}", ""]
+    lines = [f"## Communication History: {name}", f"**Email**: {email} | **Phone**: {phone}", ""]
 
     if sms:
         lines.append(f"### SMS Messages ({len(sms)})")
@@ -572,7 +619,7 @@ def _handle_communication_history(question: str, contact_email: str | None) -> t
     if not sms and not calls and not deliveries:
         lines.append("No communication history found for this customer.")
 
-    data = {"phone": phone, "sms_count": len(sms), "calls_count": len(calls), "deliveries_count": len(deliveries)}
+    data = {"phone": phone, "email": email, "sms_count": len(sms), "calls_count": len(calls), "deliveries_count": len(deliveries)}
     return "\n".join(lines), data
 
 
@@ -854,7 +901,7 @@ def tone_drafts(req: ToneRequest):
 
     with get_cursor(commit=False) as cur:
         cur.execute("""
-            SELECT first_name, last_name, lifecycle_segment, total_orders, last_order_date
+            SELECT first_name, last_name, lifecycle_segment, total_orders, last_order_at
             FROM contacts WHERE email = %s
         """, (req.contact_email,))
         row = cur.fetchone()
@@ -868,7 +915,7 @@ def tone_drafts(req: ToneRequest):
         f"Customer name: {name}\n"
         f"Lifecycle stage: {c.get('lifecycle_segment')}\n"
         f"Total orders: {c.get('total_orders', 0)}\n"
-        f"Last order: {c.get('last_order_date') or 'never'}"
+        f"Last order: {c.get('last_order_at') or 'never'}"
     )
 
     client = anthropic.Anthropic(api_key=api_key)
@@ -908,6 +955,8 @@ async def handle_query(req: QueryRequest):
     category = req.category.lower().strip()
     question = req.question.strip()
     email = req.contact_email.strip().lower() if req.contact_email else None
+    phone = req.contact_phone.strip() if req.contact_phone else None
+    name = req.contact_name.strip() if req.contact_name else None
 
     try:
         if category == "customer_lookup":
@@ -923,7 +972,7 @@ async def handle_query(req: QueryRequest):
         elif category == "order_analytics":
             answer, data = _handle_order_analytics(question)
         elif category == "communication_history":
-            answer, data = _handle_communication_history(question, email)
+            answer, data = _handle_communication_history(question, email, phone, name)
         elif category == "ground_team_notes":
             answer, data = _handle_ground_team_notes(question)
         elif category == "ad_copies":
