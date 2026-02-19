@@ -154,9 +154,9 @@ def build_contact_profile(cur, contact_id: int) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# System prompt for Claude
+# System prompt for Claude (base — playbook rules appended dynamically)
 # ---------------------------------------------------------------------------
-SYSTEM_PROMPT = """You are the DabbahWala marketing intelligence agent. You analyze customer profiles
+BASE_SYSTEM_PROMPT = """You are the DabbahWala marketing intelligence agent. You analyze customer profiles
 and decide if/how to reach out to convert them into new orders or subscriptions.
 
 DabbahWala is a fresh, home-style Indian food delivery service in Atlanta. We cook food
@@ -184,7 +184,7 @@ For each contact, you must output valid JSON with these fields:
   "reasoning": "your step-by-step thinking about this contact"
 }
 
-Rules:
+Default rules:
 - Do NOT create an action if the contact already has a pending opportunity
 - Do NOT suggest contacting opted-out or cooling contacts
 - Personalize messages using the contact's name, favorite items, and order history
@@ -193,6 +193,63 @@ Rules:
 - Be conservative with confidence — only high confidence (>0.8) for hot priority
 - Consider timing: don't nudge someone who ordered yesterday
 - Output ONLY the JSON object, no other text"""
+
+
+def get_full_system_prompt() -> str:
+    """
+    Build the full system prompt by combining the base prompt with
+    user-configured playbook rules from the database.
+
+    Flow: Airtable -> n8n -> Python API -> DB -> here -> Claude
+    """
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT category, rule_name, instruction, priority
+            FROM agent_playbook
+            WHERE is_active = true
+            ORDER BY
+                CASE category
+                    WHEN 'exclusion' THEN 1
+                    WHEN 'priority' THEN 2
+                    WHEN 'inference' THEN 3
+                    WHEN 'decision' THEN 4
+                    WHEN 'messaging' THEN 5
+                    ELSE 6
+                END,
+                priority DESC
+        """)
+        rules = cur.fetchall()
+
+    if not rules:
+        return BASE_SYSTEM_PROMPT
+
+    # Group by category
+    categories = {}
+    for r in rules:
+        cat = r['category']
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(r)
+
+    category_labels = {
+        'exclusion': 'EXCLUSION RULES (Must Follow — these override everything)',
+        'priority': 'PRIORITY RULES',
+        'inference': 'INFERENCE RULES (What to Look For)',
+        'decision': 'DECISION RULES (What to Do)',
+        'messaging': 'MESSAGING RULES (How to Communicate)',
+        'general': 'GENERAL RULES',
+    }
+
+    lines = ["\n\n## Your Playbook (Configured by the DabbahWala Team)\n"]
+    lines.append("These rules come from the team and OVERRIDE the default rules above when they conflict.\n")
+
+    for cat in ['exclusion', 'priority', 'inference', 'decision', 'messaging', 'general']:
+        if cat in categories:
+            lines.append(f"\n### {category_labels.get(cat, cat.upper())}")
+            for r in categories[cat]:
+                lines.append(f"- **{r['rule_name']}**: {r['instruction']}")
+
+    return BASE_SYSTEM_PROMPT + "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -266,7 +323,7 @@ async def analyze_contacts(limit: int = 30):
         user_prompt = f"Analyze this DabbahWala customer and decide if we should reach out:\n\n{profile_str}"
 
         try:
-            response = await call_claude(SYSTEM_PROMPT, user_prompt)
+            response = await call_claude(get_full_system_prompt(), user_prompt)
             # Parse JSON response
             # Strip markdown code blocks if present
             clean = response.strip()
@@ -345,7 +402,7 @@ async def analyze_single_contact(contact_id: int):
     profile_str = json.dumps(profile, default=str, indent=2)
     user_prompt = f"Analyze this DabbahWala customer and decide if we should reach out:\n\n{profile_str}"
 
-    response = await call_claude(SYSTEM_PROMPT, user_prompt)
+    response = await call_claude(get_full_system_prompt(), user_prompt)
 
     try:
         clean = response.strip()

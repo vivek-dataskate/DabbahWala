@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request
 
-from app.routers import agent, campaigns, daily_orders, delivery, events, intelligence, lifecycle, opportunities, reports, sms, telnyx
+from app.routers import agent, campaigns, daily_orders, delivery, events, intelligence, lifecycle, opportunities, playbook, reports, sms, telnyx
 
 app = FastAPI(
     title="DabbahWala Marketing System",
@@ -19,6 +19,7 @@ app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opp
 app.include_router(daily_orders.router, prefix="/api/daily-orders", tags=["daily-orders"])
 app.include_router(intelligence.router, prefix="/api/intelligence", tags=["intelligence"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
+app.include_router(playbook.router, prefix="/api/playbook", tags=["playbook"])
 
 
 @app.get("/health")
