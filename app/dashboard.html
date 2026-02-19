@@ -174,12 +174,12 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
     <input id="q-email" type="email" placeholder="customer@example.com">
   </div>
 
-  <div class="form-group" id="q-phone-group" style="display:none">
+  <div class="form-group" id="q-phone-group">
     <label>Phone number <span class="hint">(optional)</span></label>
     <input id="q-phone" type="tel" placeholder="+1234567890">
   </div>
 
-  <div class="form-group" id="q-name-group" style="display:none">
+  <div class="form-group" id="q-name-group">
     <label>Customer name <span class="hint">(optional)</span></label>
     <input id="q-name" type="text" placeholder="e.g. John Smith">
   </div>
@@ -341,18 +341,9 @@ function setBtn(id, disabled, label) {
 // ─── query ───────────────────────────────────────────────────────────────────
 function onCategoryChange() {
   const cat = document.getElementById('q-category').value;
-  const isCommsHistory = cat === 'communication_history';
   const needsEmail = ['customer_lookup','communication_history'].includes(cat);
   const hint = document.getElementById('q-email-hint');
-
-  document.getElementById('q-phone-group').style.display = isCommsHistory ? '' : 'none';
-  document.getElementById('q-name-group').style.display  = isCommsHistory ? '' : 'none';
-
-  if (isCommsHistory) {
-    hint.textContent = '(optional — provide at least one of email, phone, or name)';
-  } else {
-    hint.textContent = needsEmail ? '(required)' : '(required for Customer Lookup and Communication History)';
-  }
+  hint.textContent = needsEmail ? '(required)' : '(optional)';
 }
 
 async function runQuery() {
@@ -616,7 +607,7 @@ async function uploadCSV() {
     let html = `<div class="upload-summary" style="margin-top:20px">
       <div class="stat-box"><div class="s-label">Ingested</div><div class="s-val green">${data.ingested}</div></div>
       <div class="stat-box"><div class="s-label">Skipped</div><div class="s-val red">${data.skipped}</div></div>
-      <div class="stat-box"><div class="s-label">Revenue</div><div class="s-val blue" style="font-size:1.4rem">AED ${(s.total_revenue_aed||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
+      <div class="stat-box"><div class="s-label">Revenue</div><div class="s-val blue" style="font-size:1.4rem">USD $${(s.total_revenue||s.total_revenue_usd||s.total_revenue_aed||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
       <div class="stat-box"><div class="s-label">New customers</div><div class="s-val" style="color:#6f42c1">${s.new_customers||0}</div></div>
       <div class="stat-box"><div class="s-label">Returning</div><div class="s-val blue">${s.returning_customers||0}</div></div>
     </div>`;
