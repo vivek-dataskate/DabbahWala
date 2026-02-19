@@ -166,10 +166,9 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 <div class="tabs">
   <div class="tab active" onclick="switchTab('query')">📊 Query</div>
   <div class="tab" onclick="switchTab('agent')">🤖 Run Agent</div>
-  <div class="tab" onclick="switchTab('tone')">✉️ Email Templates</div>
   <div class="tab" onclick="switchTab('upload')">⚡ Actions</div>
   <div class="tab" onclick="switchTab('reports')">📋 Reports</div>
-  <div class="tab" onclick="switchTab('chatbot')">💬 AI Assistant</div>
+  <div class="tab" onclick="switchTab('chatbot')">💬 About Me</div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ QUERY -->
@@ -180,15 +179,42 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="form-group">
     <label>Category</label>
     <select id="q-category" onchange="onCategoryChange()">
-      <option value="pipeline_snapshot">📈  Pipeline Snapshot — Lifecycle stage distribution</option>
-      <option value="who_to_contact">📞  Who to Contact Today — Prioritized outreach list</option>
-      <option value="daily_summary">📅  Daily Summary — Today's orders and activity</option>
-      <option value="order_analytics">🍽️  Order Analytics — Top dishes, revenue, trends</option>
-      <option value="campaign_performance">📧  Campaign Performance — Email campaign stats</option>
-      <option value="customer_lookup">🔍  Customer Lookup — Full contact profile</option>
-      <option value="communication_history">💬  Communication History — SMS / call log</option>
-      <option value="free_form">🧠  Ask Anything (AI) — Free-form question</option>
+      <optgroup label="📊 Overview">
+        <option value="pipeline_snapshot">Pipeline Snapshot — Lifecycle stage distribution</option>
+        <option value="daily_summary">Daily Summary — Today's orders and activity</option>
+      </optgroup>
+      <optgroup label="📦 Orders &amp; Revenue">
+        <option value="order_summary_by_order_date">Orders by Order Date — Revenue, count &amp; source breakdown for a date range</option>
+        <option value="order_summary_by_delivery_date">Orders by Delivery Date — Who's receiving within a date range</option>
+        <option value="order_analytics">Order Analytics — Top dishes, revenue, trends</option>
+        <option value="revenue_trends">Revenue Trends — Weekly / monthly totals with trend intelligence</option>
+      </optgroup>
+      <optgroup label="👥 Contacts &amp; Outreach">
+        <option value="who_to_contact">Who to Contact Today — Prioritised outreach list</option>
+        <option value="customer_lookup">Customer Lookup — Full contact profile</option>
+        <option value="communication_history">Communication History — SMS / call log</option>
+      </optgroup>
+      <optgroup label="📧 Campaigns">
+        <option value="campaign_performance">Campaign Performance — Email campaign stats</option>
+      </optgroup>
+      <optgroup label="🧠 AI">
+        <option value="free_form">Ask Anything (AI) — Free-form question</option>
+      </optgroup>
     </select>
+  </div>
+
+  <div class="form-group" id="q-daterange-group" style="display:none">
+    <label id="q-daterange-label">Date range</label>
+    <div class="row2">
+      <div>
+        <label style="font-size:0.78rem;color:#999;font-weight:400;margin-bottom:4px">From</label>
+        <input id="q-date-from" type="date">
+      </div>
+      <div>
+        <label style="font-size:0.78rem;color:#999;font-weight:400;margin-bottom:4px">To</label>
+        <input id="q-date-to" type="date">
+      </div>
+    </div>
   </div>
 
   <div class="form-group" id="q-question-group">
@@ -229,209 +255,233 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div id="a-result"></div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════ TONE -->
-<div id="panel-tone" class="panel">
-  <div class="panel-title">Campaign Email Templates</div>
-  <div class="panel-desc">Select a campaign scenario, review the current email draft, rewrite it (manually or with Claude), then push directly to Instantly.</div>
-
-  <!-- ── Step 1: Scenario ── -->
-  <div class="form-group">
-    <label>1. Select campaign scenario</label>
-    <select id="t-campaign" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;background:#fff">
-      <option value="">— pick a campaign —</option>
-      <option value="NURTURE_SLOW">Nurture Slow — Cold contacts (7 emails)</option>
-      <option value="PROMO_STANDARD">Promo Standard — Engaged &amp; active</option>
-      <option value="PROMO_AGGRESSIVE">Promo Aggressive — Lapsed customers</option>
-      <option value="NEW_CUSTOMER_ONBOARDING">New Customer Onboarding</option>
-      <option value="REACTIVATION">Reactivation — Long-dormant</option>
-    </select>
-  </div>
-
-  <button class="btn" id="t-load-btn" onclick="loadCampaignTemplate()">Load Template</button>
-  <div id="t-load-result"></div>
-
-  <!-- ── Step 2 + 3: Template editor (shown after load) ── -->
-  <div id="t-editor" style="display:none;margin-top:20px">
-
-    <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
-      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">2. Select email step &amp; A/B variant</div>
-      <div class="row2">
-        <div class="form-group" style="margin:0">
-          <label>Email step</label>
-          <select id="t-step" onchange="switchStepVariant()" style="width:100%;padding:8px 10px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.85rem;background:#fff"></select>
-        </div>
-        <div class="form-group" style="margin:0">
-          <label>A/B variant</label>
-          <select id="t-variant" onchange="switchStepVariant()" style="width:100%;padding:8px 10px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.85rem;background:#fff"></select>
-        </div>
-      </div>
-    </div>
-
-    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">3. Review &amp; rewrite</div>
-
-    <div class="form-group">
-      <label>Subject line</label>
-      <input id="t-subject" type="text" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;box-sizing:border-box">
-    </div>
-
-    <div class="form-group">
-      <label>Body <span class="hint">(Instantly HTML — &lt;div&gt; tags + {{firstName|there}} tokens)</span></label>
-      <textarea id="t-body" rows="12" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.82rem;font-family:monospace;box-sizing:border-box;resize:vertical"></textarea>
-    </div>
-
-    <div class="form-group">
-      <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem;padding:8px 16px" onclick="toggleBodyPreview()">Toggle HTML Preview</button>
-      <div id="t-preview" style="display:none;margin-top:10px;border:1.5px solid #e0e0ea;border-radius:8px;padding:16px;background:#fff;font-family:sans-serif;font-size:0.9rem;line-height:1.6"></div>
-    </div>
-
-    <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
-      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:8px">Ask Claude to rewrite</div>
-      <input id="t-instruction" type="text" placeholder="e.g. Make it shorter, add urgency, focus on fresh ingredients…" style="width:100%;padding:9px 12px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">
-      <button class="btn" id="t-rewrite-btn" onclick="askClaudeRewrite()" style="background:#6f42c1;font-size:0.88rem;padding:9px 18px">✨ Ask Claude to Rewrite</button>
-    </div>
-
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-      <button class="btn" id="t-save-btn" onclick="saveAndPush()" style="background:#28a745">💾 Save &amp; Push to Instantly</button>
-      <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem" onclick="resetToneEditor()">← New scenario</button>
-    </div>
-    <div id="t-save-result" style="margin-top:12px"></div>
-  </div>
-</div>
-
 <!-- ══════════════════════════════════════════════════════ ACTIONS -->
 <div id="panel-upload" class="panel">
   <div class="panel-title">Actions</div>
-  <div class="panel-desc">All operations that write or send data — upload orders, run agent intelligence, send delay alerts, and launch promotional blasts.</div>
-
-  <!-- ─────────────── 1. Upload Daily Orders ─────────────── -->
-  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">📤 Upload Daily Orders</div>
-
-  <div class="form-group" style="margin-bottom:20px">
-    <label>Expected columns <span class="hint">(any order, extra columns ignored)</span></label>
-    <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:7px;padding:13px;font-family:monospace;font-size:0.82rem;color:#555;line-height:1.8">
-      email &nbsp;·&nbsp; phone &nbsp;·&nbsp; order_id &nbsp;·&nbsp; order_date &nbsp;·&nbsp; source &nbsp;·&nbsp; total_amount &nbsp;·&nbsp; order_type &nbsp;·&nbsp; delivery_slot &nbsp;·&nbsp; notes
-    </div>
-  </div>
+  <div class="panel-desc">Select an action, fill in the required details, and execute.</div>
 
   <div class="form-group">
-    <label>CSV file</label>
-    <input type="file" id="u-file" accept=".csv" style="padding:8px;background:#fafafe">
+    <label>Action</label>
+    <select id="ac-action" onchange="onActionChange()">
+      <optgroup label="📁 Data">
+        <option value="upload_orders">📤  Upload Daily Orders — Ingest CSV and run lifecycle analysis</option>
+      </optgroup>
+      <optgroup label="✉️ Templates">
+        <option value="email_templates">✉️  Email Templates — Edit &amp; push campaign email drafts to Instantly</option>
+        <option value="sms_templates">💬  SMS Templates — View and edit outbound SMS sequences</option>
+      </optgroup>
+      <optgroup label="🤖 Intelligence">
+        <option value="run_agents">🤖  Run Agents on All Contacts — Full inference → decision → orchestration cycle</option>
+      </optgroup>
+      <optgroup label="📣 Communications">
+        <option value="delay_alert">⚡  Delay Alert — Notify today's customers of a delivery delay</option>
+        <option value="promo_blast">🎉  Promotional Blast — Send SMS/email to opted-in customers</option>
+        <option value="broadcast_history">📋  Broadcast History — View past blasts and alerts</option>
+      </optgroup>
+    </select>
   </div>
 
-  <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:8px;padding:13px;margin-bottom:18px;display:flex;align-items:flex-start;gap:10px">
-    <input type="checkbox" id="u-shipday-toggle" style="margin-top:3px;flex-shrink:0">
-    <div>
-      <label for="u-shipday-toggle" style="font-size:0.88rem;font-weight:600;color:#0c5460;cursor:pointer;display:inline">
-        Create Shipday delivery orders automatically
-      </label>
-      <div style="font-size:0.8rem;color:#6c757d;margin-top:3px;line-height:1.4">
-        Only tick this if Shipday orders for this date have <strong>not</strong> already been created manually.
-        Ticking this when orders already exist in Shipday will create duplicates.
+  <!-- ─────────────── Upload Daily Orders ─────────────── -->
+  <div id="ac-section-upload_orders">
+    <div class="form-group" style="margin-bottom:20px">
+      <label>Expected columns <span class="hint">(any order, extra columns ignored)</span></label>
+      <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:7px;padding:13px;font-family:monospace;font-size:0.82rem;color:#555;line-height:1.8">
+        email &nbsp;·&nbsp; phone &nbsp;·&nbsp; order_id &nbsp;·&nbsp; order_date &nbsp;·&nbsp; source &nbsp;·&nbsp; total_amount &nbsp;·&nbsp; order_type &nbsp;·&nbsp; delivery_slot &nbsp;·&nbsp; notes
       </div>
     </div>
-  </div>
-
-  <button class="btn" id="u-btn" onclick="uploadCSV()">Upload &amp; Process</button>
-  <div id="u-result"></div>
-
-  <hr style="margin:32px 0;border:none;border-top:1.5px solid #e0e0ea">
-
-  <!-- ─────────────── 2. Run Agents on All Contacts ─────────────── -->
-  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">🤖 Run Agents on All Contacts</div>
-  <div class="panel-desc" style="margin-bottom:14px">Run the full inference → decision → orchestration cycle on every non-opted-out contact and immediately dispatch each decision: leads assigned to an Instantly campaign are pushed now, escalations are created as Airtable tasks now — no waiting for the hourly n8n cycle.</div>
-  <button class="btn" id="ra-btn" onclick="runAllAgents()" style="background:#6f42c1">Run Agents on All Contacts</button>
-  <div id="ra-result" style="margin-top:14px"></div>
-
-  <hr style="margin:32px 0;border:none;border-top:1.5px solid #e0e0ea">
-
-  <!-- ─────────────── 3. Delay Alert ─────────────── -->
-  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">⚡ Delay Alert</div>
-  <div style="background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:14px;margin-bottom:20px;font-size:0.87rem;color:#842029">
-    Sends SMS <strong>and</strong> email to every customer with an order on the selected date. Reaches all active-order contacts regardless of promo flags — this is an operational notification.
-  </div>
-
-  <div class="row2">
     <div class="form-group">
-      <label>Delivery date affected <span class="hint">(defaults to today)</span></label>
-      <input type="date" id="bc-delay-date">
+      <label>CSV file</label>
+      <input type="file" id="u-file" accept=".csv" style="padding:8px;background:#fafafe">
+    </div>
+    <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:8px;padding:13px;margin-bottom:18px;display:flex;align-items:flex-start;gap:10px">
+      <input type="checkbox" id="u-shipday-toggle" style="margin-top:3px;flex-shrink:0">
+      <div>
+        <label for="u-shipday-toggle" style="font-size:0.88rem;font-weight:600;color:#0c5460;cursor:pointer;display:inline">
+          Create Shipday delivery orders automatically
+        </label>
+        <div style="font-size:0.8rem;color:#6c757d;margin-top:3px;line-height:1.4">
+          Only tick this if Shipday orders for this date have <strong>not</strong> already been created manually.
+          Ticking this when orders already exist in Shipday will create duplicates.
+        </div>
+      </div>
+    </div>
+    <button class="btn" id="u-btn" onclick="uploadCSV()">Upload &amp; Process</button>
+    <div id="u-result"></div>
+  </div>
+
+  <!-- ─────────────── Email Templates ─────────────── -->
+  <div id="ac-section-email_templates" style="display:none">
+    <div class="panel-desc" style="margin-bottom:16px">Select a campaign scenario, review the current email draft, rewrite it (manually or with Claude), then push directly to Instantly.</div>
+    <div class="form-group">
+      <label>1. Select campaign scenario</label>
+      <select id="t-campaign" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;background:#fff">
+        <option value="">— pick a campaign —</option>
+        <option value="NURTURE_SLOW">Nurture Slow — Cold contacts (7 emails)</option>
+        <option value="PROMO_STANDARD">Promo Standard — Engaged &amp; active</option>
+        <option value="PROMO_AGGRESSIVE">Promo Aggressive — Lapsed customers</option>
+        <option value="NEW_CUSTOMER_ONBOARDING">New Customer Onboarding</option>
+        <option value="REACTIVATION">Reactivation — Long-dormant</option>
+      </select>
+    </div>
+    <button class="btn" id="t-load-btn" onclick="loadCampaignTemplate()">Load Template</button>
+    <div id="t-load-result"></div>
+    <div id="t-editor" style="display:none;margin-top:20px">
+      <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">2. Select email step &amp; A/B variant</div>
+        <div class="row2">
+          <div class="form-group" style="margin:0">
+            <label>Email step</label>
+            <select id="t-step" onchange="switchStepVariant()" style="width:100%;padding:8px 10px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.85rem;background:#fff"></select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>A/B variant</label>
+            <select id="t-variant" onchange="switchStepVariant()" style="width:100%;padding:8px 10px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.85rem;background:#fff"></select>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">3. Review &amp; rewrite</div>
+      <div class="form-group">
+        <label>Subject line</label>
+        <input id="t-subject" type="text" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;box-sizing:border-box">
+      </div>
+      <div class="form-group">
+        <label>Body <span class="hint">(Instantly HTML — &lt;div&gt; tags + {{firstName|there}} tokens)</span></label>
+        <textarea id="t-body" rows="12" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.82rem;font-family:monospace;box-sizing:border-box;resize:vertical"></textarea>
+      </div>
+      <div class="form-group">
+        <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem;padding:8px 16px" onclick="toggleBodyPreview()">Toggle HTML Preview</button>
+        <div id="t-preview" style="display:none;margin-top:10px;border:1.5px solid #e0e0ea;border-radius:8px;padding:16px;background:#fff;font-family:sans-serif;font-size:0.9rem;line-height:1.6"></div>
+      </div>
+      <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:8px">Ask Claude to rewrite</div>
+        <input id="t-instruction" type="text" placeholder="e.g. Make it shorter, add urgency, focus on fresh ingredients…" style="width:100%;padding:9px 12px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">
+        <button class="btn" id="t-rewrite-btn" onclick="askClaudeRewrite()" style="background:#6f42c1;font-size:0.88rem;padding:9px 18px">✨ Ask Claude to Rewrite</button>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button class="btn" id="t-save-btn" onclick="saveAndPush()" style="background:#28a745">💾 Save &amp; Push to Instantly</button>
+        <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem" onclick="resetToneEditor()">← New scenario</button>
+      </div>
+      <div id="t-save-result" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- ─────────────── SMS Templates ─────────────── -->
+  <div id="ac-section-sms_templates" style="display:none">
+    <div class="panel-desc" style="margin-bottom:16px">Edit the SMS message for each scenario, rewrite with Claude, and save. These templates are used by the agent when dispatching SMS actions.</div>
+    <div class="form-group">
+      <label>1. Select SMS scenario</label>
+      <select id="sms-scenario" onchange="loadSmsTemplate()" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;background:#fff">
+        <option value="">— pick a scenario —</option>
+        <option value="WELCOME">Welcome — First order thank-you</option>
+        <option value="REORDER_NUDGE">Reorder Nudge — Gentle prompt to order again</option>
+        <option value="REACTIVATION">Reactivation — Lapsed customer re-engagement</option>
+        <option value="PROMO_OFFER">Promo Offer — Discount or limited-time deal</option>
+        <option value="DELIVERY_CONFIRMATION">Delivery Confirmation — Order on its way</option>
+        <option value="DELAY_ALERT">Delay Alert — Running late notification</option>
+      </select>
+    </div>
+    <div id="sms-editor" style="display:none;margin-top:4px">
+      <div class="form-group">
+        <label>Message <span class="hint">(keep under 160 chars · use {{first_name}} for personalisation)</span></label>
+        <textarea id="sms-body" rows="4" oninput="smsUpdateCount()" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;font-family:inherit;box-sizing:border-box;resize:vertical"></textarea>
+        <div id="sms-char-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
+      </div>
+      <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:8px">Ask Claude to rewrite</div>
+        <input id="sms-instruction" type="text" placeholder="e.g. More friendly, add urgency, mention fresh ingredients…" style="width:100%;padding:9px 12px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">
+        <button class="btn" id="sms-rewrite-btn" onclick="askSmsRewrite()" style="background:#6f42c1;font-size:0.88rem;padding:9px 18px">✨ Ask Claude to Rewrite</button>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <button class="btn" id="sms-save-btn" onclick="saveSmsTemplate()" style="background:#28a745">💾 Save Template</button>
+        <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem" onclick="resetSmsEditor()">← New scenario</button>
+      </div>
+      <div id="sms-save-result" style="margin-top:12px"></div>
+    </div>
+  </div>
+
+  <!-- ─────────────── Run Agents on All Contacts ─────────────── -->
+  <div id="ac-section-run_agents" style="display:none">
+    <div class="panel-desc" style="margin-bottom:14px">Run the full inference → decision → orchestration cycle on every non-opted-out contact and immediately dispatch each decision: leads assigned to an Instantly campaign are pushed now, escalations are created as Airtable tasks now — no waiting for the hourly n8n cycle.</div>
+    <button class="btn" id="ra-btn" onclick="runAllAgents()" style="background:#6f42c1">Run Agents on All Contacts</button>
+    <div id="ra-result" style="margin-top:14px"></div>
+  </div>
+
+  <!-- ─────────────── Delay Alert ─────────────── -->
+  <div id="ac-section-delay_alert" style="display:none">
+    <div style="background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:14px;margin-bottom:20px;font-size:0.87rem;color:#842029">
+      Sends SMS <strong>and</strong> email to every customer with an order on the selected date. Reaches all active-order contacts regardless of promo flags — this is an operational notification.
+    </div>
+    <div class="row2">
+      <div class="form-group">
+        <label>Delivery date affected <span class="hint">(defaults to today)</span></label>
+        <input type="date" id="bc-delay-date">
+      </div>
+      <div class="form-group">
+        <label>Your name <span class="hint">(optional)</span></label>
+        <input type="text" id="bc-delay-author" placeholder="e.g. Vivek">
+      </div>
     </div>
     <div class="form-group">
-      <label>Your name <span class="hint">(optional)</span></label>
-      <input type="text" id="bc-delay-author" placeholder="e.g. Vivek">
-    </div>
-  </div>
-
-  <div class="form-group">
-    <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
-    <textarea id="bc-delay-sms" rows="3" placeholder="Hi! Your DabbahWala delivery for today is running 45–60 min late due to heavy rain. We appreciate your patience!"></textarea>
-    <div id="bc-delay-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
-  </div>
-
-  <div class="form-group">
-    <label>Email subject</label>
-    <input type="text" id="bc-delay-subject" placeholder="Delivery update — your order is on its way">
-  </div>
-
-  <div class="form-group">
-    <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
-    <textarea id="bc-delay-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;We wanted to let you know that your order is running a little late today due to heavy rain. Our drivers are on the way and your food will arrive as soon as possible. Thank you for your patience!&lt;/p&gt;&lt;p&gt;— Team DabbahWala&lt;/p&gt;"></textarea>
-  </div>
-
-  <button class="btn" id="bc-delay-btn" onclick="sendDelayAlert()" style="background:#dc3545">Send Delay Alert Now</button>
-  <div id="bc-delay-result" style="margin-top:14px"></div>
-
-  <hr style="margin:32px 0;border:none;border-top:1.5px solid #e0e0ea">
-
-  <!-- ─────────────── 4. Promotional Blast ─────────────── -->
-  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">🎉 Promotional Blast</div>
-  <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:10px;padding:14px;margin-bottom:20px;font-size:0.87rem;color:#0c5460">
-    Sends to all customers opted in to promotional messaging. Only contacts with <code>sms_promo_enabled</code> or <code>email_promo_enabled</code> receive messages on their respective channels.
-  </div>
-
-  <div class="row2">
-    <div class="form-group">
-      <label>Title <span class="hint">(internal label)</span></label>
-      <input type="text" id="bc-promo-title" placeholder="e.g. Eid Special — 20% Off">
+      <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
+      <textarea id="bc-delay-sms" rows="3" placeholder="Hi! Your DabbahWala delivery for today is running 45–60 min late due to heavy rain. We appreciate your patience!"></textarea>
+      <div id="bc-delay-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
     </div>
     <div class="form-group">
-      <label>Your name <span class="hint">(optional)</span></label>
-      <input type="text" id="bc-promo-author" placeholder="e.g. Vivek">
+      <label>Email subject</label>
+      <input type="text" id="bc-delay-subject" placeholder="Delivery update — your order is on its way">
     </div>
-  </div>
-
-  <div class="form-group">
-    <label>Channels</label>
-    <div style="display:flex;gap:20px;margin-top:4px">
-      <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-sms" checked> SMS</label>
-      <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-email" checked> Email</label>
+    <div class="form-group">
+      <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
+      <textarea id="bc-delay-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;We wanted to let you know that your order is running a little late today due to heavy rain. Our drivers are on the way and your food will arrive as soon as possible. Thank you for your patience!&lt;/p&gt;&lt;p&gt;— Team DabbahWala&lt;/p&gt;"></textarea>
     </div>
+    <button class="btn" id="bc-delay-btn" onclick="sendDelayAlert()" style="background:#dc3545">Send Delay Alert Now</button>
+    <div id="bc-delay-result" style="margin-top:14px"></div>
   </div>
 
-  <div class="form-group" id="bc-promo-sms-group">
-    <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
-    <textarea id="bc-promo-sms" rows="3" placeholder="DabbahWala Eid special: 20% off all orders today! Use code EID20 at checkout. Reply STOP to opt out."></textarea>
-    <div id="bc-promo-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
+  <!-- ─────────────── Promotional Blast ─────────────── -->
+  <div id="ac-section-promo_blast" style="display:none">
+    <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:10px;padding:14px;margin-bottom:20px;font-size:0.87rem;color:#0c5460">
+      Sends to all customers opted in to promotional messaging. Only contacts with <code>sms_promo_enabled</code> or <code>email_promo_enabled</code> receive messages on their respective channels.
+    </div>
+    <div class="row2">
+      <div class="form-group">
+        <label>Title <span class="hint">(internal label)</span></label>
+        <input type="text" id="bc-promo-title" placeholder="e.g. Eid Special — 20% Off">
+      </div>
+      <div class="form-group">
+        <label>Your name <span class="hint">(optional)</span></label>
+        <input type="text" id="bc-promo-author" placeholder="e.g. Vivek">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Channels</label>
+      <div style="display:flex;gap:20px;margin-top:4px">
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-sms" checked> SMS</label>
+        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-email" checked> Email</label>
+      </div>
+    </div>
+    <div class="form-group" id="bc-promo-sms-group">
+      <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
+      <textarea id="bc-promo-sms" rows="3" placeholder="DabbahWala Eid special: 20% off all orders today! Use code EID20 at checkout. Reply STOP to opt out."></textarea>
+      <div id="bc-promo-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
+    </div>
+    <div class="form-group" id="bc-promo-email-group">
+      <label>Email subject</label>
+      <input type="text" id="bc-promo-subject" placeholder="Eid Mubarak! 20% off just for you 🎉">
+    </div>
+    <div class="form-group" id="bc-promo-body-group">
+      <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
+      <textarea id="bc-promo-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;Eid Mubarak from all of us at DabbahWala! To celebrate, enjoy 20% off your next order. Use code &lt;strong&gt;EID20&lt;/strong&gt; at checkout.&lt;/p&gt;"></textarea>
+    </div>
+    <button class="btn" id="bc-promo-btn" onclick="sendPromo()">Queue Promotional Blast</button>
+    <div id="bc-promo-result" style="margin-top:14px"></div>
   </div>
 
-  <div class="form-group" id="bc-promo-email-group">
-    <label>Email subject</label>
-    <input type="text" id="bc-promo-subject" placeholder="Eid Mubarak! 20% off just for you 🎉">
+  <!-- ─────────────── Broadcast History ─────────────── -->
+  <div id="ac-section-broadcast_history" style="display:none">
+    <button class="btn btn-gray" onclick="loadBroadcastHistory()" style="margin-bottom:16px">Load / Refresh</button>
+    <div id="bc-history-result"></div>
   </div>
-
-  <div class="form-group" id="bc-promo-body-group">
-    <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
-    <textarea id="bc-promo-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;Eid Mubarak from all of us at DabbahWala! To celebrate, enjoy 20% off your next order. Use code &lt;strong&gt;EID20&lt;/strong&gt; at checkout.&lt;/p&gt;"></textarea>
-  </div>
-
-  <button class="btn" id="bc-promo-btn" onclick="sendPromo()">Queue Promotional Blast</button>
-  <div id="bc-promo-result" style="margin-top:14px"></div>
-
-  <hr style="margin:32px 0;border:none;border-top:1.5px solid #e0e0ea">
-
-  <!-- ─────────────── 5. Broadcast History ─────────────── -->
-  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">📋 Broadcast History</div>
-  <button class="btn btn-gray" onclick="loadBroadcastHistory()" style="margin-bottom:16px">Load / Refresh</button>
-  <div id="bc-history-result"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ REPORTS -->
@@ -451,9 +501,9 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div id="r-result"></div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════ AI CHATBOT -->
+<!-- ══════════════════════════════════════════════════════ ABOUT ME -->
 <div id="panel-chatbot" class="panel">
-  <div class="panel-title">AI System Assistant</div>
+  <div class="panel-title">About Me — How This System Works</div>
   <div class="panel-desc">Ask anything about <strong>how this system works</strong> — from high-level business purpose and marketing strategy, to functional processes (lifecycle rules, re-engagement flows, escalation logic), to technical details (agent pipeline, n8n workflows, integrations).<br><span style="color:#e63946;font-size:0.82rem;font-weight:600">Not for live data lookups — use the Query tab for specific customer, order, or campaign records.</span></div>
 
   <div style="margin-bottom:14px">
@@ -488,7 +538,7 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 let _toneDrafts = {};
 
 // ─── tabs ────────────────────────────────────────────────────────────────────
-const TAB_NAMES = ['query','agent','tone','upload','reports','chatbot'];
+const TAB_NAMES = ['query','agent','upload','reports','chatbot'];
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
@@ -512,25 +562,120 @@ function setBtn(id, disabled, label) {
   if (b) { b.disabled = disabled; if (label) b.textContent = label; }
 }
 
+// ─── actions ─────────────────────────────────────────────────────────────────
+const AC_SECTIONS = ['upload_orders','email_templates','sms_templates','run_agents','delay_alert','promo_blast','broadcast_history'];
+function onActionChange() {
+  const val = document.getElementById('ac-action').value;
+  AC_SECTIONS.forEach(s => {
+    document.getElementById('ac-section-' + s).style.display = s === val ? 'block' : 'none';
+  });
+}
+
+// ─── sms templates ────────────────────────────────────────────────────────────
+let _smsScenario = '';
+const SMS_DEFAULTS = {
+  WELCOME:               'Hi {{first_name}}, thanks for your first DabbahWala order! We can\'t wait for you to enjoy it. — Team DabbahWala',
+  REORDER_NUDGE:         'Hi {{first_name}}, it\'s been a while! Your favourite DabbahWala meals are ready to order again. Reply STOP to opt out.',
+  REACTIVATION:          'Hi {{first_name}}, we miss you at DabbahWala! Come back and enjoy 10% off your next order. Reply STOP to opt out.',
+  PROMO_OFFER:           'Hi {{first_name}}, DabbahWala special today: use code SAVE15 for 15% off. Limited time! Reply STOP to opt out.',
+  DELIVERY_CONFIRMATION: 'Hi {{first_name}}, your DabbahWala order is on its way! Expected in 30–45 min. — Team DabbahWala',
+  DELAY_ALERT:           'Hi {{first_name}}, your DabbahWala delivery is running 30–45 min late today. Thank you for your patience! — Team DabbahWala',
+};
+async function loadSmsTemplate() {
+  const scenario = document.getElementById('sms-scenario').value;
+  if (!scenario) { document.getElementById('sms-editor').style.display = 'none'; return; }
+  _smsScenario = scenario;
+  document.getElementById('sms-save-result').innerHTML = '';
+  try {
+    const res = await fetch(`/api/sms-templates/${scenario}`);
+    document.getElementById('sms-body').value = res.ok ? (await res.json()).message : (SMS_DEFAULTS[scenario] || '');
+  } catch { document.getElementById('sms-body').value = SMS_DEFAULTS[scenario] || ''; }
+  smsUpdateCount();
+  document.getElementById('sms-editor').style.display = 'block';
+}
+function smsUpdateCount() {
+  const len = (document.getElementById('sms-body').value || '').length;
+  const el  = document.getElementById('sms-char-count');
+  if (el) { el.textContent = `${len} / 160`; el.style.color = len > 160 ? '#dc3545' : '#aaa'; }
+}
+async function askSmsRewrite() {
+  const instruction = document.getElementById('sms-instruction').value.trim();
+  setBtn('sms-rewrite-btn', true, '✨ Rewriting…');
+  document.getElementById('sms-save-result').innerHTML = '';
+  try {
+    const res  = await fetch('/api/sms-templates/rewrite', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ scenario: _smsScenario, message: document.getElementById('sms-body').value, instruction }),
+    });
+    const data = await res.json();
+    setBtn('sms-rewrite-btn', false, '✨ Ask Claude to Rewrite');
+    if (!res.ok) { setError('sms-save-result', data.detail || JSON.stringify(data)); return; }
+    document.getElementById('sms-body').value = data.message;
+    smsUpdateCount();
+    document.getElementById('sms-save-result').innerHTML =
+      '<p style="color:#6f42c1;font-size:0.85rem">✓ Claude rewrote the draft — review above, then Save when ready.</p>';
+  } catch(e) { setBtn('sms-rewrite-btn', false, '✨ Ask Claude to Rewrite'); setError('sms-save-result', 'Network error: ' + e.message); }
+}
+async function saveSmsTemplate() {
+  if (!_smsScenario) return;
+  setBtn('sms-save-btn', true, 'Saving…');
+  try {
+    const res  = await fetch(`/api/sms-templates/${_smsScenario}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ message: document.getElementById('sms-body').value }),
+    });
+    const data = await res.json();
+    setBtn('sms-save-btn', false, '💾 Save Template');
+    if (!res.ok) { setError('sms-save-result', data.detail || JSON.stringify(data)); return; }
+    document.getElementById('sms-save-result').innerHTML = '<p style="color:#28a745;font-size:0.85rem">✓ Template saved.</p>';
+  } catch(e) { setBtn('sms-save-btn', false, '💾 Save Template'); setError('sms-save-result', 'Network error: ' + e.message); }
+}
+function resetSmsEditor() {
+  _smsScenario = '';
+  document.getElementById('sms-scenario').value = '';
+  document.getElementById('sms-editor').style.display = 'none';
+  document.getElementById('sms-save-result').innerHTML = '';
+  document.getElementById('sms-instruction').value = '';
+}
+
 // ─── query ───────────────────────────────────────────────────────────────────
+const Q_DATE_CATS    = ['order_summary_by_order_date','order_summary_by_delivery_date','revenue_trends'];
+const Q_CONTACT_CATS = ['customer_lookup','communication_history'];
+const Q_HIDE_CONTACT = ['pipeline_snapshot','daily_summary','order_summary_by_order_date',
+                        'order_summary_by_delivery_date','order_analytics','revenue_trends','campaign_performance'];
+const Q_DATE_LABELS  = {
+  order_summary_by_order_date:    'Order date range',
+  order_summary_by_delivery_date: 'Delivery date range',
+  revenue_trends:                 'Period (leave blank for last 12 weeks)',
+};
+
 function onCategoryChange() {
-  const cat = document.getElementById('q-category').value;
-  const needsEmail = ['customer_lookup','communication_history'].includes(cat);
-  const hint = document.getElementById('q-email-hint');
-  hint.textContent = needsEmail ? '(required)' : '(optional)';
+  const cat      = document.getElementById('q-category').value;
+  const needsDate    = Q_DATE_CATS.includes(cat);
+  const hideContact  = Q_HIDE_CONTACT.includes(cat);
+  const needsEmail   = Q_CONTACT_CATS.includes(cat);
+
+  document.getElementById('q-daterange-group').style.display = needsDate    ? 'block' : 'none';
+  document.getElementById('q-email-group').style.display     = hideContact  ? 'none'  : 'block';
+  document.getElementById('q-phone-group').style.display     = hideContact  ? 'none'  : 'block';
+  document.getElementById('q-name-group').style.display      = hideContact  ? 'none'  : 'block';
+  document.getElementById('q-email-hint').textContent        = needsEmail   ? '(required)' : '(optional)';
+  if (needsDate) document.getElementById('q-daterange-label').textContent = Q_DATE_LABELS[cat] || 'Date range';
 }
 
 async function runQuery() {
-  const cat   = document.getElementById('q-category').value;
-  const q     = document.getElementById('q-question').value.trim();
-  const email = document.getElementById('q-email').value.trim();
-  const phone = document.getElementById('q-phone').value.trim();
-  const name  = document.getElementById('q-name').value.trim();
+  const cat      = document.getElementById('q-category').value;
+  const q        = document.getElementById('q-question').value.trim();
+  const email    = document.getElementById('q-email').value.trim();
+  const phone    = document.getElementById('q-phone').value.trim();
+  const name     = document.getElementById('q-name').value.trim();
+  const dateFrom = document.getElementById('q-date-from').value;
+  const dateTo   = document.getElementById('q-date-to').value;
   setLoading('q-result', 'Running query…');
   try {
     const res  = await fetch('/api/query', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null }),
+      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null, date_from: dateFrom || null, date_to: dateTo || null }),
     });
     const data = await res.json();
     if (!res.ok) { setError('q-result', data.detail || JSON.stringify(data)); return; }
@@ -1134,8 +1279,12 @@ async function sendChat() {
 }
 
 // ─── init ─────────────────────────────────────────────────────────────────────
-document.getElementById('r-date').value       = new Date().toISOString().slice(0,10);
-document.getElementById('bc-delay-date').value = new Date().toISOString().slice(0,10);
+const _today = new Date();
+const _d = d => { const x = new Date(_today); x.setDate(x.getDate() + d); return x.toISOString().slice(0,10); };
+document.getElementById('r-date').value        = _d(0);
+document.getElementById('bc-delay-date').value = _d(0);
+document.getElementById('q-date-from').value   = _d(-30);
+document.getElementById('q-date-to').value     = _d(0);
 bcAttachCounter('bc-delay-sms', 'bc-delay-sms-count');
 bcAttachCounter('bc-promo-sms', 'bc-promo-sms-count');
 document.getElementById('bc-promo-ch-sms').addEventListener('change', bcUpdatePromoFields);
