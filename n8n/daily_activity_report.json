@@ -31,7 +31,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/agents/report/activity",
+        "url": "={{$vars.DABBAHWALA_API_URL}}/api/agents/report/activity",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={ \"report_date\": \"{{ $json.report_date }}\" }",

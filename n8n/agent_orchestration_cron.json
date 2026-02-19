@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/agents/cycle/run-all",
+        "url": "={{$vars.DABBAHWALA_API_URL}}/api/agents/cycle/run-all",
         "options": { "timeout": 300000 }
       },
       "id": "run-agent-cycle",
