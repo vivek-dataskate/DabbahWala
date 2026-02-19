@@ -1,0 +1,272 @@
+{
+  "name": "DabbahWala \u2014 Google Docs Sync",
+  "nodes": [
+    {
+      "id": "g1",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        300
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "g2",
+      "name": "Manual Sync",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        160,
+        460
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "g3",
+      "name": "List Drive Files",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        400,
+        380
+      ],
+      "parameters": {
+        "resource": "fileFolder",
+        "operation": "search",
+        "queryFilters": {
+          "filters": [
+            {
+              "filter": "mimeType",
+              "mimeType": "application/vnd.google-apps.document"
+            }
+          ]
+        },
+        "options": {
+          "fields": "id,name,modifiedTime,webViewLink"
+        }
+      }
+    },
+    {
+      "id": "g4",
+      "name": "Filter & Classify",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        380
+      ],
+      "parameters": {
+        "jsCode": "\n// Filter docs modified in last 35 minutes (with overlap)\nconst cutoff = new Date(Date.now() - 35 * 60 * 1000).toISOString();\nconst items = $input.all().filter(i => {\n  const mod = i.json.modifiedTime || '';\n  return mod >= cutoff;\n});\n\n// Classify by naming convention\nreturn items.map(i => {\n  const name = (i.json.name || '').toLowerCase();\n  let docType = 'general';\n  if (name.includes('playbook') || name.includes('agent')) docType = 'agent_playbook';\n  else if (name.includes('marketing')) docType = 'marketing_input';\n  else if (name.includes('ground') || name.includes('field')) docType = 'field_team_input';\n  return {json:{...i.json, doc_type: docType}};\n});\n"
+      }
+    },
+    {
+      "id": "g5",
+      "name": "Has New Docs?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        380
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $input.all().length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "g6",
+      "name": "Read Google Doc",
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        280
+      ],
+      "parameters": {
+        "operation": "get",
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        }
+      }
+    },
+    {
+      "id": "g7",
+      "name": "Build Content Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        280
+      ],
+      "parameters": {
+        "jsCode": "\nconst meta = $('Filter & Classify').item.json;\nconst body = $input.first().json?.body?.content || [];\n// Extract text from doc body segments\nconst text = body.map(s => {\n  return (s.paragraph?.elements || []).map(e => e.textRun?.content || '').join('');\n}).join('').trim();\n\nreturn [{json:{\n  doc_id: meta.id,\n  doc_name: meta.name,\n  doc_type: meta.doc_type,\n  web_link: meta.webViewLink || '',\n  content: text.slice(0, 5000),   // cap at 5k chars\n  synced_at: new Date().toISOString(),\n  word_count: text.split(/\\s+/).length\n}}];\n"
+      }
+    },
+    {
+      "id": "g8",
+      "name": "Store in Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1600,
+        280
+      ],
+      "parameters": {
+        "operation": "upsert",
+        "base": {
+          "value": "appuy2VTIao6XVpIW",
+          "mode": "id"
+        },
+        "table": {
+          "value": "Team Content",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Doc ID": "={{ $json.doc_id }}",
+            "Doc Name": "={{ $json.doc_name }}",
+            "Type": "={{ $json.doc_type }}",
+            "Link": "={{ $json.web_link }}",
+            "Content": "={{ $json.content }}",
+            "Word Count": "={{ $json.word_count }}",
+            "Synced At": "={{ $json.synced_at }}"
+          }
+        },
+        "fieldsToMergeOn": "Doc ID"
+      }
+    },
+    {
+      "id": "g9",
+      "name": "No New Docs \u2014 Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        480
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "List Drive Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Sync": {
+      "main": [
+        [
+          {
+            "node": "List Drive Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List Drive Files": {
+      "main": [
+        [
+          {
+            "node": "Filter & Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter & Classify": {
+      "main": [
+        [
+          {
+            "node": "Has New Docs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Docs?": {
+      "main": [
+        [
+          {
+            "node": "Read Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No New Docs \u2014 Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Google Doc": {
+      "main": [
+        [
+          {
+            "node": "Build Content Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Content Payload": {
+      "main": [
+        [
+          {
+            "node": "Store in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": null
+}

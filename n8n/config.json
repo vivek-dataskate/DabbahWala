@@ -8,7 +8,9 @@
       "n8n_credential_name": "Airtable API Key",
       "note": "API key stored in .env as AIRTABLE_API_KEY",
       "base_id": "appuy2VTIao6XVpIW",
-      "field_sales_table": "Field Sales Tasks"
+      "field_sales_table": "Field Sales Tasks",
+      "team_inputs_table": "Team Inputs",
+      "team_content_table": "Team Content"
     },
     "telnyx": {
       "n8n_credential_id": "XnntvX8AXpdR97oQ",
@@ -17,41 +19,89 @@
       "from_number": "+18444322224",
       "messaging_profile_id": "400191f9-0057-41f5-9f10-375fb3fe1a70"
     },
+    "google": {
+      "note": "Google OAuth credentials stored in n8n credential store (Google Drive + Google Docs)"
+    },
     "n8n": {
       "note": "API key stored in .env as N8N_API_KEY"
     }
   },
 
   "workflows": {
+    "agent_orchestration_cron": {
+      "id": "pYZ1ApMThTL3noTa",
+      "name": "DabbahWala — Agent Orchestration Cron",
+      "schedule": "Every 3 hours",
+      "file": "agent_orchestration_cron.json"
+    },
+    "action_queue_executor": {
+      "id": "D9Brq0t2VCXMrFDA",
+      "name": "DabbahWala — Action Queue Executor",
+      "schedule": "Every 30 minutes",
+      "file": "action_queue_executor.json"
+    },
     "lifecycle_cycle_cron": {
       "id": "Wp3g7LJJ7Ts530cD",
       "name": "DabbahWala — Lifecycle Cycle Runner",
-      "schedule": "Every hour"
+      "schedule": "Every hour",
+      "file": "lifecycle_cycle_cron.json"
     },
     "sms_dispatch": {
       "id": "GNvg3xSKVlf8JEsA",
       "name": "DabbahWala — SMS Dispatch via Telnyx",
-      "schedule": "Every 10 minutes"
-    },
-    "opportunity_dispatcher": {
-      "id": "2sblrfxwa4YtVYOs",
-      "name": "DabbahWala — Opportunity Dispatcher",
-      "schedule": "Every 5 minutes"
+      "schedule": "Every 10 minutes",
+      "file": "sms_dispatch.json"
     },
     "airtable_outcome_sync": {
       "id": "EpbdsHnMZAApxl19",
       "name": "DabbahWala — Airtable Outcome Sync",
-      "schedule": "Every 15 minutes"
+      "schedule": "Every 15 minutes",
+      "file": "airtable_outcome_sync.json"
     },
-    "opportunity_detection_cron": {
-      "id": "1S4dixHhCbMPbf8S",
-      "name": "DabbahWala — Opportunity Detection Cron",
-      "schedule": "Every 2 hours"
+    "telnyx_inbound_collector": {
+      "id": "rDrQwnxh1qqUKtrt",
+      "name": "DabbahWala — Telnyx Inbound Collector",
+      "schedule": "Every 30 minutes",
+      "file": "telnyx_inbound_collector.json"
     },
-    "daily_report_generator": {
-      "id": "apR06lXjkNIuweAx",
-      "name": "DabbahWala — Daily Report Generator",
-      "schedule": "Daily at 11 PM"
+    "shipday_delivery_collector": {
+      "id": "FfSOdphMYFykwIPo",
+      "name": "DabbahWala — Shipday Delivery Collector",
+      "schedule": "Every 30 minutes",
+      "file": "shipday_delivery_collector.json"
+    },
+    "daily_order_upload": {
+      "id": "REQyXIbCNULavLht",
+      "name": "DabbahWala — Daily Order Upload",
+      "schedule": "Daily at 1 PM EST (Mon–Sat)",
+      "file": "daily_order_upload.json",
+      "note": "Calls POST /api/daily-orders/process per order, then POST /api/agents/cycle/run-all"
+    },
+    "daily_activity_report": {
+      "id": "63MrMRK9YCIDwY9m",
+      "name": "DabbahWala — Daily Activity Report",
+      "schedule": "Daily at 8 AM",
+      "file": "daily_activity_report.json"
+    },
+    "daily_outcome_report": {
+      "id": "xufFQct91kP2Ddf0",
+      "name": "DabbahWala — Daily Outcome Report",
+      "schedule": "Daily at 8:30 AM",
+      "file": "daily_outcome_report.json"
+    },
+    "marketing_query_form": {
+      "id": "d2MkjsDhUkpXJbFx",
+      "name": "DabbahWala — Marketing Query Form",
+      "schedule": "On form submission",
+      "file": "marketing_query_form.json",
+      "note": "Routes query to POST /api/agents/cycle/run-for-contact, stores in Airtable Team Inputs"
+    },
+    "google_docs_sync": {
+      "id": "mztwpch8WMxd63WA",
+      "name": "DabbahWala — Google Docs Sync",
+      "schedule": "Every 30 minutes",
+      "file": "google_docs_sync.json",
+      "note": "Syncs ground team & marketing team Google Docs to Airtable Team Content table"
     }
   }
 }
