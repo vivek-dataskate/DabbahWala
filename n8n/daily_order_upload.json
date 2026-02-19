@@ -1,0 +1,162 @@
+{
+  "name": "DabbahWala — Daily Order Upload",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 13 * * *"}]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily at 1PM EST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Upload",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [100, 450]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/daily-orders/process",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "file", "parameterType": "formBinaryData", "inputDataFieldName": "data"}
+          ]
+        },
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "upload-to-api",
+      "name": "Upload CSV to API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-orders",
+              "leftValue": "={{ $json.total_orders }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-result",
+      "name": "Has Orders?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/intelligence/run-cycle",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "run-intelligence",
+      "name": "Run Intelligence Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/placeholder",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"Daily orders processed!\\n- Date: {{ $json.date }}\\n- Orders: {{ $json.total_orders }}\\n- Revenue: ${{ $json.total_revenue }}\\n- New customers: {{ $json.new_contacts }}\\n- Opportunities: {{ $json.opportunities_created }}\"\n}",
+        "options": {}
+      },
+      "id": "notify-success",
+      "name": "Notify Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 250]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/placeholder",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"Daily order upload had issues. Check logs.\"\n}",
+        "options": {}
+      },
+      "id": "notify-failure",
+      "name": "Notify Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Daily at 1PM EST": {
+      "main": [
+        [
+          {"node": "Upload CSV to API", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Manual Upload": {
+      "main": [
+        [
+          {"node": "Upload CSV to API", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Upload CSV to API": {
+      "main": [
+        [
+          {"node": "Has Orders?", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Has Orders?": {
+      "main": [
+        [
+          {"node": "Run Intelligence Cycle", "type": "main", "index": 0}
+        ],
+        [
+          {"node": "Notify Failure", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Run Intelligence Cycle": {
+      "main": [
+        [
+          {"node": "Notify Success", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

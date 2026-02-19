@@ -52,6 +52,31 @@
       "id": "apR06lXjkNIuweAx",
       "name": "DabbahWala — Daily Report Generator",
       "schedule": "Daily at 11 PM"
+    },
+    "airtable_playbook_sync": {
+      "id": "EVwS9TSfk7c8avtZ",
+      "name": "DabbahWala — Airtable Playbook Sync",
+      "schedule": "Every 15 minutes",
+      "active": true
+    },
+    "daily_order_upload": {
+      "id": "8F4wigbdVaAE8WsV",
+      "name": "DabbahWala — Daily Order Upload",
+      "schedule": "Daily at 1 PM EST",
+      "active": true
+    },
+    "hourly_intelligence_cycle": {
+      "id": "TOBTV4lcSx7sUNXX",
+      "name": "DabbahWala — Hourly Intelligence Cycle",
+      "schedule": "Every hour",
+      "active": true
+    },
+    "marketing_query_form": {
+      "id": "PENDING_IMPORT",
+      "name": "DabbahWala — Marketing Query Form",
+      "schedule": "On-demand (form submission)",
+      "active": true,
+      "note": "Import marketing_query_form.json into n8n, then update this ID. Form URL will be: https://digitalworker.dataskate.io/form/<webhook-id>"
     }
   }
 }
