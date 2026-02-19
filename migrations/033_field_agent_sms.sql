@@ -1,4 +1,4 @@
--- 026_field_agent_sms.sql
+-- 033_field_agent_sms.sql
 -- Track SMS sent by field agents from personal phones against the customer record.
 -- Adds source + agent_name columns to telnyx_messages, updates the store SP
 -- and get_communication_history to expose them to the inference agents.

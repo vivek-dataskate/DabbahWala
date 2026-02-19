@@ -3,7 +3,7 @@ import os
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 
-from app.routers import agents, campaigns, daily_orders, delivery, events, lifecycle, opportunities, query, reports, sms, telnyx
+from app.routers import agents, agent, campaigns, daily_orders, delivery, events, intelligence, lifecycle, opportunities, playbook, query, reports, sms, team_content, telnyx
 
 app = FastAPI(
     title="DabbahWala Marketing System",
@@ -21,7 +21,11 @@ app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opportunities"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(daily_orders.router, prefix="/api/daily-orders", tags=["daily-orders"])
+app.include_router(intelligence.router, prefix="/api/intelligence", tags=["intelligence"])
+app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
+app.include_router(playbook.router, prefix="/api/playbook", tags=["playbook"])
 app.include_router(query.router, prefix="/api/query", tags=["query"])
+app.include_router(team_content.router, prefix="/api/team-content", tags=["team-content"])
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
@@ -34,21 +38,25 @@ def dashboard():
 
 @app.get("/health")
 def health():
+    from fastapi.responses import JSONResponse
     try:
         from app.db import get_cursor
         with get_cursor(commit=False) as cur:
             cur.execute("SELECT 1")
         return {"status": "ok", "db": "connected"}
     except Exception as e:
-        return {"status": "degraded", "db": str(e)}
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "db": str(e)},
+        )
 
 
 @app.post("/admin/migrate/{migration_number}")
 def run_migration(migration_number: int, secret: str = ""):
     """Run a specific migration file by number. Requires admin secret."""
     import os
-    admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
-    if secret != admin_secret:
+    admin_secret = os.environ.get("ADMIN_SECRET", "")
+    if not admin_secret or secret != admin_secret:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -72,7 +80,7 @@ def run_migration(migration_number: int, secret: str = ""):
 async def run_query(request: Request, secret: str = "", sql: str = ""):
     """Run a read-only SQL query. Accepts SQL via query param or JSON body."""
     import os
-    admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+    admin_secret = os.environ.get("ADMIN_SECRET", "")
 
     # Try JSON body if query params empty
     if not sql:
@@ -83,7 +91,7 @@ async def run_query(request: Request, secret: str = "", sql: str = ""):
         except Exception:
             pass
 
-    if secret != admin_secret:
+    if not admin_secret or secret != admin_secret:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -104,7 +112,7 @@ async def run_query(request: Request, secret: str = "", sql: str = ""):
 async def run_exec(request: Request, secret: str = "", sql: str = ""):
     """Run a DDL/DML SQL statement. Accepts SQL via query param or JSON body."""
     import os
-    admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+    admin_secret = os.environ.get("ADMIN_SECRET", "")
 
     # Try JSON body if query params empty
     if not sql:
@@ -115,7 +123,7 @@ async def run_exec(request: Request, secret: str = "", sql: str = ""):
         except Exception:
             pass
 
-    if secret != admin_secret:
+    if not admin_secret or secret != admin_secret:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Forbidden")
 
