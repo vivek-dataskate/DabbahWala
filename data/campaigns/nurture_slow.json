@@ -1,0 +1,193 @@
+{
+  "name": "DW-NurtureSlow-ColdContacts",
+  "status": 0,
+  "campaign_schedule": {
+    "schedules": [
+      {
+        "name": "Weekday",
+        "timing": { "from": "12:00", "to": "22:00" },
+        "days": { "1": true, "2": true, "3": true, "4": true, "5": true },
+        "timezone": "America/Detroit"
+      },
+      {
+        "name": "Weekend",
+        "timing": { "from": "09:00", "to": "23:59" },
+        "days": { "0": true, "6": true },
+        "timezone": "America/Detroit"
+      }
+    ],
+    "start_date": "2026-02-19",
+    "end_date": null
+  },
+  "sequences": [
+    {
+      "steps": [
+        {
+          "type": "email",
+          "delay": 3,
+          "variants": [
+            {
+              "subject": "Before we say anything else, here's who we are",
+              "body": "<div>{{RANDOM | A quick introduction | Just wanted to introduce ourselves | We wanted to reach out first}}.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>DabbahWala is a home-style Indian food delivery service based in Michigan.</div><div><br /></div><div>We don't run a restaurant. We don't have a dine-in space.</div><div>We cook from a kitchen, to order, and deliver the same day.</div><div><br /></div><div>The food is meant to feel like something cooked at home — lighter oils, fresh vegetables, no MSG, no artificial enhancers. Meals made in small batches, not in bulk.</div><div><br /></div><div>We built DabbahWala for people who want to eat well on regular days, not just special ones.</div><div><br /></div><div>Over the next few emails, we'll share a little more about how it works and what we cook.</div><div>No pressure to do anything with it.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "You might not know us yet. Here's a quick introduction.",
+              "body": "<div>{{RANDOM | We'll keep this short | This won't take long | Just a brief note}}.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>DabbahWala delivers home-style Indian food, cooked fresh and sent out the same day.</div><div><br /></div><div>We're not a restaurant. We're not a meal-kit service.</div><div>We're a kitchen that cooks the way most people wish they had time to cook at home.</div><div><br /></div><div>That means: fresh vegetables, lighter oils, no MSG or artificial flavors, and meals prepared only after you order — not hours in advance.</div><div><br /></div><div>{{RANDOM | We started DabbahWala because finding food that's genuinely good for everyday eating is harder than it should be | We built this because there's a gap between restaurant food and home cooking that nobody was filling | The idea was simple — great home-style food that actually fits into your daily routine}}.</div><div><br /></div><div>We'll share more about what we cook and how it works over the next few notes.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "A quick note from the DabbahWala kitchen",
+              "body": "<div>We wanted to introduce ourselves properly.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>DabbahWala is a home-style Indian food delivery service in Michigan.</div><div><br /></div><div>We cook fresh meals daily — to order — and deliver them the same day.</div><div>No restaurants. No dine-in. Just real food made the way it would be in a home kitchen.</div><div><br /></div><div>{{RANDOM | Light oils. Fresh vegetables. Small batches. No artificial anything | Fresh prep every day. Lighter cooking. Nothing artificial | Cooked small, cooked fresh, delivered the same day}}.</div><div><br /></div><div>We built this for people who want food they can eat regularly without it feeling heavy or repetitive.</div><div><br /></div><div>Over the next few emails, we'll share more about what that actually looks like.</div><div><br /></div><div>– The DabbahWala Kitchen Team</div>"
+            },
+            {
+              "subject": "DabbahWala — what we are and what we're not",
+              "body": "<div>It's easier to start with what we're not.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>We're not a restaurant. We're not a meal-prep service. We're not a catering company.</div><div><br /></div><div>DabbahWala is a home-style Indian food kitchen that cooks and delivers fresh meals daily, directly to your door.</div><div><br /></div><div>We cook only after orders come in. That means nothing sits in a warmer waiting for you. Food is made fresh and delivered the same day.</div><div><br /></div><div>The cooking is intentional — lighter oils, fresh vegetables, no MSG, small batches. Food that feels easy to eat on a regular Tuesday, not just a special occasion.</div><div><br /></div><div>That's what we're building toward. We'll explain more over the next few notes.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 5,
+          "variants": [
+            {
+              "subject": "Why home-style cooking is actually different",
+              "body": "<div>It's not just a marketing phrase.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>{{RANDOM | When people hear "home-style," they often assume it means simple or basic | "Home-style" gets used loosely — we want to explain what it actually means to us | The phrase "home-style" gets thrown around a lot, so let us be specific}}.</div><div><br /></div><div>At DabbahWala, it means cooking the way most households actually cook:</div><div><br /></div><div>Lighter oils that don't leave you feeling heavy.</div><div>No MSG or artificial flavor boosters.</div><div>Vegetables that are cut and prepared the day of cooking, not days before.</div><div>Spices used in balance — not to overpower, but to make the food genuinely enjoyable over time.</div><div><br /></div><div>Restaurant food is designed to impress once. Home-style food is designed to be good every day.</div><div><br /></div><div>That's the difference. And it matters when you're eating from the same kitchen week after week.</div><div><br /></div><div>We'll share more about our menu and how we keep it from feeling repetitive next.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "The difference between restaurant food and what we make",
+              "body": "<div>It comes down to who the food is made for.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Restaurant food is made to impress. Rich, bold, indulgent.</div><div>That's appropriate — it's a special experience.</div><div><br /></div><div>But it's not the kind of food you can eat every day without feeling it.</div><div><br /></div><div>At DabbahWala, we cook the opposite way.</div><div><br /></div><div>Meals are lighter. Oils are everyday cooking oils, not heavy restaurant bases. Vegetables are fresh, not pre-processed. Nothing is cooked in bulk and reheated.</div><div><br /></div><div>{{RANDOM | The goal is food that feels good the second, third, and fourth time you eat it | We think about how food feels on an ordinary Thursday, not just a Friday night out | We build every dish around whether you'd want to eat it again in three days}}.</div><div><br /></div><div>That's what home-style means to us — food that fits into real life, not just occasions.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "What "home-style" actually means in our kitchen",
+              "body": "<div>We use the phrase a lot. Here's what's behind it.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Home-style cooking at DabbahWala isn't about presentation or novelty.</div><div>It's about how the food is actually made.</div><div><br /></div><div>{{RANDOM | We cook with lighter, everyday oils | We avoid the heavy bases and rich oils most restaurant kitchens rely on | Cooking oil makes a bigger difference than most people realize — so we use lighter ones}}.</div><div>No MSG. No artificial flavor enhancers.</div><div>Vegetables are prepared the day of cooking, not days in advance.</div><div>We cook in small batches so nothing sits around.</div><div><br /></div><div>The result is food that tastes clean and familiar — the way a good home-cooked meal feels after a long day.</div><div><br /></div><div>Not trying to be fancy. Just trying to be the food you'd actually want to eat on a regular week.</div><div><br /></div><div>– DabbahWala Kitchen Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 5,
+          "variants": [
+            {
+              "subject": "We cook your food after you order it. Here's why that matters.",
+              "body": "<div>It's a small detail that changes a lot.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Most food delivery businesses cook in advance. Meals are prepared in the morning, loaded into containers, and dispatched throughout the day.</div><div><br /></div><div>We do it differently.</div><div><br /></div><div>At DabbahWala, meals are cooked only after orders come in. That means when your order arrives, it was made for you — not sitting in a warmer since 9am.</div><div><br /></div><div>{{RANDOM | Fresh food tastes different. Not just marginally — noticeably | You can tell the difference between food cooked that morning and food cooked for you | It's the kind of freshness that makes you want to order again}}.</div><div><br /></div><div>We also keep portion sizes honest and use fresh vegetables prepared the same day. No shortcuts with frozen or pre-cut produce.</div><div><br /></div><div>It takes more effort. But it's the only way the food actually holds up over time.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "Fresh food, every single day",
+              "body": "<div>This isn't marketing — it's just how we operate.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Here's how a typical day at DabbahWala works:</div><div><br /></div><div>Orders come in → we cook → food is delivered the same day.</div><div><br /></div><div>{{RANDOM | No pre-cooking. No holding trays. No reheating | Nothing sits in a container waiting for a delivery window | What you receive was cooked after you ordered it}}.</div><div><br /></div><div>Vegetables are prepped fresh each morning. Spices are measured per batch, not poured from bulk containers. Everything is cooked in small quantities so quality doesn't slip.</div><div><br /></div><div>We built DabbahWala this way because we believe fresh food is the foundation — and cutting corners there undermines everything else.</div><div><br /></div><div>Next we'll share how our menu works and why it rotates.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "How we keep the food tasting like it was made today",
+              "body": "<div>Because it was.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>The reason DabbahWala food tastes fresh isn't luck. It's the process.</div><div><br /></div><div>We cook only after orders are placed. That's the starting point. No pre-made meals waiting to be reheated.</div><div><br /></div><div>Then:</div><div>Vegetables are cut and prepared the morning of delivery.</div><div>Meals are cooked in small batches — not industrial quantities.</div><div>Food leaves the kitchen and arrives the same day.</div><div><br /></div><div>{{RANDOM | It's more work than cooking in bulk. But it's the only way to maintain what matters most: food that actually feels fresh when it arrives | We chose this approach over efficiency. Because efficiency at the cost of freshness defeats the whole purpose | The extra effort is worth it — it's the difference between food you eat and food you genuinely enjoy}}.</div><div><br /></div><div>– DabbahWala Kitchen Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 6,
+          "variants": [
+            {
+              "subject": "You'll never eat the same thing twice",
+              "body": "<div>We built it that way on purpose.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>One of the quiet frustrations with food delivery is repetition.</div><div>Good food becomes average when it shows up the exact same way every week.</div><div><br /></div><div>{{RANDOM | At DabbahWala, we rotate the menu regularly | Our menu changes frequently so eating well stays interesting | Dishes rotate so you're never stuck choosing between the same five options}}.</div><div><br /></div><div>There are always a few options to choose from each day — different proteins, different preparations, seasonal vegetables.</div><div><br /></div><div>We keep dishes light enough that you can eat them often, and varied enough that you actually want to.</div><div><br /></div><div>{{RANDOM | The goal isn't variety for its own sake | We're not rotating menus just to seem interesting | Menu rotation isn't a gimmick}}. It's about making DabbahWala the kind of food you can genuinely eat three or four times a week without getting tired of it.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "Why our menu changes regularly",
+              "body": "<div>It wasn't an obvious decision. But it was the right one.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Early on, we offered a fixed menu. Simple, consistent, easy to manage.</div><div><br /></div><div>The problem: even people who loved the food started ordering less frequently over time.</div><div>Not because anything changed — but because repetition quietly kills appetite.</div><div><br /></div><div>So we changed the model.</div><div><br /></div><div>Now, dishes at DabbahWala rotate regularly. You'll see familiar comfort dishes alongside new preparations throughout the week.</div><div><br /></div><div>{{RANDOM | Enough variety to keep things interesting. Enough familiarity to feel comforting | Not so different that it feels unfamiliar — just different enough that you're genuinely curious what's on today | The goal is food you want to order on a Monday as much as a Friday}}.</div><div><br /></div><div>It's a simple change that made a real difference in how often people come back.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "More variety than you'd expect from a delivery kitchen",
+              "body": "<div>Here's what the menu actually looks like.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>On any given day at DabbahWala, you'll find a few options to choose from — different proteins, different preparations, sometimes a special based on what's fresh.</div><div><br /></div><div>Dishes rotate regularly. So if you ordered dal and rice last week, something different is likely leading the menu this week.</div><div><br /></div><div>{{RANDOM | We don't just make Indian food — we make the kind of Indian food that fits into everyday eating | The cooking is rooted in how people actually eat at home, not what looks good on a restaurant menu | Familiar flavors, thoughtfully prepared, and varied enough that ordering regularly doesn't get old}}.</div><div><br /></div><div>If you ever want to see what's on the menu today, you can reply with Menu and we'll send it over.</div><div><br /></div><div>Or check it out at https://www.dabbahwala.com whenever you're ready.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 7,
+          "variants": [
+            {
+              "subject": "Ordering from DabbahWala is simpler than you think",
+              "body": "<div>We tried to strip out as many steps as possible.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>You can order from DabbahWala a few different ways:</div><div><br /></div><div>1. Visit https://www.dabbahwala.com and order directly online.</div><div>2. Reply **Menu** to this email and we'll send you today's options and help you order personally.</div><div>3. Set up a subscription if you want meals without thinking about it every day.</div><div><br /></div><div>{{RANDOM | Most people start with a single order to try us out. That's completely fine | No commitment required — you can order once and see if it's right for you | Ordering once to try it is always the easiest place to start}}.</div><div><br /></div><div>Delivery is complimentary on orders over $35. Food is cooked fresh and arrives the same day.</div><div><br /></div><div>If you have any questions before ordering, just reply to this email. We're usually quick to respond.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "Three ways to order your meals from us",
+              "body": "<div>We kept it simple on purpose.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Some people like to order online. Some prefer to just message us. Some want to set it and forget it.</div><div><br /></div><div>DabbahWala works all three ways:</div><div><br /></div><div><strong>Online</strong> — Browse and order directly at https://www.dabbahwala.com. Takes a few minutes.</div><div><br /></div><div><strong>Reply to this email</strong> — Send back **Menu** and we'll walk you through today's options personally. Great if you're not sure what you want yet.</div><div><br /></div><div><strong>Subscription</strong> — If you want meals regularly without reordering each time, we can set up a subscription that fits your schedule.</div><div><br /></div><div>{{RANDOM | Orders over $35 include complimentary delivery. Everything is cooked fresh and delivered the same day | Free delivery on orders above $35. Fresh-cooked, same-day | Complimentary delivery for orders over $35 — and everything's made fresh when your order comes in}}.</div><div><br /></div><div>No pressure to commit to anything. Start with one order and see how it goes.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "No complicated process. Just good food.",
+              "body": "<div>That's all we were going for.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Ordering from DabbahWala is straightforward:</div><div><br /></div><div>You pick what you want. We cook it. It arrives the same day.</div><div><br /></div><div>{{RANDOM | You can order online at https://www.dabbahwala.com, or just reply Menu and we'll guide you through it | Head to the website to order, or message us directly if you'd rather talk it through | Online ordering takes a few minutes, or reply Menu and we'll handle it personally}}.</div><div><br /></div><div>If you're ordering more than $35 worth of food, delivery is on us.</div><div><br /></div><div>If you'd like to make it recurring — a subscription means you don't have to think about reordering. Just meals, regularly, without the admin.</div><div><br /></div><div>No commitment required to start. Try a single order and see if DabbahWala is right for your routine.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "How DabbahWala fits into a regular week",
+              "body": "<div>We've thought about this a lot.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>A lot of people don't want to cook every day — but they also don't want to order restaurant food every time.</div><div>DabbahWala is meant to fill that gap.</div><div><br /></div><div>Order for a day when cooking feels like too much. Set up a subscription for the days you know you won't have time. Message us when you want something specific.</div><div><br /></div><div>{{RANDOM | The food is designed to fit into a real routine, not just a special treat | We think about how our meals sit alongside everything else in your week | It's built to be flexible — one order, recurring orders, whatever works for you}}.</div><div><br /></div><div>Orders over $35 include complimentary delivery. Everything is cooked to order and delivered the same day.</div><div><br /></div><div>Visit https://www.dabbahwala.com to see what we're cooking today, or reply **Menu** and we'll send it to you directly.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 7,
+          "variants": [
+            {
+              "subject": "A small offer for your first order",
+              "body": "<div>We don't usually do this, but we wanted to make it easy to try us.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>We've shared a lot about who we are and how we cook.</div><div>Now we'd like to make it a little easier to try us for the first time.</div><div><br /></div><div>Use code <strong>DWALAFEB15</strong> at checkout for 15% off your order.</div><div>Minimum cart: $50. Valid for 30 days.</div><div><br /></div><div>{{RANDOM | No strings attached — just a way to lower the barrier on your first order | It's our way of saying: give us a try, and we'll take care of the rest | Think of it as our introduction offer — try us once and decide if we're worth coming back to}}.</div><div><br /></div><div>Order at https://www.dabbahwala.com, or reply **Menu** and we'll help you put together an order personally.</div><div><br /></div><div>Everything is cooked fresh and delivered same-day. Complimentary delivery on orders over $35.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "15% off your first DabbahWala order",
+              "body": "<div>Here's something to make your first order easier.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>We've been sharing what DabbahWala is about.</div><div>{{RANDOM | Now we'd like to make it easy to try | Now it's time to actually taste it | We figured the best way to explain the rest is for you to just try it}}.</div><div><br /></div><div>Use code <strong>DWALAFEB15</strong> for 15% off.</div><div>Minimum order: $50. Code is valid for 30 days.</div><div><br /></div><div>Order online at https://www.dabbahwala.com, or reply **Menu** and we'll walk you through what's on today.</div><div><br /></div><div>{{RANDOM | Fresh-cooked, same-day delivery. Free delivery on orders over $35 | Everything cooked to order. Complimentary delivery above $35 | Delivered fresh the same day. Free delivery when your cart is over $35}}.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "We'd love to feed you. Here's a first-order discount.",
+              "body": "<div>Consider it our introduction.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>{{RANDOM | After sharing a few things about how we cook and what we make, we wanted to offer you something concrete | We've done our best to explain DabbahWala in words — now we'd rather you just try it | All the emails in the world won't tell you as much as a single meal will}}.</div><div><br /></div><div>Use <strong>DWALAFEB15</strong> at checkout to get 15% off your first order.</div><div>Minimum cart value: $50. Valid for the next 30 days.</div><div><br /></div><div>Head to https://www.dabbahwala.com to see what's on the menu today.</div><div>Or reply **Menu** and we'll send you the options and help you order.</div><div><br /></div><div>Free delivery on orders over $35. Cooked fresh. Delivered same-day.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 5,
+          "variants": [
+            {
+              "subject": "We'll leave this here",
+              "body": "<div>And then we'll step back.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>This is our last message for now.</div><div><br /></div><div>We've shared what DabbahWala is, how we cook, and why we think it's worth trying.</div><div>{{RANDOM | We don't want to keep filling your inbox | We won't keep pushing — that's not what we're about | We'd rather say less and earn your attention than say more and lose it}}.</div><div><br /></div><div>If you ever feel like trying home-style Indian food that's fresh, light, and actually made for everyday eating — we'll be here.</div><div><br /></div><div>Code <strong>DWALAFEB15</strong> still gives you 15% off (minimum $50 cart, valid 30 days).</div><div><br /></div><div>Reply **Menu** whenever you're ready, or order at https://www.dabbahwala.com.</div><div><br /></div><div>No pressure at all. Just good food, when it feels right.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "No pressure. Just here when you're ready.",
+              "body": "<div>That's genuinely all we wanted to say.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>We know you've received a few emails from us over the past few weeks.</div><div>{{RANDOM | We wanted to make sure you had enough to make an informed decision | We shared what we could to give you a real picture of what DabbahWala is | We hope at least one of those was worth reading}}.</div><div><br /></div><div>If home-style Indian food, cooked fresh and delivered the same day, sounds like something that fits your life — we'd love to cook for you.</div><div><br /></div><div>Code <strong>DWALAFEB15</strong> gets you 15% off a first order of $50 or more. Valid for 30 days.</div><div><br /></div><div>Order at https://www.dabbahwala.com or just reply **Menu** to start.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "Whenever you're ready, we're here",
+              "body": "<div>We'll keep this one short.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>{{RANDOM | This is the last note we'll send for a while | We won't be filling your inbox anymore after this | We're stepping back after this one}}.</div><div><br /></div><div>If you ever want fresh home-style Indian food, delivered the same day — that's us.</div><div><br /></div><div>Use <strong>DWALAFEB15</strong> for 15% off your first order (minimum $50, valid 30 days).</div><div><br /></div><div>https://www.dabbahwala.com — or reply **Menu** and we'll take it from there.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        }
+      ]
+    }
+  ],
+  "email_gap": 9,
+  "random_wait_max": 6,
+  "text_only": false,
+  "first_email_text_only": true,
+  "daily_limit": 500,
+  "stop_on_reply": true,
+  "link_tracking": false,
+  "open_tracking": true,
+  "stop_on_auto_reply": true,
+  "prioritize_new_leads": true,
+  "match_lead_esp": false,
+  "stop_for_company": false,
+  "insert_unsubscribe_header": true,
+  "allow_risky_contacts": true,
+  "disable_bounce_protect": false,
+  "cc_list": [],
+  "bcc_list": []
+}

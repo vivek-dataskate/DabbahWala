@@ -1,0 +1,169 @@
+{
+  "name": "DW-NewCustomerOnboarding",
+  "status": 0,
+  "campaign_schedule": {
+    "schedules": [
+      {
+        "name": "Weekday",
+        "timing": { "from": "12:00", "to": "22:00" },
+        "days": { "1": true, "2": true, "3": true, "4": true, "5": true },
+        "timezone": "America/Detroit"
+      },
+      {
+        "name": "Weekend",
+        "timing": { "from": "09:00", "to": "23:59" },
+        "days": { "0": true, "6": true },
+        "timezone": "America/Detroit"
+      }
+    ],
+    "start_date": "2026-02-19",
+    "end_date": null
+  },
+  "sequences": [
+    {
+      "steps": [
+        {
+          "type": "email",
+          "delay": 1,
+          "variants": [
+            {
+              "subject": "Welcome to DabbahWala — we're glad you tried us",
+              "body": "<div>Thank you for your first order.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>We wanted to personally welcome you to DabbahWala.</div><div><br /></div><div>You just placed your first order with us — and that means a lot. Every customer who tries us for the first time is taking a chance on a kitchen they don't know yet.</div><div><br /></div><div>We want to make sure that chance pays off.</div><div><br /></div><div>{{RANDOM | Your meal was cooked fresh today, specifically for your order. That's how every DabbahWala order works — no pre-made batches, no reheating | Everything in your order was prepared after you placed it. Fresh vegetables, lighter oils, no artificial anything — that's the standard for every order | What you received today was cooked for you. Not prepped in advance, not kept warm since the morning}}.</div><div><br /></div><div>Over the next few weeks, we'll share a few things that'll help you get the most out of DabbahWala.</div><div><br /></div><div>And if you have any questions or feedback about your first order — reply to this email. We read everything.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "Your first DabbahWala order. Thanks for trying us.",
+              "body": "<div>We don't take first orders lightly.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>You ordered from DabbahWala for the first time, and we wanted to reach out personally.</div><div><br /></div><div>{{RANDOM | Trying a new kitchen is a small act of trust. We appreciate it | A first order is always a risk — and we want to make sure it was worth taking | You gave us a shot. We want to make sure we deserved it}}.</div><div><br /></div><div>We cook fresh daily, to order. No pre-made meals, no batch cooking that sits all morning.</div><div>What you received today was made specifically for your order.</div><div><br /></div><div>If you have any feedback — good, bad, or in between — just reply. We're genuinely listening.</div><div><br /></div><div>We'll be in touch over the next couple of weeks with a few things to help you get the most out of DabbahWala.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "Thanks for your first order — here's what comes next",
+              "body": "<div>Welcome to DabbahWala.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Your first order is done. We hope it was exactly what you were hoping for — and if anything wasn't right, just reply to this email and we'll sort it out.</div><div><br /></div><div>{{RANDOM | We take first impressions seriously | Getting your first experience right is the most important thing to us | If something missed the mark, we want to know}}.</div><div><br /></div><div>Over the next few weeks, we'll send a few emails about how to get the most out of DabbahWala — things like how the menu works, how subscriptions work, and how to make it a proper part of your weekly routine.</div><div><br /></div><div>No pressure to do anything with it. Just wanted to say welcome, and we're glad you tried us.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 3,
+          "variants": [
+            {
+              "subject": "How to get the most out of DabbahWala",
+              "body": "<div>A few things we wish every new customer knew from the start.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Now that you've placed your first order, a few things worth knowing:</div><div><br /></div><div><strong>Check the menu regularly.</strong> It rotates. {{RANDOM | There's always something different from the last time you looked | Dishes change frequently, so what's on today might not be on next week | You'll find something new each time you check}}.</div><div><br /></div><div><strong>Reply "Menu" anytime.</strong> If you'd rather not visit the website, reply to any of our emails with Menu and we'll send you today's options and help you order directly.</div><div><br /></div><div><strong>Free delivery over $35.</strong> Ordering for yourself and a partner, or building a slightly larger order, means delivery is on us.</div><div><br /></div><div><strong>Subscriptions exist.</strong> If you find yourself ordering regularly, we can set up a schedule so you don't have to reorder manually each time.</div><div><br /></div><div>Any questions, just reply. We're easy to reach.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "A quick guide to making DabbahWala work for you",
+              "body": "<div>Four things that make a real difference.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>After your first order, here's what experienced DabbahWala customers tend to do:</div><div><br /></div><div>1. <strong>Check the menu before deciding.</strong> It rotates — there's often something different. Visit https://www.dabbahwala.com or reply <strong>Menu</strong> and we'll send the day's options.</div><div><br /></div><div>2. <strong>Order over $35.</strong> {{RANDOM | Delivery is free above that amount | That's the free delivery threshold | Orders above $35 include complimentary delivery}}.</div><div><br /></div><div>3. <strong>Treat it like a regular thing, not a special occasion.</strong> The food is light enough to eat a few times a week — that's by design.</div><div><br /></div><div>4. <strong>Consider a subscription</strong> if you find yourself ordering consistently. Meals arrive on your schedule without manual reordering.</div><div><br /></div><div>Any questions — just reply. We respond quickly.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "A few things new DabbahWala customers find helpful",
+              "body": "<div>Sharing these while everything is still fresh.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Since you've just ordered for the first time, a few notes that are worth reading before your next one:</div><div><br /></div><div><strong>The menu changes.</strong> Check what's on before you order — there's usually something different from your last visit. Reply <strong>Menu</strong> and we'll send today's options directly.</div><div><br /></div><div><strong>Orders over $35 ship free.</strong> Worth keeping in mind when building your order.</div><div><br /></div><div><strong>Everything is cooked to order.</strong> {{RANDOM | So timing matters a bit — we'd appreciate orders earlier in the day when you can | Ordering earlier gives us time to get it to you at your preferred time | We prep and cook after you order, so a little lead time helps}}.</div><div><br /></div><div><strong>Subscriptions are available</strong> for regular customers who'd rather not reorder each time.</div><div><br /></div><div>Questions? Just reply.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "The best DabbahWala customers do one thing differently",
+              "body": "<div>It's simpler than you'd expect.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>The customers who get the most out of DabbahWala are the ones who make it part of their regular week — not a backup plan for when cooking falls through.</div><div><br /></div><div>{{RANDOM | It sounds obvious, but the mindset shift matters | The food is built for regular eating — the cooking style, the rotating menu, the freshness — it's all designed to hold up over time | It's not a treat. It's a practical answer to everyday eating}}.</div><div><br /></div><div>A few things that help:</div><div>Check the menu often — it rotates, so there's always something new to consider.</div><div>Order above $35 when you can — free delivery makes it more worthwhile.</div><div>Reply <strong>Menu</strong> anytime to see what's on today.</div><div>Ask about a subscription if ordering regularly is your goal.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 4,
+          "variants": [
+            {
+              "subject": "Why the menu at DabbahWala keeps changing",
+              "body": "<div>It was a deliberate decision — here's why.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>One thing new customers notice is that the menu at DabbahWala isn't the same every time they check.</div><div><br /></div><div>That's on purpose.</div><div><br /></div><div>{{RANDOM | We rotate dishes regularly so that eating from the same kitchen doesn't start to feel like eating the same thing | We change the menu so that coming back always feels worth it | Repetition is the main reason people stop ordering from a service they liked — so we built in variety from the start}}.</div><div><br /></div><div>You'll find familiar comfort dishes alongside different proteins and seasonal options throughout the week. Enough consistency to feel like home, enough variety to stay interesting.</div><div><br /></div><div>Worth checking what's on today: https://www.dabbahwala.com</div><div>Or reply <strong>Menu</strong> and we'll send you the current lineup.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "You'll never order exactly the same thing twice",
+              "body": "<div>Here's how the menu actually works.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>At DabbahWala, the menu rotates regularly.</div><div><br /></div><div>There's always a selection to choose from — different proteins, different preparations, sometimes a special based on what's fresh that week. But the lineup changes, so you're never stuck choosing between the same five options every time.</div><div><br /></div><div>{{RANDOM | The goal is food you'd want to order on a Monday as much as a Friday | We built the menu to be interesting enough that coming back regularly doesn't get old | Variety is what makes regular ordering sustainable — and that was the point from the beginning}}.</div><div><br /></div><div>Check today's options at https://www.dabbahwala.com — or reply <strong>Menu</strong> and we'll send the lineup directly.</div><div><br /></div><div>Free delivery on orders over $35.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "What's on today might surprise you",
+              "body": "<div>Worth checking before you decide what to eat.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>The DabbahWala menu rotates regularly — which means what's on today is likely different from what you ordered before.</div><div><br /></div><div>{{RANDOM | We change it deliberately, so coming back stays interesting | Variety is baked into how DabbahWala works — it's part of what makes ordering regularly feel sustainable | We rotate dishes often so you're always choosing between something a bit different}}.</div><div><br /></div><div>Today's options are at https://www.dabbahwala.com — or reply <strong>Menu</strong> and we'll send them to you directly.</div><div><br /></div><div>Fresh-cooked, same-day delivery. Free delivery over $35.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 5,
+          "variants": [
+            {
+              "subject": "Share DabbahWala with a friend — here's 20% off for both of you",
+              "body": "<div>If you've enjoyed the food, this is a good one.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>We have a friends and family offer we'd like to share with you.</div><div><br /></div><div>Code <strong>DWALAF&F20</strong> gives anyone you refer 20% off their order.</div><div>Minimum cart: $35 | Valid: 3 months</div><div><br /></div><div>{{RANDOM | It works on any order, not just the first one — so it's genuinely useful over time | Three months of validity means they can use it at their own pace, not just on a first order | A 20% discount on orders over $35 is real value — great for a friend who's been curious about trying us}}.</div><div><br /></div><div>Just pass along the code. No formal referral link needed.</div><div><br /></div><div>And of course — if you want to use it yourself on your next order, {{RANDOM | it works for existing customers too on orders $35 and up | you're welcome to apply it to your own order | that's completely fine too}}.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "Know someone who'd like DabbahWala? Pass them this code.",
+              "body": "<div>20% off. Minimum $35. Valid 3 months.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>If you have a friend or family member who's ever asked about DabbahWala — or who you think would enjoy it — use code <strong>DWALAF&F20</strong> to get them 20% off their order.</div><div><br /></div><div>Minimum cart: $35 | Valid for 3 months from today</div><div><br /></div><div>{{RANDOM | There's no better recommendation than home-style food from someone who's already tried it | A personal referral from you is worth more than any ad we could run | If you've enjoyed the food, sharing it is the nicest thing you can do for us}}.</div><div><br /></div><div>Just send them the code: <strong>DWALAF&F20</strong>. They can order at https://www.dabbahwala.com whenever they're ready.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "A friends & family code for people you care about",
+              "body": "<div>This one is meant to be shared.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Code <strong>DWALAF&F20</strong> gives 20% off DabbahWala orders of $35 or more.</div><div>It's valid for 3 months — plenty of time for someone to use it at their own pace.</div><div><br /></div><div>{{RANDOM | Share it with a friend who's curious about home-style Indian food | If someone you know has been looking for a good food delivery option, this is a real one | Pass it to anyone who you think would appreciate fresh, home-cooked food delivered to their door}}.</div><div><br /></div><div>They order at https://www.dabbahwala.com and apply the code at checkout. Simple as that.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 5,
+          "variants": [
+            {
+              "subject": "Would a DabbahWala subscription make sense for you?",
+              "body": "<div>It might be worth considering.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>You've had your first order. Hopefully a few more since then.</div><div><br /></div><div>{{RANDOM | At some point, for customers who order regularly, a subscription becomes the more natural choice | If you're finding yourself ordering DabbahWala a few times a week, there's a simpler way to do it | When ordering becomes a routine, subscriptions make the routine automatic}}.</div><div><br /></div><div>With a DabbahWala subscription, you choose the frequency — daily, a few times a week, weekdays only — and meals arrive on that schedule without reordering.</div><div><br /></div><div>You can pause, adjust, or cancel anytime. No locked-in commitment.</div><div>Same complimentary delivery on orders over $35.</div><div><br /></div><div>Reply <strong>Subscribe</strong> if you'd like to explore it, or if you want to understand the options before deciding.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "The next step after your first DabbahWala order",
+              "body": "<div>For customers who want to make this a habit.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>You've placed your first order. The next natural step, for customers who enjoy the food, is building a routine around it.</div><div><br /></div><div>DabbahWala is built for regular eating. {{RANDOM | The cooking is light enough that you can have it a few times a week without it feeling heavy | Rotating menus mean you're not eating the same thing repeatedly | Cooked fresh each day, so quality doesn't slip with frequency}}.</div><div><br /></div><div>A subscription helps with the routine side. You pick the schedule, we cook and deliver. No daily decision required.</div><div><br /></div><div>Reply <strong>Subscribe</strong> to get started, or just keep ordering whenever you want — both work.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "Turning DabbahWala into a routine — here's how",
+              "body": "<div>The customers who get the most out of it do this.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>The DabbahWala customers who are happiest are the ones who made it part of their regular week — not just a convenience they use when nothing else is available.</div><div><br /></div><div>{{RANDOM | Food that's light, fresh, and varied is the kind you can eat consistently. That's what we built | We designed the cooking and menu specifically to hold up to regular ordering | The goal was always frequency — food you'd want several times a week, not just occasionally}}.</div><div><br /></div><div>If you'd like to make it automatic, a subscription removes the friction. Reply <strong>Subscribe</strong> and we'll build a schedule around your preferences.</div><div><br /></div><div>Or just keep ordering individually — we're happy either way. Either way, see you back soon.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        },
+        {
+          "type": "email",
+          "delay": 7,
+          "variants": [
+            {
+              "subject": "Come back soon. Here's what's on.",
+              "body": "<div>A quick check-in.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>It's been a little while since your first order.</div><div><br /></div><div>{{RANDOM | We wanted to check in and see if you've been back | We're reaching out to make sure you found your way back | Just a note to say the kitchen is still going, the menu has rotated, and there's always something fresh}}.</div><div><br /></div><div>Today's options are at https://www.dabbahwala.com — or reply <strong>Menu</strong> and we'll send them over personally.</div><div><br /></div><div>Fresh-cooked, same-day delivery. Complimentary delivery on orders over $35.</div><div><br /></div><div>{{RANDOM | We hope to see you back soon | Looking forward to your next order | We're here whenever you're ready}}.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "We hope the first order went well — ready for another?",
+              "body": "<div>Checking in.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>We hope your first DabbahWala order was worth it.</div><div><br /></div><div>{{RANDOM | If you've been back since, great. If not — we'd love to get you on a second order | Whether you've ordered again or not, we wanted to reach out | We're checking in to make sure everything went smoothly and to say: come back when you're ready}}.</div><div><br /></div><div>The menu has changed since your first order — worth checking what's on today.</div><div><br /></div><div>https://www.dabbahwala.com — or reply <strong>Menu</strong> to see today's options.</div><div><br /></div><div>– DabbahWala Team</div>"
+            },
+            {
+              "subject": "The second DabbahWala order is always easier than the first",
+              "body": "<div>You know what to expect now.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>The first order from a new kitchen is always the one with the most uncertainty.</div><div>You don't know the food. You don't know the timing. You don't know what to expect.</div><div><br /></div><div>{{RANDOM | Now you do | That part is behind you | You've got the baseline now}}.</div><div><br /></div><div>The second order is just about eating well.</div><div><br /></div><div>Check what's on at https://www.dabbahwala.com or reply <strong>Menu</strong> for today's options.</div><div>Free delivery over $35.</div><div><br /></div><div>– DabbahWala Team</div>"
+            }
+          ],
+          "delay_unit": "days",
+          "pre_delay_unit": "days"
+        }
+      ]
+    }
+  ],
+  "email_gap": 9,
+  "random_wait_max": 6,
+  "text_only": false,
+  "first_email_text_only": true,
+  "daily_limit": 500,
+  "stop_on_reply": true,
+  "link_tracking": false,
+  "open_tracking": true,
+  "stop_on_auto_reply": true,
+  "prioritize_new_leads": true,
+  "match_lead_esp": false,
+  "stop_for_company": false,
+  "insert_unsubscribe_header": true,
+  "allow_risky_contacts": true,
+  "disable_bounce_protect": false,
+  "cc_list": [],
+  "bcc_list": []
+}
