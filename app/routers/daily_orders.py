@@ -19,6 +19,16 @@ from app.db import get_cursor
 router = APIRouter()
 
 
+def _col(row: dict, *candidates: str) -> str:
+    """Return first matching column value, case-insensitive, or empty string."""
+    low = {k.lower().strip(): v for k, v in row.items()}
+    for key in candidates:
+        v = low.get(key.lower().strip())
+        if v is not None:
+            return str(v)
+    return ''
+
+
 def normalize_phone(phone) -> str:
     if not phone:
         return ''
@@ -130,16 +140,21 @@ async def process_daily_orders(file: UploadFile = File(...)):
     from collections import Counter
 
     content = await file.read()
-    reader = csv.DictReader(io.StringIO(content.decode('utf-8')))
+    # utf-8-sig strips BOM from Excel-generated CSVs
+    try:
+        text = content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        text = content.decode('latin-1')
+    reader = csv.DictReader(io.StringIO(text))
     rows = list(reader)
 
     if not rows:
         raise HTTPException(status_code=400, detail="Empty CSV file")
 
-    # Group by Order Number
+    # Group by Order Number (accept common column name variants)
     orders_grouped = defaultdict(list)
     for row in rows:
-        order_num = row.get('Order Number', '').strip()
+        order_num = _col(row, 'Order Number', 'order_number', 'Order #', 'OrderNumber', 'order_id').strip()
         if order_num:
             orders_grouped[order_num].append(row)
 
@@ -176,13 +191,13 @@ async def process_daily_orders(file: UploadFile = File(...)):
     with get_cursor(commit=True) as cur:
         for order_num, item_rows in orders_grouped.items():
             first = item_rows[0]
-            phone = normalize_phone(first.get('Customer Phone Number', ''))
-            name = first.get('Customer Name', '').strip()
-            address = first.get('Customer Address', '').strip()
-            date_raw = first.get('Date', '').strip()
-            plan_name = first.get('Plan Name', '').strip()
-            delivery_slot = first.get('Delivery Slot Name', '').strip()
-            order_type = first.get('Order Type', '').strip()
+            phone = normalize_phone(_col(first, 'Customer Phone Number', 'Phone', 'Customer Phone', 'phone'))
+            name = _col(first, 'Customer Name', 'Name', 'Customer', 'customer_name').strip()
+            address = _col(first, 'Customer Address', 'Address', 'address').strip()
+            date_raw = _col(first, 'Date', 'Order Date', 'date', 'order_date').strip()
+            plan_name = _col(first, 'Plan Name', 'plan_name', 'Plan').strip()
+            delivery_slot = _col(first, 'Delivery Slot Name', 'Delivery Slot', 'delivery_slot').strip()
+            order_type = _col(first, 'Order Type', 'order_type', 'Type').strip()
 
             try:
                 order_date = datetime.strptime(date_raw, '%d/%m/%Y').strftime('%Y-%m-%d')
@@ -272,9 +287,9 @@ async def process_daily_orders(file: UploadFile = File(...)):
             items = []
             total_amount = 0
             for row in item_rows:
-                raw_dish = row.get('Dish Name', '').strip()
-                qty = int(row.get('Quantity', 1) or 1)
-                price = float(row.get('Unit Price', 0) or 0)
+                raw_dish = _col(row, 'Dish Name', 'Item Name', 'Product', 'dish_name', 'item_name', 'Item').strip()
+                qty = int(_col(row, 'Quantity', 'Qty', 'qty', 'quantity') or 1)
+                price = float(_col(row, 'Unit Price', 'Price', 'Unit Price (AED)', 'unit_price', 'price') or 0)
                 if raw_dish:
                     canonical = resolve_dish_name(raw_dish, alias_map, master_norm, master_set)
                     items.append((canonical, qty, price, qty * price))
