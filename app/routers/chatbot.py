@@ -264,22 +264,28 @@ def _save_interaction(question: str, answer: str, sources: list[str]) -> None:
         )
 
 
-# Patterns that signal a customer/order data request rather than a system question
+# Patterns that signal a request for *specific live data* — not system/process questions.
+# Business process questions ("how do we handle lapsed customers?") are IN scope.
+# Specific data lookups ("show me orders for John", "how many sales today") are OUT of scope.
 _OUT_OF_SCOPE_PATTERNS = re.compile(
-    r"\b("
-    r"customer|contact|order|invoice|delivery|shipment|purchase|transaction|"
-    r"email address|phone number|revenue|sales data|campaign stat|"
-    r"who ordered|what did .{0,30} order|show me .{0,30} order|"
-    r"look up|lookup|find me|search for|list (all |the )?(customer|contact|order)|"
-    r"how many order|lapsed customer|active customer|lifecycle stage of|"
-    r"pipeline snapshot|daily summary|communication history|sms log|call log"
-    r")\b",
+    r"("
+    r"show me .{0,40}(order|customer|contact|invoice|sale|revenue|stat)|"
+    r"find me .{0,40}(customer|contact|order)|"
+    r"look\s?up .{0,40}(customer|contact|order)|"
+    r"list (all |the )?(customer|contact|order|sale)|"
+    r"(how many|total number of) (order|sale|customer|contact|message|sms|email)s?\b(?! are |s? (handled|processed|trigger|sent by|defined|exist in the))|"
+    r"what did .{0,30} (order|buy|purchase)|"
+    r"(revenue|sales|gmv|aov).{0,30}(today|yesterday|this week|last week|last month)|"
+    r"(email address|phone number) (of|for) .{1,40}|"
+    r"pull (up |the )?(record|data|profile|history) (of|for)|"
+    r"give me (the |a )?(data|record|profile|history|report) (of|for)"
+    r")",
     re.IGNORECASE,
 )
 
 
 def _is_out_of_scope(question: str) -> bool:
-    """Return True if the question is about customer/order data rather than system docs."""
+    """Return True only for specific live-data lookups, not business/process questions."""
     return bool(_OUT_OF_SCOPE_PATTERNS.search(question))
 
 
@@ -310,11 +316,11 @@ async def ask(req: ChatRequest):
         return ChatResponse(
             question=question,
             answer=(
-                "This assistant is scoped to **system documentation only** — "
-                "it explains how DabbahWala works (architecture, agent pipeline, "
-                "API endpoints, lifecycle rules, workflows, etc.).\n\n"
-                "For customer profiles, order history, campaign performance, or "
-                "contact data, please use the **Query** tab instead."
+                "That looks like a request for **live data** (specific records, counts, or "
+                "real-time stats). This assistant covers business strategy, marketing processes, "
+                "system design, and how things work — but not live database queries.\n\n"
+                "For customer profiles, order history, campaign stats, or contact data, "
+                "please use the **Query** tab instead."
             ),
             sources=[],
         )
@@ -343,24 +349,35 @@ async def ask(req: ChatRequest):
     context = "\n".join(context_lines)
 
     system_prompt = (
-        "You are an AI assistant for the DabbahWala marketing automation system. "
-        "Your ONLY job is to explain how the SYSTEM works — its architecture, agent pipeline, "
-        "API endpoints, database schema, lifecycle rules, n8n workflows, integrations, and "
-        "configuration — based strictly on the provided system documentation.\n\n"
-        "STRICT SCOPE RULES:\n"
-        "- Answer ONLY questions about how the system is built and how it operates.\n"
-        "- Do NOT answer questions about specific customers, contacts, orders, revenue figures, "
-        "campaign statistics, or any live data. If asked, tell the user to use the Query tab.\n"
-        "- Do NOT query or reference any database data; your knowledge comes only from the "
-        "documentation context provided.\n\n"
-        "Answer clearly and concisely. Use markdown formatting where it helps readability. "
-        "If the documentation does not cover the question, say so honestly."
+        "You are the AI assistant embedded in the DabbahWala marketing automation dashboard. "
+        "DabbahWala is a fresh Indian food delivery service in Atlanta. This system is its "
+        "fully automated, AI-driven marketing brain.\n\n"
+        "You can answer questions at ANY level:\n"
+        "- **Business purpose & strategy** — why this system exists, what problem it solves, "
+        "what the marketing goals are, how the business approaches customer acquisition and retention.\n"
+        "- **Functional & process level** — how lifecycle stages work, what triggers a re-engagement "
+        "campaign, how a failed delivery is handled, when a contact gets escalated, how the "
+        "email and SMS channels are coordinated, what the offer strategy looks like.\n"
+        "- **Operational & technical level** — how the agent pipeline works, what n8n workflows "
+        "run and when, how data flows between services, what the API endpoints do.\n\n"
+        "WHAT TO AVOID:\n"
+        "- Do NOT answer questions that require looking up *specific live records* — e.g. "
+        "fetching a named customer's profile, today's order count, or real-time revenue figures. "
+        "For those, tell the user to use the **Query** tab.\n"
+        "- Do NOT make up facts not supported by the documentation. If the docs are silent on "
+        "something, say so honestly and reason from what is documented.\n\n"
+        "TONE: Speak as an expert who deeply understands both the business and the system. "
+        "When asked 'why' questions (why this approach, why are you confident it works), "
+        "draw on the documented design choices and reason through the logic — e.g. why a "
+        "4-layer agent pipeline gives better decisions than a single call, why lifecycle "
+        "segmentation improves conversion, why multi-channel coordination matters.\n\n"
+        "Use markdown formatting. Be concise but thorough."
     )
 
     user_message = (
         f"Context from system documentation:\n\n{context}\n\n"
         f"Question: {question}\n\n"
-        "Please answer the question based on the documentation above."
+        "Answer based on the documentation and your understanding of the system's purpose and design."
     )
 
     try:

@@ -346,23 +346,23 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 <!-- ══════════════════════════════════════════════════════ AI CHATBOT -->
 <div id="panel-chatbot" class="panel">
   <div class="panel-title">AI System Assistant</div>
-  <div class="panel-desc">Ask questions about <strong>how this system works</strong> — the agent pipeline, lifecycle rules, API endpoints, database schema, n8n workflows, integrations, and configuration. Answers are sourced from system documentation only.<br><span style="color:#e63946;font-size:0.82rem;font-weight:600">Not for customer, order, or campaign data — use the Query tab for live data questions.</span></div>
+  <div class="panel-desc">Ask anything about <strong>how this system works</strong> — from high-level business purpose and marketing strategy, to functional processes (lifecycle rules, re-engagement flows, escalation logic), to technical details (agent pipeline, n8n workflows, integrations).<br><span style="color:#e63946;font-size:0.82rem;font-weight:600">Not for live data lookups — use the Query tab for specific customer, order, or campaign records.</span></div>
 
   <div style="margin-bottom:14px">
     <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:8px">Example questions — click to ask</div>
     <div style="display:flex;flex-wrap:wrap;gap:7px">
-      <button class="suggestion-chip" onclick="askSuggestion(this)">Where is RAG used vs vector search?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">Where are MCPs used in the system?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the inference layer work?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the orchestrator choose a final action?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How do feedback loops update the decision agent logic?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the 4-layer agent pipeline work end-to-end?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What are the lifecycle segments and how do contacts move between them?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What n8n workflows run and on what schedule?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How is the Intelligence Cycle different from the Agent Pipeline?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What external services are integrated and how?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">How are delivery events handled by the system?</button>
-      <button class="suggestion-chip" onclick="askSuggestion(this)">What guardrails does the orchestrator apply?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the purpose of this system and how does it achieve it?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">Why is a 4-layer AI pipeline better than a single AI call?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system re-engage lapsed customers?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What happens when a delivery fails or is delayed?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system decide whether to send SMS vs email?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What triggers an escalation to Airtable?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How do contacts progress through lifecycle stages?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the offer strategy and how are offers personalised?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the Intelligence Cycle differ from the Agent Pipeline?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What happens end-to-end when a new order is placed?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system prevent over-messaging contacts?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How are daily reports generated and what do they cover?</button>
     </div>
   </div>
 
