@@ -145,7 +145,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/{{ $json.opportunity_id }}/outcome",
+        "url": "={{https://dabbahwala-latest.onrender.com}}/api/opportunities/{{ $json.opportunity_id }}/outcome",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"status\": \"{{ $json.api_status }}\",\n  \"outcome\": \"{{ $json.outcome }}\"\n}",

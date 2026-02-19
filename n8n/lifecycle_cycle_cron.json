@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/lifecycle/run",
+        "url": "={{https://dabbahwala-latest.onrender.com}}/api/lifecycle/run",
         "options": {
           "timeout": 60000
         }
@@ -64,7 +64,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/campaigns/pending",
+        "url": "={{https://dabbahwala-latest.onrender.com}}/api/campaigns/pending",
         "options": {}
       },
       "id": "fetch-campaigns",
@@ -222,7 +222,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/campaigns/{{ $json.queue_id }}/executed",
+        "url": "={{https://dabbahwala-latest.onrender.com}}/api/campaigns/{{ $json.queue_id }}/executed",
         "options": {}
       },
       "id": "mark-executed",
