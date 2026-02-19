@@ -1,4 +1,4 @@
--- Migration 025: Agent Intelligence Tables
+-- Migration 032: Agent Intelligence Tables
 -- Adds tables for inference results, decision recommendations,
 -- action queue, customer goals, and orchestrator audit log.
 

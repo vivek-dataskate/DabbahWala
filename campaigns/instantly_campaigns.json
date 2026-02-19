@@ -1,0 +1,307 @@
+{
+  "campaigns": [
+    {
+      "name": "Dabbah-NewWebsite",
+      "instantly_id": "8e420c5c-4fec-4dea-ad9e-8aeb25c067c3",
+      "status": "ACTIVE",
+      "target_segment": "cold",
+      "campaign_type": "NURTURE_SLOW",
+      "description": "Re-engagement series for lapsed/cold customers who ordered before. 8-step email nurture over ~47 days. Tells the story of what changed at DabbahWala.",
+      "steps": 8,
+      "total_days": 47,
+      "cta": "Reply MENU"
+    },
+    {
+      "name": "Dabbah-NewCustomer-Onboarding",
+      "instantly_id": null,
+      "status": "NEEDS_CREATION",
+      "target_segment": "new_customer",
+      "campaign_type": "NEW_CUSTOMER_ONBOARDING",
+      "description": "Welcome series for first-time customers. Builds trust, explains how DabbahWala works, and pitches subscriptions.",
+      "steps": 5,
+      "total_days": 14,
+      "sequence": [
+        {
+          "step": 1,
+          "delay_days": 0,
+          "subject_ideas": [
+            "Welcome to DabbahWala, {{firstName}}",
+            "Your first meal is on its way",
+            "Thanks for choosing DabbahWala"
+          ],
+          "body_theme": "Warm welcome. Thank them for the first order. Set expectations: fresh food, cooked to order, same-day delivery. Mention rotating menu.",
+          "cta": "Browse this week's menu at dabbahwala.com"
+        },
+        {
+          "step": 2,
+          "delay_days": 2,
+          "subject_ideas": [
+            "How DabbahWala works (it's simple)",
+            "Behind the scenes at DabbahWala",
+            "The DabbahWala difference"
+          ],
+          "body_theme": "Explain the process: Order -> Cooked fresh -> Delivered same day. Lighter oils, no MSG, small batches. Not restaurant food, everyday food.",
+          "cta": "See today's menu"
+        },
+        {
+          "step": 3,
+          "delay_days": 4,
+          "subject_ideas": [
+            "Save time with a weekly plan",
+            "Eating well without the planning",
+            "Your meals, handled"
+          ],
+          "body_theme": "Introduce subscription option. Save 15-20%, no daily decision-making, priority delivery. Flexible: pause/cancel anytime. Focus on convenience.",
+          "cta": "Reply SUBSCRIBE or visit dabbahwala.com/subscribe"
+        },
+        {
+          "step": 4,
+          "delay_days": 7,
+          "subject_ideas": [
+            "What our customers say",
+            "Real feedback from DabbahWala customers",
+            "Why people keep ordering"
+          ],
+          "body_theme": "Social proof. Share 2-3 real customer testimonials about freshness, taste, convenience. Mention neighborhoods served (Atlanta metro).",
+          "cta": "Order again at dabbahwala.com"
+        },
+        {
+          "step": 5,
+          "delay_days": 14,
+          "subject_ideas": [
+            "Still thinking about it?",
+            "We'd love to cook for you again",
+            "One more thing"
+          ],
+          "body_theme": "Gentle nudge. If they haven't reordered, acknowledge it. No pressure. Mention free delivery over $35. Offer to help via reply.",
+          "cta": "Reply MENU for today's options"
+        }
+      ]
+    },
+    {
+      "name": "Dabbah-ActiveCustomer-Engagement",
+      "instantly_id": null,
+      "status": "NEEDS_CREATION",
+      "target_segment": "active_customer",
+      "campaign_type": "PROMO_STANDARD",
+      "description": "Keep active customers engaged with new dishes, seasonal specials, and referral asks. Light touch, value-focused.",
+      "steps": 4,
+      "total_days": 30,
+      "sequence": [
+        {
+          "step": 1,
+          "delay_days": 0,
+          "subject_ideas": [
+            "New on the menu this week",
+            "Something new from our kitchen",
+            "Fresh additions to DabbahWala"
+          ],
+          "body_theme": "Highlight 2-3 new or seasonal dishes. Include appetizing descriptions. Mention they can customize or add sides.",
+          "cta": "Order at dabbahwala.com"
+        },
+        {
+          "step": 2,
+          "delay_days": 10,
+          "subject_ideas": [
+            "A quick tip for regulars",
+            "How to get the most from DabbahWala",
+            "DabbahWala insider tip"
+          ],
+          "body_theme": "If not on subscription, gently pitch it. If already subscribed, offer pairing tips (add sides, desserts). Mention free delivery threshold.",
+          "cta": "Check today's menu"
+        },
+        {
+          "step": 3,
+          "delay_days": 20,
+          "subject_ideas": [
+            "Know someone who'd love this?",
+            "Share the taste of home",
+            "Your friends might love DabbahWala"
+          ],
+          "body_theme": "Referral ask. You've ordered X times, you clearly enjoy our food. Share with friends/family. No formal program needed, just genuine word-of-mouth.",
+          "cta": "Share dabbahwala.com"
+        },
+        {
+          "step": 4,
+          "delay_days": 30,
+          "subject_ideas": [
+            "Thank you for being a regular",
+            "A note of appreciation",
+            "You're part of the DabbahWala family"
+          ],
+          "body_theme": "Genuine thank you. Acknowledge their loyalty. Mention they can always text for anything. Build personal relationship.",
+          "cta": "Reply anytime"
+        }
+      ]
+    },
+    {
+      "name": "Dabbah-Lapsed-Winback",
+      "instantly_id": null,
+      "status": "NEEDS_CREATION",
+      "target_segment": "lapsed_customer",
+      "campaign_type": "PROMO_AGGRESSIVE",
+      "description": "Win back lapsed customers (30-60 days inactive). More urgent tone, highlight improvements, direct CTA.",
+      "steps": 4,
+      "total_days": 21,
+      "sequence": [
+        {
+          "step": 1,
+          "delay_days": 0,
+          "subject_ideas": [
+            "We've missed cooking for you",
+            "It's been a while, {{firstName}}",
+            "DabbahWala has changed"
+          ],
+          "body_theme": "Acknowledge the gap. Be honest: we know we didn't earn a regular spot. Share 2-3 specific improvements made since they left.",
+          "cta": "Reply MENU for today's options"
+        },
+        {
+          "step": 2,
+          "delay_days": 5,
+          "subject_ideas": [
+            "What's different now at DabbahWala",
+            "We fixed what wasn't working",
+            "A better DabbahWala"
+          ],
+          "body_theme": "Detail specific changes: cook-to-order, rotating menu, lighter ingredients, easier ordering. Be specific, not vague.",
+          "cta": "See the new menu at dabbahwala.com"
+        },
+        {
+          "step": 3,
+          "delay_days": 12,
+          "subject_ideas": [
+            "Your next order gets special attention",
+            "We'll take extra care",
+            "A welcome-back treat"
+          ],
+          "body_theme": "Offer special attention: priority handling, possible surprise from kitchen. Make them feel valued, not just another win-back target.",
+          "cta": "Reply MENU or order at dabbahwala.com"
+        },
+        {
+          "step": 4,
+          "delay_days": 21,
+          "subject_ideas": [
+            "No pressure, just a thought",
+            "Whenever you're ready",
+            "We'll be here"
+          ],
+          "body_theme": "Final gentle note. No pressure. Door is always open. Reply MENU anytime. Respect their decision.",
+          "cta": "Reply MENU anytime"
+        }
+      ]
+    },
+    {
+      "name": "Dabbah-Reactivation",
+      "instantly_id": null,
+      "status": "NEEDS_CREATION",
+      "target_segment": "reactivation_candidate",
+      "campaign_type": "REACTIVATION",
+      "description": "Last-resort reactivation for 60+ day inactive customers. Direct, honest, outcome-focused.",
+      "steps": 3,
+      "total_days": 14,
+      "sequence": [
+        {
+          "step": 1,
+          "delay_days": 0,
+          "subject_ideas": [
+            "An honest note from DabbahWala",
+            "We'd like to earn your trust back",
+            "One more chance?"
+          ],
+          "body_theme": "Very honest, humble. We didn't deliver on what you expected. Here's what we've done about it. Specific changes, not corporate speak.",
+          "cta": "Reply MENU or visit dabbahwala.com"
+        },
+        {
+          "step": 2,
+          "delay_days": 7,
+          "subject_ideas": [
+            "What would bring you back?",
+            "Help us get better",
+            "We're listening"
+          ],
+          "body_theme": "Ask for feedback. What didn't work? What would they want different? Show you genuinely care about their experience.",
+          "cta": "Reply with any feedback"
+        },
+        {
+          "step": 3,
+          "delay_days": 14,
+          "subject_ideas": [
+            "Last note from us",
+            "We'll step back now",
+            "Thank you either way"
+          ],
+          "body_theme": "Graceful exit. Thank them for being a customer. Door is always open. No more emails unless they engage. Respect their space.",
+          "cta": "dabbahwala.com whenever you're ready"
+        }
+      ]
+    },
+    {
+      "name": "Dabbah-AppToDirect",
+      "instantly_id": null,
+      "status": "NEEDS_CREATION",
+      "target_segment": "app_customers",
+      "campaign_type": "APP_TO_DIRECT",
+      "description": "Convert food delivery app (DoorDash/UberEats/Grubhub) customers to order directly from DabbahWala website.",
+      "steps": 4,
+      "total_days": 21,
+      "sequence": [
+        {
+          "step": 1,
+          "delay_days": 0,
+          "subject_ideas": [
+            "Thanks for ordering DabbahWala",
+            "We're glad you found us",
+            "A note from DabbahWala"
+          ],
+          "body_theme": "Thank them for discovering DabbahWala (even via an app). Introduce who we are. Mention we cook fresh, same-day delivery, home-style food.",
+          "cta": "Learn more at dabbahwala.com"
+        },
+        {
+          "step": 2,
+          "delay_days": 5,
+          "subject_ideas": [
+            "A tip that saves you money",
+            "DabbahWala without the middleman",
+            "Same food, better price"
+          ],
+          "body_theme": "Explain benefits of ordering direct: no app fees (saves 15-30%), free delivery over $35, faster handling, ability to customize, subscribe, or just text MENU.",
+          "cta": "Order direct at dabbahwala.com"
+        },
+        {
+          "step": 3,
+          "delay_days": 12,
+          "subject_ideas": [
+            "Why direct customers get more",
+            "The perks of ordering direct",
+            "A better way to order DabbahWala"
+          ],
+          "body_theme": "Specific perks: personalized orders, dietary preferences remembered, priority delivery, occasional kitchen surprises, subscription option for daily convenience.",
+          "cta": "Try ordering direct — reply MENU"
+        },
+        {
+          "step": 4,
+          "delay_days": 21,
+          "subject_ideas": [
+            "Quick reminder from DabbahWala",
+            "Just in case you missed this",
+            "Still ordering through apps?"
+          ],
+          "body_theme": "Gentle final push. Mention again: same food, lower cost, better service. If they reply MENU, we handle everything personally. No app needed.",
+          "cta": "Reply MENU or visit dabbahwala.com"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_campaigns": 6,
+    "active_in_instantly": 1,
+    "needs_creation_in_instantly": 5,
+    "creation_priority": [
+      "Dabbah-NewCustomer-Onboarding (highest impact — retain first-time buyers)",
+      "Dabbah-AppToDirect (convert app customers to direct — higher margins)",
+      "Dabbah-Lapsed-Winback (bring back 30-60 day inactive)",
+      "Dabbah-ActiveCustomer-Engagement (keep regulars engaged + referrals)",
+      "Dabbah-Reactivation (last resort for 60+ day inactive)"
+    ]
+  }
+}
