@@ -140,7 +140,7 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 <div class="tabs">
   <div class="tab active" onclick="switchTab('query')">📊 Query</div>
   <div class="tab" onclick="switchTab('agent')">🤖 Run Agent</div>
-  <div class="tab" onclick="switchTab('tone')">✍️ Tone Drafts</div>
+  <div class="tab" onclick="switchTab('tone')">✉️ Email Templates</div>
   <div class="tab" onclick="switchTab('upload')">📤 Upload CSV</div>
   <div class="tab" onclick="switchTab('reports')">📋 Reports</div>
 </div>
@@ -194,23 +194,71 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 
 <!-- ══════════════════════════════════════════════════════ TONE -->
 <div id="panel-tone" class="panel">
-  <div class="panel-title">Tone Drafts</div>
-  <div class="panel-desc">Generate three message variations — warm, urgent, and casual — for a specific customer. Copy the one that fits best and send it directly.</div>
+  <div class="panel-title">Campaign Email Templates</div>
+  <div class="panel-desc">Select a campaign scenario, review the current email draft, rewrite it (manually or with Claude), then push directly to Instantly.</div>
 
-  <div class="row2">
-    <div class="form-group">
-      <label>Customer email</label>
-      <input id="t-email" type="email" placeholder="customer@example.com">
-    </div>
-  </div>
-
+  <!-- ── Step 1: Scenario ── -->
   <div class="form-group">
-    <label>Goal or context</label>
-    <textarea id="t-goal" placeholder="e.g. Win back a lapsed customer with a discount offer for their favourite dish"></textarea>
+    <label>1. Select campaign scenario</label>
+    <select id="t-campaign" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;background:#fff">
+      <option value="">— pick a campaign —</option>
+      <option value="NURTURE_SLOW">Nurture Slow — Cold contacts (7 emails)</option>
+      <option value="PROMO_STANDARD">Promo Standard — Engaged &amp; active</option>
+      <option value="PROMO_AGGRESSIVE">Promo Aggressive — Lapsed customers</option>
+      <option value="NEW_CUSTOMER_ONBOARDING">New Customer Onboarding</option>
+      <option value="REACTIVATION">Reactivation — Long-dormant</option>
+    </select>
   </div>
 
-  <button class="btn" id="t-btn" onclick="runTone()">Generate Drafts</button>
-  <div id="t-result"></div>
+  <button class="btn" id="t-load-btn" onclick="loadCampaignTemplate()">Load Template</button>
+  <div id="t-load-result"></div>
+
+  <!-- ── Step 2 + 3: Template editor (shown after load) ── -->
+  <div id="t-editor" style="display:none;margin-top:20px">
+
+    <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">2. Select email step &amp; A/B variant</div>
+      <div class="row2">
+        <div class="form-group" style="margin:0">
+          <label>Email step</label>
+          <select id="t-step" onchange="switchStepVariant()" style="width:100%;padding:8px 10px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.85rem;background:#fff"></select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>A/B variant</label>
+          <select id="t-variant" onchange="switchStepVariant()" style="width:100%;padding:8px 10px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.85rem;background:#fff"></select>
+        </div>
+      </div>
+    </div>
+
+    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">3. Review &amp; rewrite</div>
+
+    <div class="form-group">
+      <label>Subject line</label>
+      <input id="t-subject" type="text" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;box-sizing:border-box">
+    </div>
+
+    <div class="form-group">
+      <label>Body <span class="hint">(Instantly HTML — &lt;div&gt; tags + {{firstName|there}} tokens)</span></label>
+      <textarea id="t-body" rows="12" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.82rem;font-family:monospace;box-sizing:border-box;resize:vertical"></textarea>
+    </div>
+
+    <div class="form-group">
+      <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem;padding:8px 16px" onclick="toggleBodyPreview()">Toggle HTML Preview</button>
+      <div id="t-preview" style="display:none;margin-top:10px;border:1.5px solid #e0e0ea;border-radius:8px;padding:16px;background:#fff;font-family:sans-serif;font-size:0.9rem;line-height:1.6"></div>
+    </div>
+
+    <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
+      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:8px">Ask Claude to rewrite</div>
+      <input id="t-instruction" type="text" placeholder="e.g. Make it shorter, add urgency, focus on fresh ingredients…" style="width:100%;padding:9px 12px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">
+      <button class="btn" id="t-rewrite-btn" onclick="askClaudeRewrite()" style="background:#6f42c1;font-size:0.88rem;padding:9px 18px">✨ Ask Claude to Rewrite</button>
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn" id="t-save-btn" onclick="saveAndPush()" style="background:#28a745">💾 Save &amp; Push to Instantly</button>
+      <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem" onclick="resetToneEditor()">← New scenario</button>
+    </div>
+    <div id="t-save-result" style="margin-top:12px"></div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ UPLOAD -->
@@ -353,58 +401,171 @@ async function runAgent() {
   }
 }
 
-// ─── tone ─────────────────────────────────────────────────────────────────────
-async function runTone() {
-  const email = document.getElementById('t-email').value.trim();
-  const goal  = document.getElementById('t-goal').value.trim();
-  if (!email) { setError('t-result', 'Please enter a customer email.'); return; }
-  if (!goal)  { setError('t-result', 'Please describe the goal or context.'); return; }
-  setLoading('t-result', 'Generating message drafts…');
-  setBtn('t-btn', true, 'Generating…');
+// ─── campaign email template editor ──────────────────────────────────────────
+let _tCampaign = '';
+let _tStep = 0;
+let _tVariant = 0;
+let _tVariantCounts = [];
+
+async function loadCampaignTemplate() {
+  const campaign = document.getElementById('t-campaign').value;
+  if (!campaign) { setError('t-load-result', 'Please select a campaign scenario.'); return; }
+  setLoading('t-load-result', 'Loading current template from local JSON…');
+  setBtn('t-load-btn', true, 'Loading…');
   try {
-    const res  = await fetch('/api/query/tone', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ contact_email: email, goal }),
-    });
+    const res  = await fetch(`/api/campaigns/templates/${campaign}?step=0&variant=0`);
     const data = await res.json();
-    setBtn('t-btn', false, 'Generate Drafts');
+    setBtn('t-load-btn', false, 'Load Template');
+    if (!res.ok) { setError('t-load-result', data.detail || JSON.stringify(data)); return; }
 
-    if (!res.ok || data.error) { setError('t-result', data.detail || data.error || JSON.stringify(data)); return; }
-    _toneDrafts = data;
+    _tCampaign = campaign;
+    _tVariantCounts = data.step_summaries.map(s => s.variant_count);
 
-    const defs = [
-      { key:'warm',   icon:'🤝', label:'Warm',   border:'#28a745' },
-      { key:'urgent', icon:'⚡', label:'Urgent',  border:'#ffc107' },
-      { key:'casual', icon:'😊', label:'Casual',  border:'#17a2b8' },
-    ];
-    let html = `<div class="tone-cards">`;
-    if (data.contact_name) html += `<p style="font-size:0.87rem;color:#666">Drafts for <strong>${esc(data.contact_name)}</strong></p>`;
-    for (const d of defs) {
-      const msg = data[d.key] || '';
-      html += `
-      <div class="tone-card" style="border-left:4px solid ${d.border}">
-        <div class="tone-card-header">
-          <span class="tone-label">${d.icon} ${d.label}</span>
-          <button class="copy-btn" onclick="copyTone('${d.key}', this)">Copy</button>
-        </div>
-        <div class="tone-text">${esc(msg)}</div>
-        <div class="char-count">${msg.length} chars</div>
-      </div>`;
+    // Populate step dropdown
+    const stepSel = document.getElementById('t-step');
+    stepSel.innerHTML = '';
+    for (const s of data.step_summaries) {
+      const opt = document.createElement('option');
+      opt.value = s.index;
+      opt.textContent = `Email ${s.index + 1}  (+${s.delay_days ?? '?'} days)  — ${s.first_subject.slice(0, 48)}…`;
+      stepSel.appendChild(opt);
     }
-    html += '</div>';
-    document.getElementById('t-result').innerHTML = html;
+
+    _populateVariants(data.total_variants);
+
+    document.getElementById('t-subject').value = data.subject;
+    document.getElementById('t-body').value    = data.body;
+    document.getElementById('t-preview').style.display = 'none';
+    document.getElementById('t-editor').style.display  = 'block';
+    document.getElementById('t-save-result').innerHTML  = '';
+    document.getElementById('t-load-result').innerHTML  =
+      `<p style="color:#28a745;font-size:0.85rem;margin-top:8px">✓ Loaded <strong>${esc(data.label)}</strong> — ${data.total_steps} email steps</p>`;
+    _tStep    = 0;
+    _tVariant = 0;
   } catch(e) {
-    setBtn('t-btn', false, 'Generate Drafts');
-    setError('t-result', 'Network error: ' + e.message);
+    setBtn('t-load-btn', false, 'Load Template');
+    setError('t-load-result', 'Network error: ' + e.message);
   }
 }
 
-function copyTone(key, btn) {
-  const text = _toneDrafts[key] || '';
-  navigator.clipboard.writeText(text).then(() => {
-    btn.textContent = 'Copied ✓';
-    setTimeout(() => btn.textContent = 'Copy', 2200);
-  });
+function _populateVariants(count) {
+  const varSel = document.getElementById('t-variant');
+  varSel.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `Variant ${String.fromCharCode(65 + i)}`;   // A, B, C…
+    varSel.appendChild(opt);
+  }
+}
+
+async function switchStepVariant() {
+  const newStep    = parseInt(document.getElementById('t-step').value);
+  const newVariant = parseInt(document.getElementById('t-variant').value);
+
+  // If step changed, repopulate variant dropdown
+  if (newStep !== _tStep) {
+    _populateVariants(_tVariantCounts[newStep] || 1);
+  }
+  _tStep    = newStep;
+  _tVariant = parseInt(document.getElementById('t-variant').value);
+
+  document.getElementById('t-save-result').innerHTML = '<span style="color:#888;font-size:0.83rem">Loading…</span>';
+  try {
+    const res  = await fetch(`/api/campaigns/templates/${_tCampaign}?step=${_tStep}&variant=${_tVariant}`);
+    const data = await res.json();
+    if (!res.ok) { setError('t-save-result', data.detail); return; }
+    document.getElementById('t-subject').value = data.subject;
+    document.getElementById('t-body').value    = data.body;
+    document.getElementById('t-preview').style.display = 'none';
+    document.getElementById('t-save-result').innerHTML = '';
+  } catch(e) {
+    setError('t-save-result', 'Network error: ' + e.message);
+  }
+}
+
+function toggleBodyPreview() {
+  const box = document.getElementById('t-preview');
+  if (box.style.display === 'none') {
+    box.innerHTML     = document.getElementById('t-body').value;
+    box.style.display = 'block';
+  } else {
+    box.style.display = 'none';
+  }
+}
+
+async function askClaudeRewrite() {
+  if (!_tCampaign) return;
+  const instruction = document.getElementById('t-instruction').value.trim();
+  setBtn('t-rewrite-btn', true, '✨ Rewriting…');
+  document.getElementById('t-save-result').innerHTML = '';
+  try {
+    const res  = await fetch(`/api/campaigns/templates/${_tCampaign}/rewrite`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        step_index:    _tStep,
+        variant_index: _tVariant,
+        subject:       document.getElementById('t-subject').value,
+        body:          document.getElementById('t-body').value,
+        instruction,
+      }),
+    });
+    const data = await res.json();
+    setBtn('t-rewrite-btn', false, '✨ Ask Claude to Rewrite');
+    if (!res.ok) { setError('t-save-result', data.detail || JSON.stringify(data)); return; }
+    document.getElementById('t-subject').value = data.subject;
+    document.getElementById('t-body').value    = data.body;
+    document.getElementById('t-preview').style.display = 'none';
+    document.getElementById('t-save-result').innerHTML =
+      '<p style="color:#6f42c1;font-size:0.85rem">✓ Claude rewrote the draft — review above, then click Save &amp; Push when ready.</p>';
+  } catch(e) {
+    setBtn('t-rewrite-btn', false, '✨ Ask Claude to Rewrite');
+    setError('t-save-result', 'Network error: ' + e.message);
+  }
+}
+
+async function saveAndPush() {
+  if (!_tCampaign) return;
+  setBtn('t-save-btn', true, 'Saving…');
+  document.getElementById('t-save-result').innerHTML = '';
+  try {
+    const res  = await fetch(`/api/campaigns/templates/${_tCampaign}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        step_index:    _tStep,
+        variant_index: _tVariant,
+        subject:       document.getElementById('t-subject').value,
+        body:          document.getElementById('t-body').value,
+      }),
+    });
+    const data = await res.json();
+    setBtn('t-save-btn', false, '💾 Save & Push to Instantly');
+    if (!res.ok) { setError('t-save-result', data.detail || JSON.stringify(data)); return; }
+
+    const pushed = data.instantly_status === 'pushed';
+    const icon   = pushed ? '✅' : '⚠️';
+    const color  = pushed ? '#28a745' : '#e67e00';
+    let msg = `${icon} Saved locally. Instantly: <strong>${data.instantly_status}</strong>`;
+    if (data.instantly_error) msg += ` — ${esc(data.instantly_error)}`;
+    document.getElementById('t-save-result').innerHTML =
+      `<p style="color:${color};font-size:0.85rem">${msg}</p>`;
+  } catch(e) {
+    setBtn('t-save-btn', false, '💾 Save & Push to Instantly');
+    setError('t-save-result', 'Network error: ' + e.message);
+  }
+}
+
+function resetToneEditor() {
+  _tCampaign = '';
+  _tStep = 0;
+  _tVariant = 0;
+  document.getElementById('t-campaign').value         = '';
+  document.getElementById('t-editor').style.display   = 'none';
+  document.getElementById('t-load-result').innerHTML  = '';
+  document.getElementById('t-save-result').innerHTML  = '';
+  document.getElementById('t-instruction').value      = '';
 }
 
 // ─── upload ───────────────────────────────────────────────────────────────────

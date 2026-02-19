@@ -25,3 +25,4 @@ REPORT_EMAIL_TO = os.environ.get("REPORT_EMAIL_TO", "core@dabbahwala.com")
 REPORT_EMAIL_FROM = os.environ.get("REPORT_EMAIL_FROM", "")
 # Shipday delivery management
 SHIPDAY_API_KEY = os.environ.get("SHIPDAY_API_KEY", "")
+INSTANTLY_API_KEY = os.environ.get("INSTANTLY_API_KEY", "")
