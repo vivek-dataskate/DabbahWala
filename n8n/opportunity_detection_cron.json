@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/lifecycle/run",
+        "url": "https://dabbahwala-latest.onrender.com/api/lifecycle/run",
         "options": {
           "timeout": 30000
         }
@@ -35,7 +35,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/detect",
+        "url": "https://dabbahwala-latest.onrender.com/api/opportunities/detect",
         "options": {
           "timeout": 60000
         }
@@ -49,7 +49,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/detect/new-customer-no-repeat",
+        "url": "https://dabbahwala-latest.onrender.com/api/opportunities/detect/new-customer-no-repeat",
         "options": {
           "timeout": 60000
         }
@@ -63,7 +63,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/detect/lapsed-reengaged",
+        "url": "https://dabbahwala-latest.onrender.com/api/opportunities/detect/lapsed-reengaged",
         "options": {
           "timeout": 60000
         }
@@ -77,7 +77,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/detect/reorder-intent",
+        "url": "https://dabbahwala-latest.onrender.com/api/opportunities/detect/reorder-intent",
         "options": {
           "timeout": 60000
         }
@@ -141,7 +141,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities",
+        "url": "https://dabbahwala-latest.onrender.com/api/opportunities",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"contact_id\": {{ $json.id }},\n  \"action\": \"{{ $json.suggested_action || 'send_sms' }}\",\n  \"priority\": \"{{ $json.suggested_priority || 'warm' }}\",\n  \"reason\": \"{{ $json.signal }}: {{ ($json.first_name || '') }} {{ ($json.last_name || '') }} — opens={{ $json.opens_7d || 0 }}, orders={{ $json.total_orders || 0 }}\",\n  \"confidence_score\": {{ $json.suggested_priority === 'hot' ? 0.85 : 0.65 }}\n}",
