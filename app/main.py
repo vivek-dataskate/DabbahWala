@@ -26,6 +26,19 @@ app = FastAPI(
 
 
 @app.on_event("startup")
+async def startup_ensure_schema():
+    """Apply any schema changes that psql migrations may have silently skipped."""
+    from app.db import get_cursor
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_date DATE")
+            cur.execute("UPDATE orders SET delivery_date = order_date WHERE delivery_date IS NULL")
+        logger.info("startup_ensure_schema — orders.delivery_date present")
+    except Exception as e:
+        logger.error("startup_ensure_schema failed: %s", e)
+
+
+@app.on_event("startup")
 async def startup_sync_chatbot_docs():
     """Auto-reindex chatbot docs if markdown files changed since last deploy."""
     from app.routers.chatbot import sync_docs_on_startup
