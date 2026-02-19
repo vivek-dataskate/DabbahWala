@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from app.routers import campaigns, delivery, events, lifecycle, opportunities, reports, sms, telnyx
 
@@ -55,10 +55,20 @@ def run_migration(migration_number: int, secret: str = ""):
 
 
 @app.post("/admin/query")
-def run_query(secret: str = "", sql: str = ""):
-    """Run a read-only SQL query. Requires admin secret."""
+async def run_query(request: Request, secret: str = "", sql: str = ""):
+    """Run a read-only SQL query. Accepts SQL via query param or JSON body."""
     import os
     admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+
+    # Try JSON body if query params empty
+    if not sql:
+        try:
+            body = await request.json()
+            secret = body.get("secret", secret)
+            sql = body.get("sql", "")
+        except Exception:
+            pass
+
     if secret != admin_secret:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Forbidden")
@@ -77,10 +87,20 @@ def run_query(secret: str = "", sql: str = ""):
 
 
 @app.post("/admin/exec")
-def run_exec(secret: str = "", sql: str = ""):
-    """Run a DDL/DML SQL statement. Requires admin secret."""
+async def run_exec(request: Request, secret: str = "", sql: str = ""):
+    """Run a DDL/DML SQL statement. Accepts SQL via query param or JSON body."""
     import os
     admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+
+    # Try JSON body if query params empty
+    if not sql:
+        try:
+            body = await request.json()
+            secret = body.get("secret", secret)
+            sql = body.get("sql", "")
+        except Exception:
+            pass
+
     if secret != admin_secret:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Forbidden")
