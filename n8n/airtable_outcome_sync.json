@@ -23,97 +23,35 @@
     },
     {
       "parameters": {
-        "method": "GET",
-        "url": "https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_FIELD_SALES_TABLE}}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
-            {
-              "name": "filterByFormula",
-              "value": "AND({Status} != 'New', {Status} != '', {Synced to Postgres} != TRUE())"
-            },
-            {
-              "name": "fields[]",
-              "value": "Postgres Opportunity ID"
-            },
-            {
-              "name": "fields[]",
-              "value": "Status"
-            },
-            {
-              "name": "fields[]",
-              "value": "Outcome Notes"
-            },
-            {
-              "name": "fields[]",
-              "value": "Synced to Postgres"
-            }
-          ]
+        "operation": "list",
+        "base": {
+          "__rl": true,
+          "value": "appuy2VTIao6XVpIW",
+          "mode": "id"
         },
+        "table": {
+          "__rl": true,
+          "value": "Field Sales Tasks",
+          "mode": "name"
+        },
+        "returnAll": true,
+        "filterByFormula": "AND({Status} != 'New', {Status} != '', {Synced to Postgres} != TRUE())",
         "options": {}
       },
       "id": "fetch-updated-airtable",
       "name": "Fetch Updated Airtable Records",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
       "position": [
         440,
         300
       ],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "AIRTABLE_CREDENTIAL_ID",
+        "airtableTokenApi": {
+          "id": "hJpO8jdlT4Rmkjtx",
           "name": "Airtable API Key"
         }
       }
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
-          "conditions": [
-            {
-              "id": "check-records",
-              "leftValue": "={{ $json.records?.length }}",
-              "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "gt"
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "has-updates",
-      "name": "Has Updates?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        660,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "fieldToSplitOut": "records",
-        "options": {}
-      },
-      "id": "split-records",
-      "name": "Split Records",
-      "type": "n8n-nodes-base.splitOut",
-      "typeVersion": 1,
-      "position": [
-        880,
-        240
-      ]
     },
     {
       "parameters": {
@@ -124,8 +62,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1100,
-        240
+        660,
+        300
       ]
     },
     {
@@ -156,8 +94,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1320,
-        240
+        880,
+        300
       ]
     },
     {
@@ -174,32 +112,42 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1540,
-        180
+        1100,
+        240
       ]
     },
     {
       "parameters": {
-        "method": "PATCH",
-        "url": "=https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/{{$env.AIRTABLE_FIELD_SALES_TABLE}}/{{ $('Map Airtable Status \u2192 API Status').item.json.airtable_record_id }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "{\n  \"fields\": {\n    \"Synced to Postgres\": true\n  }\n}",
-        "options": {}
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "appuy2VTIao6XVpIW",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Field Sales Tasks",
+          "mode": "name"
+        },
+        "id": "={{ $('Map Airtable Status \u2192 API Status').item.json.airtable_record_id }}",
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Synced to Postgres": true
+          }
+        }
       },
       "id": "mark-synced",
       "name": "Mark Synced in Airtable",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
       "position": [
-        1760,
-        180
+        1320,
+        240
       ],
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "AIRTABLE_CREDENTIAL_ID",
+        "airtableTokenApi": {
+          "id": "hJpO8jdlT4Rmkjtx",
           "name": "Airtable API Key"
         }
       }
@@ -211,19 +159,8 @@
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
-        1540,
-        340
-      ]
-    },
-    {
-      "parameters": {},
-      "id": "no-updates",
-      "name": "No Updates \u2014 Skip",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        880,
-        400
+        1100,
+        380
       ]
     }
   ],
@@ -240,35 +177,6 @@
       ]
     },
     "Fetch Updated Airtable Records": {
-      "main": [
-        [
-          {
-            "node": "Has Updates?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Has Updates?": {
-      "main": [
-        [
-          {
-            "node": "Split Records",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "No Updates \u2014 Skip",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Split Records": {
       "main": [
         [
           {
