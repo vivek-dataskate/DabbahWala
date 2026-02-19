@@ -1,4 +1,4 @@
--- Menu items part 1 (125 rows, 1-125 of 125)
+-- Menu items part 1 (137 rows, 1-137 of 137)
 -- Run order: 1
 
 SET search_path TO dabbahwala;
@@ -130,5 +130,19 @@ INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Single 
 INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Family - Veg Dabbah Combo', 'combo', true, 28.94) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
 INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Family - Non-Veg Dabbah Combo', 'combo', false, 28.93) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
 INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Chicken Dum Biryani', 'biryani', false, 13.97) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+
+-- New items discovered from Feb 2026 daily orders
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Aloo Capsicum', 'curry', true, 12.00) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Fish Pulusu', 'curry', false, 12.00) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Khatti Dal', 'curry', true, 10.00) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Carrot Cabbage Fried Rice', 'sides', true, 10.00) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Paneer Puff', 'snack', true, 8.00) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Shrikhand', 'dessert', true, 5.99) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Sunnundalu (Urad Dal Laddu)', 'dessert', true, 6.99) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Toori Toor Dal (Beerakaya Pappu)', 'curry', true, 10.00) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('White Rice', 'sides', true, 4.00) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Roti - 5 Pcs', 'roti', true, 3.00) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Roti - 10 Pcs', 'roti', true, 5.00) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
+INSERT INTO menu_items (item_name, category, is_veg, avg_price) VALUES ('Samosa - 3 Pcs', 'snack', true, 8.99) ON CONFLICT (item_name) DO UPDATE SET avg_price = EXCLUDED.avg_price, category = EXCLUDED.category, is_veg = EXCLUDED.is_veg;
 
 COMMIT;
