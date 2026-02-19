@@ -1,0 +1,336 @@
+{
+  "name": "DabbahWala \u2014 Broadcast Dispatch (SMS + Email)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/broadcasts/pending-recipients",
+        "options": {}
+      },
+      "id": "fetch-pending",
+      "name": "Fetch Pending Recipients",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-items",
+              "leftValue": "={{ Array.isArray($json) ? $json.length : 0 }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-pending",
+      "name": "Has Pending Recipients?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "=",
+        "options": {}
+      },
+      "id": "split-recipients",
+      "name": "Split Recipients",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [880, 220]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.channel }}",
+                    "rightValue": "sms",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sms"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.channel }}",
+                    "rightValue": "email",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "email"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "route-by-channel",
+      "name": "Route by Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1100, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telnyx.com/v2/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"{{$env.TELNYX_FROM_NUMBER}}\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.sms_message }}\"\n}",
+        "options": {}
+      },
+      "id": "send-sms-telnyx",
+      "name": "Send SMS via Telnyx",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TELNYX_CREDENTIAL_ID",
+          "name": "Telnyx API Key"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const telnyx = $input.item.json;\nconst recipient = $('Split Recipients').item.json;\nconst success = telnyx.data && telnyx.data.id;\nreturn { json: { success, recipient_id: recipient.recipient_id, telnyx_msg_id: telnyx.data?.id || '' } };"
+      },
+      "id": "check-sms-result",
+      "name": "Check SMS Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/broadcasts/recipients/{{ $json.recipient_id }}/{{ $json.success ? 'sent' : 'failed' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.success ? '{}' : JSON.stringify({ error_message: 'Telnyx send failed' }) }}",
+        "options": {}
+      },
+      "id": "mark-sms-result",
+      "name": "Mark SMS Sent/Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 100],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/telnyx/message",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_email\": \"{{ $('Split Recipients').item.json.email }}\",\n  \"direction\": \"outbound\",\n  \"from_number\": \"{{$env.TELNYX_FROM_NUMBER}}\",\n  \"to_number\": \"{{ $('Split Recipients').item.json.phone }}\",\n  \"body\": \"{{ $('Split Recipients').item.json.sms_message }}\",\n  \"telnyx_msg_id\": \"{{ $('Check SMS Result').item.json.telnyx_msg_id }}\",\n  \"status\": \"sent\",\n  \"is_delivery_staff\": false,\n  \"metadata\": { \"source\": \"broadcast\", \"job_id\": {{ $('Split Recipients').item.json.job_id }} }\n}",
+        "options": {}
+      },
+      "id": "store-sms-record",
+      "name": "Store SMS in Telnyx Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 100],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/broadcasts/recipients/{{ $json.recipient_id }}/send-email",
+        "options": {}
+      },
+      "id": "send-email-server",
+      "name": "Send Email via Server SMTP",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 360],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "no-pending",
+      "name": "No Pending \u2014 Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [880, 400]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Pending Recipients": {
+      "main": [
+        [
+          {
+            "node": "Has Pending Recipients?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Pending Recipients?": {
+      "main": [
+        [
+          {
+            "node": "Split Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Pending \u2014 Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Recipients": {
+      "main": [
+        [
+          {
+            "node": "Route by Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Channel": {
+      "sms": [
+        {
+          "node": "Send SMS via Telnyx",
+          "type": "main",
+          "index": 0
+        }
+      ],
+      "email": [
+        {
+          "node": "Send Email via Server SMTP",
+          "type": "main",
+          "index": 0
+        }
+      ]
+    },
+    "Send SMS via Telnyx": {
+      "main": [
+        [
+          {
+            "node": "Check SMS Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check SMS Result": {
+      "main": [
+        [
+          {
+            "node": "Mark SMS Sent/Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark SMS Sent/Failed": {
+      "main": [
+        [
+          {
+            "node": "Store SMS in Telnyx Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Broadcasts",
+      "id": "broadcasts"
+    }
+  ],
+  "pinData": {}
+}
