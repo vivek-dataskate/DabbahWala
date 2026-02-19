@@ -100,6 +100,16 @@ class OpportunityOutcome(BaseModel):
     outcome: Optional[str] = None
 
 
+# --- Field agent SMS ---
+class FieldAgentSmsIn(BaseModel):
+    contact_phone: Optional[str] = None   # field agents know phone, not email
+    contact_email: Optional[str] = None
+    agent_name: str
+    body: str
+    sent_at: Optional[datetime] = None    # allow backdating if logged after the fact
+    notes: Optional[str] = None
+
+
 # --- Generic ---
 class IdResponse(BaseModel):
     id: int
