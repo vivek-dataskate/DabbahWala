@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from app.db import get_cursor
+from app.services.airtable_sync import create_field_sales_task
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,7 @@ class DailyOrderResult(BaseModel):
     agent_analysis: list = []
     field_opportunities: list = []
     campaign_moves: list = []
+    airtable_synced: int = 0
 
 
 @router.post("/process", response_model=DailyOrderResult)
@@ -228,6 +230,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
     order_date_str = ''
     agent_analysis: list = []
     field_opportunities: list = []
+    airtable_tasks: list = []
 
     with get_cursor(commit=True) as cur:
         for order_num, item_rows in orders_grouped.items():
@@ -315,15 +318,19 @@ async def process_daily_orders(file: UploadFile = File(...)):
 
                 # Build field agent recommendation for this contact
                 first_name = name.split()[0] if name else 'Customer'
+                _last_name = contact.get('last_name', '') or ''
+                _email = contact.get('email', '') or ''
+                _last_order_at = contact.get('last_order_at')
                 if lifecycle in ('lapsed_customer', 'reactivation_candidate'):
+                    _reason = (
+                        f"{first_name} is returning after a lapse. Call to confirm satisfaction "
+                        f"and offer a loyalty reward to retain them long-term."
+                    )
                     agent_analysis.append({
                         'contact_name': name,
                         'chosen_action': 'winback_follow_up',
                         'chosen_channel': 'call',
-                        'reasoning_snippet': (
-                            f"{first_name} is returning after a lapse. Call to confirm satisfaction "
-                            f"and offer a loyalty reward to retain them long-term."
-                        ),
+                        'reasoning_snippet': _reason,
                     })
                     field_opportunities.append({
                         'contact_name': name,
@@ -333,15 +340,24 @@ async def process_daily_orders(file: UploadFile = File(...)):
                             f"Personal follow-up call recommended to lock in loyalty."
                         ),
                     })
+                    airtable_tasks.append({
+                        'first_name': first_name, 'last_name': _last_name,
+                        'phone': phone or '', 'email': _email,
+                        'priority': 'Hot', 'action_type': 'winback_follow_up',
+                        'reason': _reason, 'suggested_message': _reason,
+                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
+                        'last_order_at': _last_order_at,
+                    })
                 elif contact.get('primary_source') == 'Food Delivery Apps':
+                    _reason = (
+                        f"{first_name} previously ordered via a delivery app. Reinforce direct ordering "
+                        f"benefits — no platform fees, faster delivery, priority support."
+                    )
                     agent_analysis.append({
                         'contact_name': name,
                         'chosen_action': 'direct_order_pitch',
                         'chosen_channel': 'sms',
-                        'reasoning_snippet': (
-                            f"{first_name} previously ordered via a delivery app. Reinforce direct ordering "
-                            f"benefits — no platform fees, faster delivery, priority support."
-                        ),
+                        'reasoning_snippet': _reason,
                     })
                     field_opportunities.append({
                         'contact_name': name,
@@ -351,15 +367,24 @@ async def process_daily_orders(file: UploadFile = File(...)):
                             "subscription to prevent churn back to app platforms."
                         ),
                     })
+                    airtable_tasks.append({
+                        'first_name': first_name, 'last_name': _last_name,
+                        'phone': phone or '', 'email': _email,
+                        'priority': 'Hot', 'action_type': 'direct_order_pitch',
+                        'reason': _reason, 'suggested_message': _reason,
+                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
+                        'last_order_at': _last_order_at,
+                    })
                 elif prev_orders == 0:
+                    _reason = (
+                        f"First direct order from {first_name}. Prime moment to pitch a weekly "
+                        f"subscription — saves ~20% vs daily ordering."
+                    )
                     agent_analysis.append({
                         'contact_name': name,
                         'chosen_action': 'subscription_pitch',
                         'chosen_channel': 'sms',
-                        'reasoning_snippet': (
-                            f"First direct order from {first_name}. Prime moment to pitch a weekly "
-                            f"subscription — saves ~20% vs daily ordering."
-                        ),
+                        'reasoning_snippet': _reason,
                     })
                     field_opportunities.append({
                         'contact_name': name,
@@ -369,25 +394,51 @@ async def process_daily_orders(file: UploadFile = File(...)):
                             f"to maximise lifetime value."
                         ),
                     })
+                    airtable_tasks.append({
+                        'first_name': first_name, 'last_name': _last_name,
+                        'phone': phone or '', 'email': _email,
+                        'priority': 'Warm', 'action_type': 'subscription_pitch',
+                        'reason': _reason, 'suggested_message': _reason,
+                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
+                        'last_order_at': _last_order_at,
+                    })
                 elif order_total > 0 and order_total < 15:
+                    _reason = (
+                        f"Order value ${order_total:.2f} — suggest add-ons (drinks, desserts) or "
+                        f"upgrade to a family plan to increase order value."
+                    )
                     agent_analysis.append({
                         'contact_name': name,
                         'chosen_action': 'upsell',
                         'chosen_channel': 'sms',
-                        'reasoning_snippet': (
-                            f"Order value ${order_total:.2f} — suggest add-ons (drinks, desserts) or "
-                            f"upgrade to a family plan to increase order value."
-                        ),
+                        'reasoning_snippet': _reason,
+                    })
+                    airtable_tasks.append({
+                        'first_name': first_name, 'last_name': _last_name,
+                        'phone': phone or '', 'email': _email,
+                        'priority': 'Warm', 'action_type': 'upsell',
+                        'reason': _reason, 'suggested_message': _reason,
+                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
+                        'last_order_at': _last_order_at,
                     })
                 else:
+                    _reason = (
+                        f"Regular customer with {prev_orders} prior order(s). Thank {first_name} "
+                        f"personally and share this week's new menu highlights."
+                    )
                     agent_analysis.append({
                         'contact_name': name,
                         'chosen_action': 'loyalty_nurture',
                         'chosen_channel': 'sms',
-                        'reasoning_snippet': (
-                            f"Regular customer with {prev_orders} prior order(s). Thank {first_name} "
-                            f"personally and share this week's new menu highlights."
-                        ),
+                        'reasoning_snippet': _reason,
+                    })
+                    airtable_tasks.append({
+                        'first_name': first_name, 'last_name': _last_name,
+                        'phone': phone or '', 'email': _email,
+                        'priority': 'Cold', 'action_type': 'loyalty_nurture',
+                        'reason': _reason, 'suggested_message': _reason,
+                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
+                        'last_order_at': _last_order_at,
                     })
             else:
                 # Create new contact
@@ -412,14 +463,15 @@ async def process_daily_orders(file: UploadFile = File(...)):
 
                 # Welcome + subscription pitch for brand-new customers
                 first_name = name.split()[0] if name else 'Customer'
+                _new_reason = (
+                    f"New customer {first_name} — send a warm welcome, confirm delivery "
+                    f"satisfaction, and pitch a weekly subscription for ~20% savings."
+                )
                 agent_analysis.append({
                     'contact_name': name,
                     'chosen_action': 'welcome_and_subscribe',
                     'chosen_channel': 'sms',
-                    'reasoning_snippet': (
-                        f"New customer {first_name} — send a warm welcome, confirm delivery "
-                        f"satisfaction, and pitch a weekly subscription for ~20% savings."
-                    ),
+                    'reasoning_snippet': _new_reason,
                 })
                 field_opportunities.append({
                     'contact_name': name,
@@ -428,6 +480,14 @@ async def process_daily_orders(file: UploadFile = File(...)):
                         f"First-ever order from {first_name}. High conversion window — reach out "
                         f"within 2 hours to welcome and offer a subscription trial."
                     ),
+                })
+                airtable_tasks.append({
+                    'first_name': first_n, 'last_name': last_n,
+                    'phone': phone or '', 'email': '',
+                    'priority': 'Warm', 'action_type': 'welcome_and_subscribe',
+                    'reason': _new_reason, 'suggested_message': _new_reason,
+                    'lifecycle_segment': 'new_customer', 'total_orders': 0,
+                    'last_order_at': None,
                 })
 
             # Insert order — resolve dish names against master menu
@@ -552,6 +612,19 @@ async def process_daily_orders(file: UploadFile = File(...)):
             exc_info=True,
         )
 
+    # Push all field agent tasks to Airtable immediately
+    airtable_synced = 0
+    if airtable_tasks:
+        logger.info("Pushing %d tasks to Airtable", len(airtable_tasks))
+        for task in airtable_tasks:
+            try:
+                create_field_sales_task(task)
+                airtable_synced += 1
+            except Exception as e:
+                logger.warning("Airtable task push failed for %s %s: %s",
+                               task.get('first_name'), task.get('last_name'), e)
+        logger.info("Airtable sync complete: %d/%d pushed", airtable_synced, len(airtable_tasks))
+
     return DailyOrderResult(
         date=order_date_str,
         total_orders=order_count,
@@ -572,6 +645,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
         agent_analysis=agent_analysis,
         field_opportunities=field_opportunities,
         campaign_moves=campaign_moves,
+        airtable_synced=airtable_synced,
     )
 
 

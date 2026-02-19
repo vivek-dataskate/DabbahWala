@@ -20,6 +20,8 @@ def _headers() -> dict:
 
 def create_field_sales_task(opportunity: dict) -> str:
     """Create an Airtable record for a field sales task. Returns the Airtable record ID."""
+    if not AIRTABLE_API_KEY or not AIRTABLE_BASE_ID:
+        return ""
     fields = {
         "Customer Name": f"{opportunity.get('first_name', '')} {opportunity.get('last_name', '')}".strip(),
         "Phone": opportunity.get("phone", ""),
@@ -27,6 +29,7 @@ def create_field_sales_task(opportunity: dict) -> str:
         "Priority": opportunity.get("priority", "warm").capitalize(),
         "Reason": opportunity.get("reason", ""),
         "Suggested Action": opportunity.get("suggested_message", ""),
+        "Action Type": opportunity.get("action_type", ""),
         "Lifecycle Stage": opportunity.get("lifecycle_segment", ""),
         "Total Orders": opportunity.get("total_orders", 0),
         "Postgres Opportunity ID": opportunity.get("id"),
@@ -40,6 +43,7 @@ def create_field_sales_task(opportunity: dict) -> str:
         AIRTABLE_URL,
         headers=_headers(),
         json={"fields": fields},
+        timeout=10,
     )
     response.raise_for_status()
     return response.json()["id"]

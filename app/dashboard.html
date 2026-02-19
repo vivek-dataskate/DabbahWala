@@ -617,6 +617,7 @@ async function uploadCSV() {
       <div class="stat-box"><div class="s-label">Revenue</div><div class="s-val blue" style="font-size:1.4rem">USD $${(data.total_revenue||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
       <div class="stat-box"><div class="s-label">New customers</div><div class="s-val" style="color:#6f42c1">${data.new_contacts||0}</div></div>
       <div class="stat-box"><div class="s-label">Returning</div><div class="s-val blue">${data.existing_contacts||0}</div></div>
+      <div class="stat-box"><div class="s-label">Airtable tasks</div><div class="s-val" style="color:#e67e22">${data.airtable_synced||0}</div></div>
     </div>`;
 
     // ── Source breakdown ──────────────────────────────────────────────────────
