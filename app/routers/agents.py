@@ -23,6 +23,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.db import get_cursor
+from app.routers.campaigns import push_lead_to_instantly
+from app.services.airtable_sync import create_field_sales_task
 
 logger = logging.getLogger(__name__)
 
@@ -1262,11 +1264,13 @@ def _run_full_cycle(contact_id: int) -> dict:
     return {
         "contact_id": contact_id,
         "contact_name": f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip(),
+        "contact": contact,
         "inference_id": inference_id,
         "decision_id": decision_id,
         "orchestrator_log_id": orch_log_id,
         "chosen_action": chosen_action,
         "chosen_channel": orch_result.get("chosen_channel"),
+        "action_payload": action_payload,
         "reasoning_snippet": (orch_result.get("reasoning", "") or "")[:200],
         "outcomes_used": len(outcomes),
         "playbook_rules_active": len(playbook.split("\n")) if playbook else 0,
@@ -1723,6 +1727,120 @@ def run_agent_cycle_all():
         time.time() - t_batch,
     )
     return {"processed": len(results), "errors": errors, "results": results}
+
+
+@router.post("/cycle/run-all-contacts")
+def run_agent_cycle_all_contacts(limit: int = 1000):
+    """
+    Run the full inference → decision → orchestrator cycle for ALL non-opted-out contacts,
+    then immediately dispatch each decision:
+      - move_campaign  → push lead to Instantly campaign right now
+      - escalate_airtable → create Airtable task right now
+    Skips the n8n polling delay entirely.
+    """
+    logger.info("POST /cycle/run-all-contacts — selecting up to %d contacts", limit)
+    with get_cursor(commit=False) as cur:
+        cur.execute(
+            """
+            SELECT id FROM contacts
+            WHERE lifecycle_segment != 'optout'
+              AND (email IS NOT NULL OR phone IS NOT NULL)
+            ORDER BY last_order_at DESC NULLS LAST
+            LIMIT %s
+            """,
+            (limit,),
+        )
+        contact_ids = [r["id"] for r in cur.fetchall()]
+
+    logger.info("run-all-contacts: %d eligible contacts", len(contact_ids))
+    if not contact_ids:
+        return {"processed": 0, "campaigns_pushed": 0, "airtable_pushed": 0, "errors": [], "results": []}
+
+    results = []
+    errors = []
+    campaigns_pushed = 0
+    airtable_pushed = 0
+    t_batch = time.time()
+
+    for i, cid in enumerate(contact_ids, 1):
+        try:
+            r = _run_full_cycle(cid)
+            chosen_action = r.get("chosen_action", "none")
+            payload = r.get("action_payload", {})
+            contact = r.get("contact", {})
+
+            if chosen_action == "move_campaign":
+                to_campaign = payload.get("to_campaign", "")
+                email = payload.get("email") or contact.get("email", "")
+                if email and to_campaign:
+                    try:
+                        pushed = push_lead_to_instantly(
+                            email=email,
+                            first_name=contact.get("first_name", ""),
+                            last_name=contact.get("last_name", ""),
+                            phone=payload.get("phone") or contact.get("phone", "") or "",
+                            campaign_name=to_campaign,
+                        )
+                        if pushed:
+                            campaigns_pushed += 1
+                            r["instantly_pushed"] = to_campaign
+                            logger.info(
+                                "Instantly push: contact_id=%s → campaign=%s", cid, to_campaign
+                            )
+                    except Exception as e:
+                        logger.warning("Instantly push failed contact_id=%s: %s", cid, e)
+
+            elif chosen_action == "escalate_airtable":
+                urgency = payload.get("urgency", "high")
+                notes = payload.get("notes", "") or r.get("reasoning_snippet", "")
+                try:
+                    create_field_sales_task({
+                        "first_name": contact.get("first_name", ""),
+                        "last_name": contact.get("last_name", ""),
+                        "phone": contact.get("phone", "") or "",
+                        "email": contact.get("email", "") or "",
+                        "priority": "Hot" if urgency == "high" else "Warm",
+                        "reason": notes,
+                        "suggested_message": notes,
+                        "action_type": "escalate_airtable",
+                        "lifecycle_segment": contact.get("lifecycle_segment", ""),
+                        "total_orders": contact.get("total_orders", 0),
+                        "last_order_at": contact.get("last_order_at"),
+                    })
+                    airtable_pushed += 1
+                    r["airtable_pushed"] = True
+                    logger.info("Airtable task created: contact_id=%s urgency=%s", cid, urgency)
+                except Exception as e:
+                    logger.warning("Airtable push failed contact_id=%s: %s", cid, e)
+
+            # Strip the full contact dict from the result to keep response lean
+            r.pop("contact", None)
+            results.append(r)
+
+            if i % 20 == 0:
+                logger.info(
+                    "run-all-contacts progress: %d/%d | campaigns=%d airtable=%d errors=%d elapsed=%.0fs",
+                    i, len(contact_ids), campaigns_pushed, airtable_pushed, len(errors),
+                    time.time() - t_batch,
+                )
+
+        except Exception as e:
+            logger.error("Cycle failed contact_id=%s in run-all-contacts: %s", cid, e, exc_info=True)
+            errors.append({"contact_id": cid, "error": str(e)})
+
+    elapsed = time.time() - t_batch
+    logger.info(
+        "run-all-contacts complete: processed=%d campaigns_pushed=%d airtable_pushed=%d errors=%d in %.0fs",
+        len(results), campaigns_pushed, airtable_pushed, len(errors), elapsed,
+    )
+    return {
+        "processed": len(results),
+        "campaigns_pushed": campaigns_pushed,
+        "airtable_pushed": airtable_pushed,
+        "errors": errors,
+        "elapsed_seconds": round(elapsed),
+        "results": results,
+    }
 
 
 @router.get("/report/activity-data")

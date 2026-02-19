@@ -71,6 +71,34 @@ _CAMPAIGN_META: dict[str, dict] = {
 }
 
 
+def push_lead_to_instantly(
+    email: str,
+    first_name: str,
+    last_name: str,
+    phone: str,
+    campaign_name: str,
+) -> bool:
+    """
+    Add a lead directly to an Instantly campaign. Returns True on success.
+    Silently returns False if the campaign is unknown or API key is missing.
+    """
+    meta = _CAMPAIGN_META.get(campaign_name)
+    if not meta or not INSTANTLY_API_KEY:
+        return False
+    campaign_id = meta["instantly_id"]
+    lead = {"email": email, "first_name": first_name, "last_name": last_name}
+    if phone:
+        lead["phone"] = phone
+    response = httpx.post(
+        f"https://api.instantly.ai/api/v2/campaigns/{campaign_id}/leads",
+        headers={"Authorization": f"Bearer {INSTANTLY_API_KEY}", "Content-Type": "application/json"},
+        json={"leads": [lead]},
+        timeout=10,
+    )
+    response.raise_for_status()
+    return True
+
+
 def _load_campaign_json(campaign_name: str) -> tuple[dict, dict]:
     """Return (meta, parsed_json) or raise HTTPException."""
     meta = _CAMPAIGN_META.get(campaign_name)

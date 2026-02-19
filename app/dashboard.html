@@ -290,6 +290,13 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 
   <button class="btn" id="u-btn" onclick="uploadCSV()">Upload &amp; Process</button>
   <div id="u-result"></div>
+
+  <hr style="margin:28px 0;border:none;border-top:1.5px solid #e0e0ea">
+
+  <div class="panel-title" style="font-size:1rem;margin-bottom:6px">Run Agents on All Contacts</div>
+  <div class="panel-desc" style="margin-bottom:14px">Run the full inference → decision → orchestration cycle on every non-opted-out contact and immediately dispatch each decision: leads assigned to an Instantly campaign are pushed now, escalations are created as Airtable tasks now — no waiting for the hourly n8n cycle.</div>
+  <button class="btn" id="ra-btn" onclick="runAllAgents()" style="background:#6f42c1">Run Agents on All Contacts</button>
+  <div id="ra-result" style="margin-top:14px"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ REPORTS -->
@@ -718,6 +725,49 @@ async function uploadCSV() {
   } catch(e) {
     setBtn('u-btn', false, 'Upload & Process');
     setError('u-result', 'Network error: ' + e.message);
+  }
+}
+
+// ─── run agents on all contacts ───────────────────────────────────────────────
+async function runAllAgents() {
+  setLoading('ra-result', 'Running inference + decision + orchestration on all contacts… this can take several minutes.');
+  setBtn('ra-btn', true, 'Running…');
+  try {
+    const res  = await fetch('/api/agents/cycle/run-all-contacts', { method: 'POST' });
+    const data = await res.json();
+    setBtn('ra-btn', false, 'Run Agents on All Contacts');
+    if (!res.ok) { setError('ra-result', data.detail || JSON.stringify(data)); return; }
+
+    const actions = {};
+    (data.results || []).forEach(r => {
+      const a = r.chosen_action || 'none';
+      actions[a] = (actions[a] || 0) + 1;
+    });
+    const actionBreakdown = Object.entries(actions)
+      .map(([a, n]) => `<span style="background:${ACTION_COLOR[a]||'#888'}22;color:${ACTION_COLOR[a]||'#888'};padding:3px 10px;border-radius:10px;font-size:0.8rem;font-weight:700;margin:2px">${a}: ${n}</span>`)
+      .join(' ');
+
+    let html = `<div class="upload-summary" style="margin-top:16px">
+      <div class="stat-box"><div class="s-label">Contacts processed</div><div class="s-val green">${data.processed}</div></div>
+      <div class="stat-box"><div class="s-label">Instantly campaigns</div><div class="s-val" style="color:#17a2b8">${data.campaigns_pushed}</div></div>
+      <div class="stat-box"><div class="s-label">Airtable tasks</div><div class="s-val" style="color:#e67e22">${data.airtable_pushed}</div></div>
+      <div class="stat-box"><div class="s-label">Errors</div><div class="s-val red">${(data.errors||[]).length}</div></div>
+      <div class="stat-box"><div class="s-label">Elapsed</div><div class="s-val">${data.elapsed_seconds||'—'}s</div></div>
+    </div>`;
+
+    if (actionBreakdown) {
+      html += `<div style="margin-top:12px">${actionBreakdown}</div>`;
+    }
+
+    if ((data.errors||[]).length > 0) {
+      html += `<details style="margin-top:12px"><summary style="cursor:pointer;font-size:0.85rem;color:#888">${data.errors.length} error(s)</summary>
+        <pre style="font-size:0.78rem;color:#842029;margin-top:6px">${esc(JSON.stringify(data.errors, null, 2))}</pre></details>`;
+    }
+
+    document.getElementById('ra-result').innerHTML = html;
+  } catch(e) {
+    setBtn('ra-btn', false, 'Run Agents on All Contacts');
+    setError('ra-result', 'Network error: ' + e.message);
   }
 }
 
