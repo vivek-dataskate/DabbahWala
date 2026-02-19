@@ -5,14 +5,29 @@
     "schedules": [
       {
         "name": "Weekday",
-        "timing": { "from": "12:00", "to": "22:00" },
-        "days": { "1": true, "2": true, "3": true, "4": true, "5": true },
+        "timing": {
+          "from": "12:00",
+          "to": "22:00"
+        },
+        "days": {
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true
+        },
         "timezone": "America/Detroit"
       },
       {
         "name": "Weekend",
-        "timing": { "from": "09:00", "to": "23:59" },
-        "days": { "0": true, "6": true },
+        "timing": {
+          "from": "09:00",
+          "to": "23:59"
+        },
+        "days": {
+          "0": true,
+          "6": true
+        },
         "timezone": "America/Detroit"
       }
     ],
@@ -124,7 +139,7 @@
             },
             {
               "subject": "We hope to see you more often",
-              "body": "<div>That's the honest version of what we wanted to say.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>DabbahWala works best when it's regular. Not necessarily every day — but often enough that it becomes your default answer to "what am I eating today?"</div><div><br /></div><div>{{RANDOM | We've built everything — the rotating menus, the subscription option, the direct ordering — to make that as easy as possible | Every decision we made about how DabbahWala works was to support frequent, consistent eating | It's all designed to earn your regular business, not just one order}}.</div><div><br /></div><div>If you haven't used <strong>DWALAFEB15</strong> yet — 15% off, $50 minimum, valid 30 days — this is a good time to.</div><div><br /></div><div>See you soon at https://www.dabbahwala.com.</div><div><br /></div><div>– DabbahWala Team</div>"
+              "body": "<div>That's the honest version of what we wanted to say.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>DabbahWala works best when it's regular. Not necessarily every day — but often enough that it becomes your default answer to \"what am I eating today?\"</div><div><br /></div><div>{{RANDOM | We've built everything — the rotating menus, the subscription option, the direct ordering — to make that as easy as possible | Every decision we made about how DabbahWala works was to support frequent, consistent eating | It's all designed to earn your regular business, not just one order}}.</div><div><br /></div><div>If you haven't used <strong>DWALAFEB15</strong> yet — 15% off, $50 minimum, valid 30 days — this is a good time to.</div><div><br /></div><div>See you soon at https://www.dabbahwala.com.</div><div><br /></div><div>– DabbahWala Team</div>"
             }
           ],
           "delay_unit": "days",
@@ -149,5 +164,6 @@
   "allow_risky_contacts": true,
   "disable_bounce_protect": false,
   "cc_list": [],
-  "bcc_list": []
+  "bcc_list": [],
+  "id": "30292b3d-9f39-4ef3-b0ba-ea15c634acef"
 }

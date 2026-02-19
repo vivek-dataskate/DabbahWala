@@ -5,14 +5,29 @@
     "schedules": [
       {
         "name": "Weekday",
-        "timing": { "from": "12:00", "to": "22:00" },
-        "days": { "1": true, "2": true, "3": true, "4": true, "5": true },
+        "timing": {
+          "from": "12:00",
+          "to": "22:00"
+        },
+        "days": {
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true
+        },
         "timezone": "America/Detroit"
       },
       {
         "name": "Weekend",
-        "timing": { "from": "09:00", "to": "23:59" },
-        "days": { "0": true, "6": true },
+        "timing": {
+          "from": "09:00",
+          "to": "23:59"
+        },
+        "days": {
+          "0": true,
+          "6": true
+        },
         "timezone": "America/Detroit"
       }
     ],
@@ -52,14 +67,14 @@
           "variants": [
             {
               "subject": "Why home-style cooking is actually different",
-              "body": "<div>It's not just a marketing phrase.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>{{RANDOM | When people hear "home-style," they often assume it means simple or basic | "Home-style" gets used loosely — we want to explain what it actually means to us | The phrase "home-style" gets thrown around a lot, so let us be specific}}.</div><div><br /></div><div>At DabbahWala, it means cooking the way most households actually cook:</div><div><br /></div><div>Lighter oils that don't leave you feeling heavy.</div><div>No MSG or artificial flavor boosters.</div><div>Vegetables that are cut and prepared the day of cooking, not days before.</div><div>Spices used in balance — not to overpower, but to make the food genuinely enjoyable over time.</div><div><br /></div><div>Restaurant food is designed to impress once. Home-style food is designed to be good every day.</div><div><br /></div><div>That's the difference. And it matters when you're eating from the same kitchen week after week.</div><div><br /></div><div>We'll share more about our menu and how we keep it from feeling repetitive next.</div><div><br /></div><div>– DabbahWala Team</div>"
+              "body": "<div>It's not just a marketing phrase.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>{{RANDOM | When people hear \"home-style,\" they often assume it means simple or basic | \"Home-style\" gets used loosely — we want to explain what it actually means to us | The phrase \"home-style\" gets thrown around a lot, so let us be specific}}.</div><div><br /></div><div>At DabbahWala, it means cooking the way most households actually cook:</div><div><br /></div><div>Lighter oils that don't leave you feeling heavy.</div><div>No MSG or artificial flavor boosters.</div><div>Vegetables that are cut and prepared the day of cooking, not days before.</div><div>Spices used in balance — not to overpower, but to make the food genuinely enjoyable over time.</div><div><br /></div><div>Restaurant food is designed to impress once. Home-style food is designed to be good every day.</div><div><br /></div><div>That's the difference. And it matters when you're eating from the same kitchen week after week.</div><div><br /></div><div>We'll share more about our menu and how we keep it from feeling repetitive next.</div><div><br /></div><div>– DabbahWala Team</div>"
             },
             {
               "subject": "The difference between restaurant food and what we make",
               "body": "<div>It comes down to who the food is made for.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Restaurant food is made to impress. Rich, bold, indulgent.</div><div>That's appropriate — it's a special experience.</div><div><br /></div><div>But it's not the kind of food you can eat every day without feeling it.</div><div><br /></div><div>At DabbahWala, we cook the opposite way.</div><div><br /></div><div>Meals are lighter. Oils are everyday cooking oils, not heavy restaurant bases. Vegetables are fresh, not pre-processed. Nothing is cooked in bulk and reheated.</div><div><br /></div><div>{{RANDOM | The goal is food that feels good the second, third, and fourth time you eat it | We think about how food feels on an ordinary Thursday, not just a Friday night out | We build every dish around whether you'd want to eat it again in three days}}.</div><div><br /></div><div>That's what home-style means to us — food that fits into real life, not just occasions.</div><div><br /></div><div>– DabbahWala Team</div>"
             },
             {
-              "subject": "What "home-style" actually means in our kitchen",
+              "subject": "What \"home-style\" actually means in our kitchen",
               "body": "<div>We use the phrase a lot. Here's what's behind it.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Home-style cooking at DabbahWala isn't about presentation or novelty.</div><div>It's about how the food is actually made.</div><div><br /></div><div>{{RANDOM | We cook with lighter, everyday oils | We avoid the heavy bases and rich oils most restaurant kitchens rely on | Cooking oil makes a bigger difference than most people realize — so we use lighter ones}}.</div><div>No MSG. No artificial flavor enhancers.</div><div>Vegetables are prepared the day of cooking, not days in advance.</div><div>We cook in small batches so nothing sits around.</div><div><br /></div><div>The result is food that tastes clean and familiar — the way a good home-cooked meal feels after a long day.</div><div><br /></div><div>Not trying to be fancy. Just trying to be the food you'd actually want to eat on a regular week.</div><div><br /></div><div>– DabbahWala Kitchen Team</div>"
             }
           ],
@@ -189,5 +204,6 @@
   "allow_risky_contacts": true,
   "disable_bounce_protect": false,
   "cc_list": [],
-  "bcc_list": []
+  "bcc_list": [],
+  "id": "90ecd160-22cc-46b1-9fa5-9342fe970837"
 }

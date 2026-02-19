@@ -5,14 +5,29 @@
     "schedules": [
       {
         "name": "Weekday",
-        "timing": { "from": "12:00", "to": "22:00" },
-        "days": { "1": true, "2": true, "3": true, "4": true, "5": true },
+        "timing": {
+          "from": "12:00",
+          "to": "22:00"
+        },
+        "days": {
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true
+        },
         "timezone": "America/Detroit"
       },
       {
         "name": "Weekend",
-        "timing": { "from": "09:00", "to": "23:59" },
-        "days": { "0": true, "6": true },
+        "timing": {
+          "from": "09:00",
+          "to": "23:59"
+        },
+        "days": {
+          "0": true,
+          "6": true
+        },
         "timezone": "America/Detroit"
       }
     ],
@@ -48,7 +63,7 @@
           "variants": [
             {
               "subject": "How to get the most out of DabbahWala",
-              "body": "<div>A few things we wish every new customer knew from the start.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Now that you've placed your first order, a few things worth knowing:</div><div><br /></div><div><strong>Check the menu regularly.</strong> It rotates. {{RANDOM | There's always something different from the last time you looked | Dishes change frequently, so what's on today might not be on next week | You'll find something new each time you check}}.</div><div><br /></div><div><strong>Reply "Menu" anytime.</strong> If you'd rather not visit the website, reply to any of our emails with Menu and we'll send you today's options and help you order directly.</div><div><br /></div><div><strong>Free delivery over $35.</strong> Ordering for yourself and a partner, or building a slightly larger order, means delivery is on us.</div><div><br /></div><div><strong>Subscriptions exist.</strong> If you find yourself ordering regularly, we can set up a schedule so you don't have to reorder manually each time.</div><div><br /></div><div>Any questions, just reply. We're easy to reach.</div><div><br /></div><div>– DabbahWala Team</div>"
+              "body": "<div>A few things we wish every new customer knew from the start.</div><div><br /></div><div>Hi {{firstName|there}},</div><div><br /></div><div>Now that you've placed your first order, a few things worth knowing:</div><div><br /></div><div><strong>Check the menu regularly.</strong> It rotates. {{RANDOM | There's always something different from the last time you looked | Dishes change frequently, so what's on today might not be on next week | You'll find something new each time you check}}.</div><div><br /></div><div><strong>Reply \"Menu\" anytime.</strong> If you'd rather not visit the website, reply to any of our emails with Menu and we'll send you today's options and help you order directly.</div><div><br /></div><div><strong>Free delivery over $35.</strong> Ordering for yourself and a partner, or building a slightly larger order, means delivery is on us.</div><div><br /></div><div><strong>Subscriptions exist.</strong> If you find yourself ordering regularly, we can set up a schedule so you don't have to reorder manually each time.</div><div><br /></div><div>Any questions, just reply. We're easy to reach.</div><div><br /></div><div>– DabbahWala Team</div>"
             },
             {
               "subject": "A quick guide to making DabbahWala work for you",
@@ -165,5 +180,6 @@
   "allow_risky_contacts": true,
   "disable_bounce_protect": false,
   "cc_list": [],
-  "bcc_list": []
+  "bcc_list": [],
+  "id": "c4c42e73-83fd-4d43-b629-db5b11be66ae"
 }

@@ -5,14 +5,29 @@
     "schedules": [
       {
         "name": "Weekday",
-        "timing": { "from": "12:00", "to": "22:00" },
-        "days": { "1": true, "2": true, "3": true, "4": true, "5": true },
+        "timing": {
+          "from": "12:00",
+          "to": "22:00"
+        },
+        "days": {
+          "1": true,
+          "2": true,
+          "3": true,
+          "4": true,
+          "5": true
+        },
         "timezone": "America/Detroit"
       },
       {
         "name": "Weekend",
-        "timing": { "from": "09:00", "to": "23:59" },
-        "days": { "0": true, "6": true },
+        "timing": {
+          "from": "09:00",
+          "to": "23:59"
+        },
+        "days": {
+          "0": true,
+          "6": true
+        },
         "timezone": "America/Detroit"
       }
     ],
@@ -129,5 +144,6 @@
   "allow_risky_contacts": true,
   "disable_bounce_protect": false,
   "cc_list": [],
-  "bcc_list": []
+  "bcc_list": [],
+  "id": "0c760ec8-3415-48cd-87ff-b58babc17dde"
 }
