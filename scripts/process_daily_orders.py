@@ -33,7 +33,7 @@ import pandas as pd
 # Config
 # ---------------------------------------------------------------------------
 RENDER_URL = os.environ.get("DABBAHWALA_API_URL", "https://dabbahwala-latest.onrender.com")
-ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+ADMIN_SECRET = os.environ.get("ADMIN_SECRET", "")
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +242,7 @@ def process_orders(orders: list, execute: bool = False):
                 'match_type': match_type,
                 'prev_orders': contact.get('total_orders', 0),
                 'lifecycle': contact.get('lifecycle_segment', 'cold'),
+                'primary_source': contact.get('primary_source'),
             })
             contact_id = contact['id']
         else:

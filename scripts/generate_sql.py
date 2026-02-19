@@ -53,7 +53,7 @@ VEG_KEYWORDS = [
     'sambar', 'pungulu', 'upma', 'pesarattu', 'gobi',
 ]
 NON_VEG_KEYWORDS = [
-    'non-veg', 'nonveg', 'chicken', 'goat', 'shrimp', 'mutton', 'egg',
+    'non-veg', 'non veg', 'nonveg', 'chicken', 'goat', 'shrimp', 'mutton', 'egg',
     'fish', 'lamb', 'meat', 'tandoori chicken', 'butter chicken',
     'chicken tikka', 'chicken malai', 'chicken curry', 'chicken dum',
 ]
@@ -68,6 +68,7 @@ def classify_item(name: str) -> tuple:
             category = cat
             break
     is_veg = None
+    # Check non-veg first (longer matches before shorter to avoid 'veg' matching 'non veg')
     if any(kw in lower for kw in NON_VEG_KEYWORDS):
         is_veg = False
     elif any(kw in lower for kw in VEG_KEYWORDS):
