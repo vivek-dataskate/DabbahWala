@@ -1127,6 +1127,20 @@ async function uploadCSV() {
       html += `</div>`;
     }
 
+    // ── Shipday CSV download (always shown as fallback) ──────────────────────
+    if (data.shipday_csv_download_url) {
+      html += `<div style="margin-top:16px;background:#f8f9ff;border:1.5px solid #c7d2fe;border-radius:10px;padding:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:0.88rem;font-weight:700;color:#3730a3">📥 Shipday Import File Ready</div>
+          <div style="font-size:0.78rem;color:#6b7280;margin-top:3px">Use this CSV to manually import orders into Shipday if the automatic push was skipped or had errors.</div>
+        </div>
+        <a href="${esc(data.shipday_csv_download_url)}" download="shipday_orders.csv"
+           style="font-size:0.84rem;font-weight:600;color:#4f46e5;text-decoration:none;border:1.5px solid #4f46e5;padding:7px 16px;border-radius:7px;white-space:nowrap;background:white">
+          Download CSV ↓
+        </a>
+      </div>`;
+    }
+
     document.getElementById('u-result').innerHTML = html;
   } catch(e) {
     setBtn('u-btn', false, 'Upload & Process');
