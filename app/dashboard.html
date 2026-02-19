@@ -156,7 +156,7 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 .suggestion-chip:hover { background: #f0f0f8; border-color: #1a1a2e; color: #1a1a2e; }
 
 /* Chatbot */
-.chat-history { max-height: 500px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; margin-top: 18px; }
+.chat-history { max-height: 500px; overflow-y: auto; display: flex; flex-direction: column-reverse; gap: 16px; margin-top: 18px; }
 .chat-bubble { border-radius: 10px; padding: 14px 18px; font-size: 0.88rem; line-height: 1.65; }
 .chat-bubble.user { background: #1a1a2e; color: white; align-self: flex-end; max-width: 75%; border-bottom-right-radius: 3px; }
 .chat-bubble.assistant { background: white; border: 1.5px solid #e0e0ea; color: #1a1a2e; border-bottom-left-radius: 3px; }
@@ -546,6 +546,20 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
       <button class="suggestion-chip" onclick="askSuggestion(this)">What happens end-to-end when a new order is placed?</button>
       <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system prevent over-messaging contacts?</button>
       <button class="suggestion-chip" onclick="askSuggestion(this)">How are daily reports generated and what do they cover?</button>
+    </div>
+  </div>
+
+  <div style="margin-bottom:14px">
+    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:8px">Technical deep-dives — click to ask</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px">
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What database tables power the lifecycle engine and how are they structured?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the FastAPI router layer decide which agent or handler to invoke?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the end-to-end data flow between Shipday, n8n, and this system?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How are natural-language queries translated into safe SQL and executed?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What retry and error-handling logic exists inside the agent pipeline?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the RAG / vector-store layer retrieve context for the chatbot?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">Which PostgreSQL indexes are used and why were they chosen?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How are API endpoints authenticated and what security controls are in place?</button>
     </div>
   </div>
 
@@ -1352,7 +1366,7 @@ function _appendBubble(role, text, sources) {
     div.textContent = text;
   }
   container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
+  container.scrollTop = 0;
 }
 
 async function sendChat() {
@@ -1372,7 +1386,7 @@ async function sendChat() {
   placeholder.className = 'chat-bubble assistant';
   placeholder.innerHTML = '<span class="spinner"></span> Thinking…';
   container.appendChild(placeholder);
-  container.scrollTop = container.scrollHeight;
+  container.scrollTop = 0;
 
   try {
     const res  = await fetch('/api/chatbot/ask', {
