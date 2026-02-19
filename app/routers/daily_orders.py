@@ -323,6 +323,7 @@ def _upload_shipday_csv_to_drive(csv_content: str, filename: str) -> str:
             body=file_metadata,
             media_body=media,
             fields="id,webViewLink",
+            supportsAllDrives=True,
         ).execute()
 
         link = uploaded.get("webViewLink", "")
