@@ -117,6 +117,13 @@ def _handle_pipeline_snapshot(question: str) -> tuple[str, dict]:
         row = cur.fetchone()
         result = row.get("get_lifecycle_summary") if row else None
 
+    # Parse result early so invalid/empty JSON falls through to the fallback
+    if result and not isinstance(result, dict):
+        try:
+            result = json.loads(result)
+        except (json.JSONDecodeError, TypeError):
+            result = None
+
     if not result:
         # Fallback: direct query
         with get_cursor(commit=False) as cur:
@@ -141,7 +148,7 @@ def _handle_pipeline_snapshot(question: str) -> tuple[str, dict]:
 
         data = {"segments": segments, "total": total}
     else:
-        data = result if isinstance(result, dict) else json.loads(result)
+        data = result  # already a dict (parsed above or returned directly by psycopg2)
         segments = data.get("segments", data)
         total = sum(segments.values()) if isinstance(segments, dict) else 0
         email_promo = data.get("email_promo_count", "?")
