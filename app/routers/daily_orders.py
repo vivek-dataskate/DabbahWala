@@ -288,6 +288,51 @@ def _save_shipday_csv(orders_grouped: dict) -> str:
     return file_id
 
 
+def _upload_shipday_csv_to_drive(csv_content: str, filename: str) -> str:
+    """Upload a CSV string to Google Drive and return the web view link.
+
+    Requires env vars:
+      GOOGLE_SERVICE_ACCOUNT_JSON  — full JSON of the service account key file
+      GOOGLE_DRIVE_FOLDER_ID       — Drive folder ID to upload into
+
+    Returns the Drive web view URL, or empty string on any failure.
+    """
+    sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
+    folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
+    if not sa_json or not folder_id:
+        return ""
+
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+        from googleapiclient.http import MediaIoBaseUpload
+
+        creds = service_account.Credentials.from_service_account_info(
+            json.loads(sa_json),
+            scopes=["https://www.googleapis.com/auth/drive.file"],
+        )
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+
+        file_metadata = {"name": filename, "parents": [folder_id]}
+        media = MediaIoBaseUpload(
+            io.BytesIO(csv_content.encode("utf-8")),
+            mimetype="text/csv",
+            resumable=False,
+        )
+        uploaded = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields="id,webViewLink",
+        ).execute()
+
+        link = uploaded.get("webViewLink", "")
+        logger.info("Shipday CSV uploaded to Drive: %s", link)
+        return link
+    except Exception as e:
+        logger.warning("Google Drive upload failed: %s", e)
+        return ""
+
+
 @router.get("/download-shipday-csv/{file_id}")
 async def download_shipday_csv(file_id: str):
     """Serve a previously generated Shipday import CSV for download."""
@@ -385,6 +430,7 @@ class DailyOrderResult(BaseModel):
     airtable_synced: int = 0
     shipday_result: dict = {}
     shipday_csv_download_url: str = ""
+    shipday_drive_url: str = ""
 
 
 @router.post("/process", response_model=DailyOrderResult)
@@ -903,10 +949,18 @@ async def process_daily_orders(
 
     # Always generate a Shipday CSV so the user can do a manual import if needed
     shipday_csv_url = ""
+    shipday_drive_url = ""
     if orders_grouped:
         try:
-            file_id = _save_shipday_csv(orders_grouped)
+            csv_content = _generate_shipday_csv(orders_grouped)
+            # Save locally as a download fallback
+            _SHIPDAY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+            file_id = str(uuid.uuid4())
+            csv_filename = f"shipday_orders_{order_date_str}.csv"
+            (_SHIPDAY_EXPORT_DIR / f"{file_id}.csv").write_text(csv_content, encoding="utf-8")
             shipday_csv_url = f"/api/daily-orders/download-shipday-csv/{file_id}"
+            # Upload to Google Drive if credentials are configured
+            shipday_drive_url = _upload_shipday_csv_to_drive(csv_content, csv_filename)
         except Exception as e:
             logger.warning("Failed to generate Shipday CSV: %s", e)
 
@@ -933,6 +987,7 @@ async def process_daily_orders(
         airtable_synced=airtable_synced,
         shipday_result=shipday_result,
         shipday_csv_download_url=shipday_csv_url,
+        shipday_drive_url=shipday_drive_url,
     )
 
 
