@@ -10,12 +10,15 @@ import json
 import logging
 import os
 import re
+import uuid
 from collections import defaultdict
 from datetime import datetime
 from difflib import SequenceMatcher
+from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, Form, HTTPException, UploadFile, File
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.db import get_cursor
@@ -204,6 +207,103 @@ async def _push_orders_to_shipday(orders_grouped: dict,
     }
 
 
+# Temp directory where generated Shipday CSVs are stored (cleaned up on server restart)
+_SHIPDAY_EXPORT_DIR = Path("/tmp/shipday_exports")
+
+
+def _generate_shipday_csv(orders_grouped: dict) -> str:
+    """Convert orders_grouped into a Shipday-compatible CSV string for manual import.
+
+    One row per order. Order items are joined as 'Dish (xQty)' entries separated by ' | '.
+    """
+    output = io.StringIO()
+    fieldnames = [
+        "Order Number",
+        "Customer Name",
+        "Customer Phone",
+        "Customer Address",
+        "Restaurant Name",
+        "Expected Delivery Date",
+        "Expected Pickup Time",
+        "Expected Delivery Time",
+        "Delivery Instruction",
+        "Order Items",
+        "Order Total",
+    ]
+    writer = csv.DictWriter(output, fieldnames=fieldnames)
+    writer.writeheader()
+
+    for order_num, item_rows in orders_grouped.items():
+        first = item_rows[0]
+        customer_name = _col(first, 'Customer Name', 'Name', 'Customer', 'customer_name').strip()
+        phone = _col(first, 'Customer Phone Number', 'Phone', 'Customer Phone', 'phone').strip()
+        address = _col(first, 'Customer Address', 'Address', 'address').strip()
+        date_raw = _col(first, 'Date', 'Order Date', 'date', 'order_date').strip()
+        delivery_slot = _col(first, 'Delivery Slot Name', 'Delivery Slot', 'delivery_slot').strip()
+        delivery_instr = _col(first, 'Delivery Instructions', 'Delivery Instruction',
+                              'delivery_instructions').strip()
+        restaurant_name = os.environ.get("SHIPDAY_RESTAURANT_NAME", "DabbahWala")
+
+        try:
+            delivery_date = datetime.strptime(date_raw, '%d/%m/%Y').strftime('%Y-%m-%d')
+        except Exception:
+            delivery_date = datetime.now().strftime('%Y-%m-%d')
+
+        pickup_time, delivery_time = _parse_delivery_slot(delivery_slot)
+
+        item_parts = []
+        order_total = 0.0
+        for row in item_rows:
+            dish = _col(row, 'Dish Name', 'Item Name', 'Product', 'dish_name', 'item_name', 'Item').strip()
+            qty = int(_col(row, 'Quantity', 'Qty', 'qty', 'quantity') or 1)
+            price = float(_col(row, 'Unit Price', 'Price', 'unit_price', 'price') or 0)
+            if dish:
+                item_parts.append(f"{dish} (x{qty})")
+                order_total += qty * price
+
+        writer.writerow({
+            "Order Number": order_num,
+            "Customer Name": customer_name,
+            "Customer Phone": phone,
+            "Customer Address": address,
+            "Restaurant Name": restaurant_name,
+            "Expected Delivery Date": delivery_date,
+            "Expected Pickup Time": pickup_time,
+            "Expected Delivery Time": delivery_time,
+            "Delivery Instruction": delivery_instr,
+            "Order Items": " | ".join(item_parts),
+            "Order Total": f"{order_total:.2f}",
+        })
+
+    return output.getvalue()
+
+
+def _save_shipday_csv(orders_grouped: dict) -> str:
+    """Generate and persist a Shipday CSV to disk. Returns the file_id (UUID stem)."""
+    _SHIPDAY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    file_id = str(uuid.uuid4())
+    csv_path = _SHIPDAY_EXPORT_DIR / f"{file_id}.csv"
+    csv_path.write_text(_generate_shipday_csv(orders_grouped), encoding="utf-8")
+    logger.info("Shipday export CSV saved: %s", csv_path)
+    return file_id
+
+
+@router.get("/download-shipday-csv/{file_id}")
+async def download_shipday_csv(file_id: str):
+    """Serve a previously generated Shipday import CSV for download."""
+    # Sanitise: only allow UUID-shaped IDs
+    if not re.fullmatch(r'[0-9a-f\-]{36}', file_id):
+        raise HTTPException(status_code=400, detail="Invalid file ID")
+    csv_path = _SHIPDAY_EXPORT_DIR / f"{file_id}.csv"
+    if not csv_path.exists():
+        raise HTTPException(status_code=404, detail="File not found or expired")
+    return FileResponse(
+        path=str(csv_path),
+        media_type="text/csv",
+        filename="shipday_orders.csv",
+    )
+
+
 def _load_menu_lookup(cur) -> tuple:
     """Load alias table + master menu items into lookup dicts.
     Returns (alias_map, master_norm_map, master_set).
@@ -284,6 +384,7 @@ class DailyOrderResult(BaseModel):
     campaign_moves: list = []
     airtable_synced: int = 0
     shipday_result: dict = {}
+    shipday_csv_download_url: str = ""
 
 
 @router.post("/process", response_model=DailyOrderResult)
@@ -792,6 +893,15 @@ async def process_daily_orders(
         logger.info("Shipday push skipped — push_to_shipday not set")
         shipday_result = {}
 
+    # Always generate a Shipday CSV so the user can do a manual import if needed
+    shipday_csv_url = ""
+    if orders_grouped:
+        try:
+            file_id = _save_shipday_csv(orders_grouped)
+            shipday_csv_url = f"/api/daily-orders/download-shipday-csv/{file_id}"
+        except Exception as e:
+            logger.warning("Failed to generate Shipday CSV: %s", e)
+
     return DailyOrderResult(
         date=order_date_str,
         total_orders=order_count,
@@ -814,6 +924,7 @@ async def process_daily_orders(
         campaign_moves=campaign_moves,
         airtable_synced=airtable_synced,
         shipday_result=shipday_result,
+        shipday_csv_download_url=shipday_csv_url,
     )
 
 
