@@ -9,6 +9,7 @@ Or configure in Claude Desktop's MCP settings.
 
 from mcp.server.fastmcp import FastMCP
 
+from mcp_server.tools.agents import register_agent_tools
 from mcp_server.tools.analytics import register_analytics_tools
 from mcp_server.tools.communications import register_communications_tools
 from mcp_server.tools.contacts import register_contacts_tools
@@ -23,6 +24,7 @@ register_analytics_tools(mcp)
 register_communications_tools(mcp)
 register_recommendations_tools(mcp)
 register_opportunities_tools(mcp)
+register_agent_tools(mcp)
 
 if __name__ == "__main__":
     mcp.run()

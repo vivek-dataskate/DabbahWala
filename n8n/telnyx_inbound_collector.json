@@ -1,0 +1,524 @@
+{
+  "name": "DabbahWala \u2014 Telnyx Inbound Collector",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/30 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 30 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// 35-minute window so consecutive 30-min runs overlap and miss nothing\nconst now = new Date();\nconst from = new Date(now.getTime() - 35 * 60 * 1000);\nreturn [{ json: {\n  window_from: from.toISOString(),\n  window_to:   now.toISOString()\n}}];"
+      },
+      "id": "build-time-window",
+      "name": "Build Time Window",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.telnyx.com/v2/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter[direction][eq]",
+              "value": "inbound"
+            },
+            {
+              "name": "filter[created_at][gte]",
+              "value": "={{ $json.window_from }}"
+            },
+            {
+              "name": "page[size]",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "fetch-inbound-sms",
+      "name": "Fetch Inbound SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        180
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TELNYX_CREDENTIAL_ID",
+          "name": "Telnyx API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.telnyx.com/v2/recordings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter[created_at][gte]",
+              "value": "={{ $('Build Time Window').item.json.window_from }}"
+            },
+            {
+              "name": "page[size]",
+              "value": "50"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "fetch-call-recordings",
+      "name": "Fetch Call Recordings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        440
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TELNYX_CREDENTIAL_ID",
+          "name": "Telnyx API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Classify inbound SMS \u2014 detect delivery, order, and intent signals\nconst messages = $input.item.json.data || [];\n\nconst ORDER_KEYWORDS    = ['order', 'ordered', 'i want', 'can i order', 'how do i order', 'place an order'];\nconst DELIVERY_KEYWORDS = ['delivered', 'delivery', 'dispatched', 'out for delivery', 'shipped', 'tracking', 'package', 'collect', 'picked up', 'received'];\nconst REORDER_KEYWORDS  = ['again', 'reorder', 'same as last', 'another', 'refill', 'repeat'];\nconst PRICE_KEYWORDS    = ['price', 'cost', 'how much', 'discount', 'offer', 'deal', 'promo'];\n\nreturn messages.map(msg => {\n  const body = (msg.text || '').toLowerCase();\n  const from = msg.from?.phone_number || '';\n  const to   = msg.to?.[0]?.phone_number || '';\n\n  const isOrderSignal    = ORDER_KEYWORDS.some(kw => body.includes(kw));\n  const isDeliverySignal = DELIVERY_KEYWORDS.some(kw => body.includes(kw));\n  const isReorderSignal  = REORDER_KEYWORDS.some(kw => body.includes(kw));\n  const isPriceSignal    = PRICE_KEYWORDS.some(kw => body.includes(kw));\n\n  // Determine event_type to ingest\n  let event_type = 'sms_received';\n  if (isOrderSignal || isReorderSignal) event_type = 'order_intent_sms';\n  else if (isDeliverySignal)            event_type = 'delivery_inquiry_sms';\n  else if (isPriceSignal)               event_type = 'price_inquiry_sms';\n\n  return {\n    json: {\n      telnyx_msg_id: msg.id,\n      from_number: from,\n      to_number: to,\n      body: msg.text || '',\n      direction: 'inbound',\n      status: msg.to?.[0]?.status || 'received',\n      is_delivery_staff: false,\n      is_order_signal: isOrderSignal || isReorderSignal,\n      event_type,\n      metadata: {\n        received_at: msg.received_at,\n        signals: { isOrderSignal, isDeliverySignal, isReorderSignal, isPriceSignal }\n      }\n    }\n  };\n}).filter(m => m.json.from_number);"
+      },
+      "id": "classify-sms",
+      "name": "Classify SMS + Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract key info from call recordings\nconst recordings = $input.item.json.data || [];\n\nconst REORDER_KEYWORDS = ['order again', 'same as last', 'reorder', 'another order', 'repeat', 'refill'];\nconst COMPLAINT_WORDS  = ['late', 'cold', 'wrong', 'missing', 'refund', 'cancel', 'unhappy', 'disappointed'];\n\nreturn recordings.map(rec => {\n  const transcript = (rec.transcription?.transcript || '').toLowerCase();\n  const from = rec.from || '';\n  const to   = rec.to || '';\n\n  const hasReorderSignal  = REORDER_KEYWORDS.some(kw => transcript.includes(kw));\n  const hasComplaintSignal = COMPLAINT_WORDS.some(kw => transcript.includes(kw));\n\n  let event_type = 'call_completed';\n  if (hasReorderSignal)   event_type = 'reorder_intent_call';\n  else if (hasComplaintSignal) event_type = 'complaint_call';\n\n  return {\n    json: {\n      recording_id: rec.id,\n      from_number: from,\n      to_number: to,\n      direction: rec.direction || 'inbound',\n      recording_url: rec.download_url || rec.url || null,\n      transcript: rec.transcription?.transcript || null,\n      summary: null,\n      duration_sec: rec.duration_secs ? Math.round(rec.duration_secs) : null,\n      started_at: rec.start_time || null,\n      ended_at: rec.end_time || null,\n      event_type,\n      has_order_signal: hasReorderSignal,\n      metadata: { recording_id: rec.id, signals: { hasReorderSignal, hasComplaintSignal } }\n    }\n  };\n}).filter(r => r.json.from_number);"
+      },
+      "id": "process-recordings",
+      "name": "Classify Calls + Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-sms",
+              "leftValue": "={{ $json.from_number }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-sms-data",
+      "name": "Has SMS?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-rec",
+              "leftValue": "={{ $json.from_number }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-recording-data",
+      "name": "Has Recording?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/telnyx/message",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_email\": \"\",\n  \"direction\": \"{{ $json.direction }}\",\n  \"from_number\": \"{{ $json.from_number }}\",\n  \"to_number\": \"{{ $json.to_number }}\",\n  \"body\": \"{{ $json.body.replace(/\"/g, '\\\\\"') }}\",\n  \"telnyx_msg_id\": \"{{ $json.telnyx_msg_id }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"is_delivery_staff\": false,\n  \"metadata\": {{ JSON.stringify($json.metadata) }}\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "store-sms",
+      "name": "Store Inbound SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        120
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/events/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_email\": \"\",\n  \"event_type\": \"{{ $('Classify SMS + Signals').item.json.event_type }}\",\n  \"metadata\": {\n    \"source\": \"inbound_sms\",\n    \"body\": \"{{ $('Classify SMS + Signals').item.json.body.replace(/\"/g, '\\\\\"') }}\",\n    \"from_number\": \"{{ $('Classify SMS + Signals').item.json.from_number }}\",\n    \"signals\": {{ JSON.stringify($('Classify SMS + Signals').item.json.metadata.signals) }}\n  }\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "ingest-sms-event",
+      "name": "Ingest SMS Evidence Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        240
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/agents/cycle/run-for-contact",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"phone\": \"{{ $('Classify SMS + Signals').item.json.from_number }}\"\n}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "evaluate-sms-opportunity",
+      "name": "Evaluate Opportunity (SMS)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        180
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/telnyx/call",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_email\": \"\",\n  \"direction\": \"{{ $json.direction }}\",\n  \"from_number\": \"{{ $json.from_number }}\",\n  \"to_number\": \"{{ $json.to_number }}\",\n  \"duration_sec\": {{ $json.duration_sec || 0 }},\n  \"recording_url\": \"{{ $json.recording_url || '' }}\",\n  \"transcript\": \"{{ ($json.transcript || '').replace(/\"/g, '\\\\\"') }}\",\n  \"summary\": null,\n  \"is_delivery_staff\": false,\n  \"started_at\": \"{{ $json.started_at }}\",\n  \"ended_at\": \"{{ $json.ended_at }}\",\n  \"metadata\": {{ JSON.stringify($json.metadata) }}\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "store-call",
+      "name": "Store Call + Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        380
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/events/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_email\": \"\",\n  \"event_type\": \"{{ $('Classify Calls + Signals').item.json.event_type }}\",\n  \"metadata\": {\n    \"source\": \"telnyx_recording\",\n    \"from_number\": \"{{ $('Classify Calls + Signals').item.json.from_number }}\",\n    \"duration_sec\": {{ $('Classify Calls + Signals').item.json.duration_sec || 0 }},\n    \"signals\": {{ JSON.stringify($('Classify Calls + Signals').item.json.metadata.signals) }}\n  }\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "ingest-call-event",
+      "name": "Ingest Call Evidence Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        500
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/agents/cycle/run-for-contact",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"phone\": \"{{ $('Classify Calls + Signals').item.json.from_number }}\"\n}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "evaluate-call-opportunity",
+      "name": "Evaluate Opportunity (Call)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1560,
+        440
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "skip-sms",
+      "name": "Skip \u2014 No SMS",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "skip-call",
+      "name": "Skip \u2014 No Call",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1340,
+        600
+      ]
+    }
+  ],
+  "connections": {
+    "Every 30 Minutes": {
+      "main": [
+        [
+          {
+            "node": "Build Time Window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Time Window": {
+      "main": [
+        [
+          {
+            "node": "Fetch Inbound SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Fetch Call Recordings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Inbound SMS": {
+      "main": [
+        [
+          {
+            "node": "Classify SMS + Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Call Recordings": {
+      "main": [
+        [
+          {
+            "node": "Classify Calls + Signals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify SMS + Signals": {
+      "main": [
+        [
+          {
+            "node": "Has SMS?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Calls + Signals": {
+      "main": [
+        [
+          {
+            "node": "Has Recording?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has SMS?": {
+      "main": [
+        [
+          {
+            "node": "Store Inbound SMS",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip \u2014 No SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Recording?": {
+      "main": [
+        [
+          {
+            "node": "Store Call + Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip \u2014 No Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Inbound SMS": {
+      "main": [
+        [
+          {
+            "node": "Ingest SMS Evidence Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest SMS Evidence Event": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Opportunity (SMS)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Call + Transcript": {
+      "main": [
+        [
+          {
+            "node": "Ingest Call Evidence Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ingest Call Evidence Event": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Opportunity (Call)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Evidence Collection",
+      "id": "evidence"
+    }
+  ],
+  "pinData": {}
+}

@@ -1,0 +1,180 @@
+{
+  "name": "DabbahWala \u2014 Daily Activity Report",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily at 8 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const today = new Date().toISOString().split('T')[0];\nreturn [{ json: { report_date: today } }];"
+      },
+      "id": "get-date",
+      "name": "Get Today's Date",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/agents/report/activity",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"report_date\": \"{{ $json.report_date }}\" }",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "run-activity-report",
+      "name": "Run Activity Report Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "sent-ok",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "sent",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-status",
+      "name": "Email Sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "report-ok",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "report-failed",
+      "name": "Failed \u2014 Check Logs",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1100,
+        380
+      ]
+    }
+  ],
+  "connections": {
+    "Daily at 8 AM": {
+      "main": [
+        [
+          {
+            "node": "Get Today's Date",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Today's Date": {
+      "main": [
+        [
+          {
+            "node": "Run Activity Report Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Activity Report Agent": {
+      "main": [
+        [
+          {
+            "node": "Email Sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email Sent?": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Failed \u2014 Check Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Reporting",
+      "id": "reporting"
+    }
+  ],
+  "pinData": {}
+}

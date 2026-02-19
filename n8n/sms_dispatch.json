@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — SMS Dispatch via Telnyx",
+  "name": "DabbahWala \u2014 SMS Dispatch via Telnyx",
   "nodes": [
     {
       "parameters": {
@@ -16,19 +16,25 @@
       "name": "Every 10 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/sms/pending",
+        "url": "https://dabbahwala-latest.onrender.com/api/sms/pending",
         "options": {}
       },
       "id": "fetch-pending-sms",
       "name": "Fetch Pending SMS Contacts",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -57,7 +63,10 @@
       "name": "Has Pending SMS?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -68,17 +77,23 @@
       "name": "Split Contacts",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [880, 240]
+      "position": [
+        880,
+        240
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// Build SMS payload based on sms_level and lifecycle\nconst contact = $input.item.json;\nconst smsLevel = contact.sms_level || 1;\nconst lifecycle = contact.lifecycle || 'cold';\n\nlet messageBody = '';\n\nif (lifecycle === 'new_customer') {\n  messageBody = `Hi ${contact.contact_email.split('@')[0]}! Thanks for your recent order with DabbahWala. Reply YES for exclusive offers.`;\n} else if (smsLevel >= 3) {\n  messageBody = `We miss you! Your favorites are ready for reorder. Reply ORDER or call us — DabbahWala`;\n} else if (smsLevel >= 2) {\n  messageBody = `Special offer just for you from DabbahWala! Check your email for details. Reply STOP to opt out.`;\n} else {\n  messageBody = `DabbahWala: Fresh items available this week! Reply STOP to opt out.`;\n}\n\nreturn {\n  json: {\n    contact_id: contact.contact_id,\n    phone: contact.phone,\n    email: contact.contact_email,\n    message_body: messageBody,\n    sms_level: smsLevel\n  }\n};"
+        "jsCode": "// Build SMS payload based on sms_level and lifecycle\nconst contact = $input.item.json;\nconst smsLevel = contact.sms_level || 1;\nconst lifecycle = contact.lifecycle || 'cold';\n\nlet messageBody = '';\n\nif (lifecycle === 'new_customer') {\n  messageBody = `Hi ${contact.contact_email.split('@')[0]}! Thanks for your recent order with DabbahWala. Reply YES for exclusive offers.`;\n} else if (smsLevel >= 3) {\n  messageBody = `We miss you! Your favorites are ready for reorder. Reply ORDER or call us \u2014 DabbahWala`;\n} else if (smsLevel >= 2) {\n  messageBody = `Special offer just for you from DabbahWala! Check your email for details. Reply STOP to opt out.`;\n} else {\n  messageBody = `DabbahWala: Fresh items available this week! Reply STOP to opt out.`;\n}\n\nreturn {\n  json: {\n    contact_id: contact.contact_id,\n    phone: contact.phone,\n    email: contact.contact_email,\n    message_body: messageBody,\n    sms_level: smsLevel\n  }\n};"
       },
       "id": "build-message",
       "name": "Build SMS Message",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 240]
+      "position": [
+        1100,
+        240
+      ]
     },
     {
       "parameters": {
@@ -95,7 +110,10 @@
       "name": "Send via Telnyx",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 240],
+      "position": [
+        1320,
+        240
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "TELNYX_CREDENTIAL_ID",
@@ -106,7 +124,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/sms/{{ $('Build SMS Message').item.json.contact_id }}/sent",
+        "url": "https://dabbahwala-latest.onrender.com/api/sms/{{ $('Build SMS Message').item.json.contact_id }}/sent",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"telnyx_msg_id\": \"{{ $json.data?.id || '' }}\"\n}",
@@ -116,12 +134,15 @@
       "name": "Mark SMS Sent",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 240]
+      "position": [
+        1540,
+        240
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/telnyx/message",
+        "url": "https://dabbahwala-latest.onrender.com/api/telnyx/message",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"contact_email\": \"{{ $('Build SMS Message').item.json.email }}\",\n  \"direction\": \"outbound\",\n  \"from_number\": \"{{$env.TELNYX_FROM_NUMBER}}\",\n  \"to_number\": \"{{ $('Build SMS Message').item.json.phone }}\",\n  \"body\": \"{{ $('Build SMS Message').item.json.message_body }}\",\n  \"telnyx_msg_id\": \"{{ $json.data?.id || '' }}\",\n  \"status\": \"sent\",\n  \"is_delivery_staff\": false,\n  \"metadata\": {}\n}",
@@ -131,15 +152,21 @@
       "name": "Store in Telnyx Messages",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1760, 240]
+      "position": [
+        1760,
+        240
+      ]
     },
     {
       "parameters": {},
       "id": "no-pending",
-      "name": "No Pending — Skip",
+      "name": "No Pending \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [880, 400]
+      "position": [
+        880,
+        400
+      ]
     }
   ],
   "connections": {
@@ -176,7 +203,7 @@
         ],
         [
           {
-            "node": "No Pending — Skip",
+            "node": "No Pending \u2014 Skip",
             "type": "main",
             "index": 0
           }
@@ -232,7 +259,7 @@
       "id": "dabbahwala"
     },
     {
-      "name": "Step 3 — SMS",
+      "name": "Step 3 \u2014 SMS",
       "id": "step3-sms"
     }
   ],
