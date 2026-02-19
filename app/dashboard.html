@@ -216,7 +216,7 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 <!-- ══════════════════════════════════════════════════════ UPLOAD -->
 <div id="panel-upload" class="panel">
   <div class="panel-title">Upload Daily Orders CSV</div>
-  <div class="panel-desc">Upload a CSV of today's orders. Each row is matched to a contact and an <code>order_placed</code> event is recorded. Column names are matched flexibly.</div>
+  <div class="panel-desc">Upload a CSV of today's orders. Each row is matched to a contact and an <code>order_placed</code> event is recorded. After ingestion the system automatically runs the full inference → decision → orchestration cycle for up to 5 contacts and returns actionable recommendations for your field agents.</div>
 
   <div class="form-group" style="margin-bottom:20px">
     <label>Expected columns <span class="hint">(any order, extra columns ignored)</span></label>
@@ -408,11 +408,18 @@ function copyTone(key, btn) {
 }
 
 // ─── upload ───────────────────────────────────────────────────────────────────
+const ACTION_COLOR = {
+  send_sms:         '#28a745',
+  move_campaign:    '#17a2b8',
+  escalate_airtable:'#dc3545',
+  none:             '#aaa',
+};
+
 async function uploadCSV() {
   const fileInput = document.getElementById('u-file');
   if (!fileInput.files.length) { setError('u-result', 'Please select a CSV file.'); return; }
-  setLoading('u-result', 'Uploading and processing…');
-  setBtn('u-btn', true, 'Uploading…');
+  setLoading('u-result', 'Uploading, ingesting orders, and running agent analysis… (may take 30–60 s)');
+  setBtn('u-btn', true, 'Processing…');
   const formData = new FormData();
   formData.append('file', fileInput.files[0]);
   try {
@@ -421,18 +428,80 @@ async function uploadCSV() {
     setBtn('u-btn', false, 'Upload & Process');
     if (!res.ok) { setError('u-result', data.detail || JSON.stringify(data)); return; }
 
-    let html = `<div class="upload-summary">
+    const s = data.upload_summary || {};
+
+    // ── Stat row ──────────────────────────────────────────────────────────────
+    let html = `<div class="upload-summary" style="margin-top:20px">
       <div class="stat-box"><div class="s-label">Ingested</div><div class="s-val green">${data.ingested}</div></div>
       <div class="stat-box"><div class="s-label">Skipped</div><div class="s-val red">${data.skipped}</div></div>
-      <div class="stat-box"><div class="s-label">Date</div><div class="s-val blue" style="font-size:1.3rem">${esc(data.date)}</div></div>
+      <div class="stat-box"><div class="s-label">Revenue</div><div class="s-val blue" style="font-size:1.4rem">AED ${(s.total_revenue_aed||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
+      <div class="stat-box"><div class="s-label">New customers</div><div class="s-val" style="color:#6f42c1">${s.new_customers||0}</div></div>
+      <div class="stat-box"><div class="s-label">Returning</div><div class="s-val blue">${s.returning_customers||0}</div></div>
     </div>`;
-    if (data.message) html += `<p style="margin-top:12px;color:#888;font-size:0.87rem">${esc(data.message)}</p>`;
-    if (data.skipped_detail && data.skipped_detail.length) {
-      html += `<details><summary>${data.skipped_detail.length} skipped rows (click to expand)</summary><pre>${esc(JSON.stringify(data.skipped_detail, null, 2))}</pre></details>`;
+
+    // ── Source breakdown ──────────────────────────────────────────────────────
+    if (s.by_source && Object.keys(s.by_source).length) {
+      html += `<div style="margin-top:14px;background:white;border:1.5px solid #e0e0ea;border-radius:10px;padding:16px">
+        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:10px">Orders by source</div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap">`;
+      for (const [src, cnt] of Object.entries(s.by_source)) {
+        html += `<div><span style="font-weight:600">${esc(src)}</span> <span style="color:#888">${cnt} orders</span></div>`;
+      }
+      html += `</div></div>`;
     }
-    if (data.parse_errors && data.parse_errors.length) {
-      html += `<details><summary>${data.parse_errors.length} parse warnings</summary><pre>${esc(JSON.stringify(data.parse_errors, null, 2))}</pre></details>`;
+
+    // ── Agent analysis table ──────────────────────────────────────────────────
+    const analysis = data.agent_analysis || [];
+    if (analysis.length) {
+      html += `<div style="margin-top:16px">
+        <div style="font-size:0.9rem;font-weight:700;margin-bottom:10px">Agent Recommendations (${analysis.length} contact${analysis.length>1?'s':''})</div>
+        <div style="background:white;border:1.5px solid #e0e0ea;border-radius:10px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:0.84rem">
+          <thead><tr style="background:#f4f4f7">
+            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Contact</th>
+            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Action</th>
+            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Channel</th>
+            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Reasoning</th>
+          </tr></thead>
+          <tbody>`;
+      for (const r of analysis) {
+        if (r.error) {
+          html += `<tr><td colspan="4" style="padding:10px 14px;color:#dc3545;font-size:0.82rem">Error: ${esc(r.error)}</td></tr>`;
+          continue;
+        }
+        const action = r.chosen_action || 'none';
+        const color  = ACTION_COLOR[action] || '#aaa';
+        html += `<tr style="border-top:1px solid #f0f0f5">
+          <td style="padding:10px 14px;font-weight:500">${esc(r.contact_name||'—')}</td>
+          <td style="padding:10px 14px"><span style="background:${color}22;color:${color};padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:700">${esc(action)}</span></td>
+          <td style="padding:10px 14px;color:#666">${esc(r.chosen_channel||'—')}</td>
+          <td style="padding:10px 14px;color:#555;font-size:0.82rem;max-width:280px">${esc((r.reasoning_snippet||'').slice(0,140))}${(r.reasoning_snippet||'').length>140?'…':''}</td>
+        </tr>`;
+      }
+      html += `</tbody></table></div></div>`;
     }
+
+    // ── Field opportunities (escalations) ─────────────────────────────────────
+    const opps = data.field_opportunities || [];
+    if (opps.length) {
+      html += `<div style="margin-top:16px;background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:16px">
+        <div style="font-size:0.85rem;font-weight:700;color:#842029;margin-bottom:10px">🚨 Field Agent Opportunities (${opps.length})</div>`;
+      for (const o of opps) {
+        const color = ACTION_COLOR[o.action] || '#aaa';
+        html += `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #f5c2c7">
+          <span style="font-weight:600">${esc(o.contact_name)}</span>
+          <span style="background:${color}22;color:${color};padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:700;margin-left:8px">${esc(o.action)}</span>
+          <div style="font-size:0.83rem;color:#666;margin-top:4px">${esc(o.reasoning)}</div>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    // ── Note + collapsible details ─────────────────────────────────────────────
+    if (data.note) html += `<p style="margin-top:12px;color:#888;font-size:0.83rem">ℹ️ ${esc(data.note)}</p>`;
+    if (data.skipped_detail?.length) html += `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:0.83rem;color:#888">${data.skipped_detail.length} skipped rows</summary><pre style="font-size:0.78rem;margin-top:6px">${esc(JSON.stringify(data.skipped_detail,null,2))}</pre></details>`;
+    if (data.parse_errors?.length)   html += `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.83rem;color:#888">${data.parse_errors.length} parse warnings</summary><pre style="font-size:0.78rem;margin-top:6px">${esc(JSON.stringify(data.parse_errors,null,2))}</pre></details>`;
+
     document.getElementById('u-result').innerHTML = html;
   } catch(e) {
     setBtn('u-btn', false, 'Upload & Process');
