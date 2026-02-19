@@ -587,6 +587,13 @@ const ACTION_COLOR = {
   escalate_airtable:'#dc3545',
   none:             '#aaa',
 };
+const CAMPAIGN_COLOR = {
+  NURTURE_SLOW:             '#6c757d',
+  PROMO_STANDARD:           '#0d6efd',
+  PROMO_AGGRESSIVE:         '#fd7e14',
+  NEW_CUSTOMER_ONBOARDING:  '#28a745',
+  REACTIVATION:             '#dc3545',
+};
 
 async function uploadCSV() {
   const fileInput = document.getElementById('u-file');
@@ -668,6 +675,37 @@ async function uploadCSV() {
         </div>`;
       }
       html += `</div>`;
+    }
+
+    // ── Campaign moves (automatic lifecycle decisions) ────────────────────────
+    const moves = data.campaign_moves || [];
+    if (moves.length) {
+      html += `<div style="margin-top:16px">
+        <div style="font-size:0.9rem;font-weight:700;margin-bottom:10px">Campaign Moves — Automatic (${moves.length} contact${moves.length>1?'s':''})</div>
+        <div style="background:white;border:1.5px solid #e0e0ea;border-radius:10px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:0.84rem">
+          <thead><tr style="background:#f4f4f7">
+            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Contact</th>
+            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Segment</th>
+            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">From</th>
+            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700"></th>
+            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">To</th>
+          </tr></thead>
+          <tbody>`;
+      for (const m of moves) {
+        const fromColor = CAMPAIGN_COLOR[m.from_campaign] || '#aaa';
+        const toColor   = CAMPAIGN_COLOR[m.to_campaign]   || '#aaa';
+        html += `<tr style="border-top:1px solid #f0f0f5">
+          <td style="padding:10px 14px;font-weight:500">${esc(m.contact_name||'—')}</td>
+          <td style="padding:10px 14px;color:#666;font-size:0.8rem">${esc(m.segment||'—')}</td>
+          <td style="padding:10px 14px"><span style="background:${fromColor}22;color:${fromColor};padding:3px 8px;border-radius:10px;font-size:0.75rem;font-weight:700">${esc(m.from_campaign||'none')}</span></td>
+          <td style="padding:6px 4px;color:#999;font-size:1rem">→</td>
+          <td style="padding:10px 14px"><span style="background:${toColor}22;color:${toColor};padding:3px 8px;border-radius:10px;font-size:0.75rem;font-weight:700">${esc(m.to_campaign)}</span></td>
+        </tr>`;
+      }
+      html += `</tbody></table></div></div>`;
+    } else if (data.campaigns_queued === 0 && data.lifecycle_updated > 0) {
+      html += `<p style="margin-top:12px;color:#888;font-size:0.83rem">Lifecycle evaluated for ${data.lifecycle_updated} contacts — no campaign changes needed.</p>`;
     }
 
     // ── Note + collapsible details ─────────────────────────────────────────────

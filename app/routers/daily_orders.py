@@ -130,6 +130,7 @@ class DailyOrderResult(BaseModel):
     menu_items_created: int
     agent_analysis: list = []
     field_opportunities: list = []
+    campaign_moves: list = []
 
 
 @router.post("/process", response_model=DailyOrderResult)
@@ -505,8 +506,10 @@ async def process_daily_orders(file: UploadFile = File(...)):
     # Run lifecycle cycle
     lifecycle_updated = 0
     campaigns_queued = 0
+    campaign_moves: list = []
     logger.info("Running lifecycle cycle after order ingestion")
     try:
+        cycle_started_at = datetime.utcnow()
         with get_cursor(commit=True) as cur:
             cur.execute("SELECT * FROM run_lifecycle_cycle()")
             row = cur.fetchone()
@@ -517,6 +520,31 @@ async def process_daily_orders(file: UploadFile = File(...)):
             lifecycle_updated,
             campaigns_queued,
         )
+        # Fetch the campaign moves that were just queued by this upload
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                """
+                SELECT cq.from_campaign,
+                       cq.to_campaign,
+                       c.first_name || ' ' || coalesce(c.last_name, '') AS contact_name,
+                       c.lifecycle_segment AS segment
+                FROM campaign_queue cq
+                JOIN contacts c ON c.id = cq.contact_id
+                WHERE cq.created_at >= %s AND cq.status = 'pending'
+                ORDER BY cq.created_at
+                LIMIT 100
+                """,
+                (cycle_started_at,),
+            )
+            campaign_moves = [
+                {
+                    'contact_name': r['contact_name'].strip(),
+                    'from_campaign': r['from_campaign'],
+                    'to_campaign': r['to_campaign'],
+                    'segment': r['segment'],
+                }
+                for r in cur.fetchall()
+            ]
     except Exception as e:
         logger.error(
             "Lifecycle cycle failed after order ingestion: %s — orders still saved",
@@ -543,6 +571,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
         menu_items_created=menu_created,
         agent_analysis=agent_analysis,
         field_opportunities=field_opportunities,
+        campaign_moves=campaign_moves,
     )
 
 
