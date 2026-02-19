@@ -16,11 +16,9 @@ n8n workflow:
   2. POST /api/playbook/sync with all active records
   3. Playbook is cached and injected into Claude's system prompt
 """
-import json
 import os
-from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.db import get_cursor
