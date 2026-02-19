@@ -1,4 +1,7 @@
+import os
+
 from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
 
 from app.routers import agents, campaigns, daily_orders, delivery, events, lifecycle, opportunities, query, reports, sms, telnyx
 
@@ -19,6 +22,14 @@ app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opp
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(daily_orders.router, prefix="/api/daily-orders", tags=["daily-orders"])
 app.include_router(query.router, prefix="/api/query", tags=["query"])
+
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard():
+    """Interactive marketing intelligence dashboard."""
+    html_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
+    with open(html_path) as f:
+        return f.read()
 
 
 @app.get("/health")

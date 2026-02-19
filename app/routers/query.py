@@ -16,6 +16,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from app.db import get_cursor
+from app.services.airtable_sync import log_query_to_airtable
 
 router = APIRouter()
 
@@ -328,6 +329,73 @@ def _free_form(question: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Tone drafts
+# ---------------------------------------------------------------------------
+
+class ToneRequest(BaseModel):
+    contact_email: str
+    goal: str
+
+
+_TONES = {
+    "warm":   "friendly, personal, and empathetic — like a message from someone who genuinely cares",
+    "urgent": "time-sensitive and action-oriented — creates a sense of urgency without being pushy",
+    "casual": "relaxed and conversational — like a WhatsApp message from a friend",
+}
+
+
+@router.post("/tone")
+def tone_drafts(req: ToneRequest):
+    """
+    Generate three message drafts (warm / urgent / casual) for a specific contact.
+    """
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        return {"error": "AI not configured (ANTHROPIC_API_KEY missing)"}
+
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT first_name, last_name, lifecycle_segment, total_orders, last_order_date
+            FROM contacts WHERE email = %s
+        """, (req.contact_email,))
+        row = cur.fetchone()
+
+    if not row:
+        return {"error": f"Contact not found: {req.contact_email}"}
+
+    c = dict(row)
+    name = f"{c.get('first_name') or ''} {c.get('last_name') or ''}".strip()
+    profile = (
+        f"Customer name: {name}\n"
+        f"Lifecycle stage: {c.get('lifecycle_segment')}\n"
+        f"Total orders: {c.get('total_orders', 0)}\n"
+        f"Last order: {c.get('last_order_date') or 'never'}"
+    )
+
+    client = anthropic.Anthropic(api_key=api_key)
+    result = {"contact_name": name}
+
+    for tone_name, tone_desc in _TONES.items():
+        resp = client.messages.create(
+            model=MODEL,
+            max_tokens=200,
+            system=(
+                f"You write marketing SMS/WhatsApp messages for DabbahWala, a food delivery "
+                f"business in the UAE. Write ONE short message (max 160 chars) in a {tone_name} "
+                f"tone: {tone_desc}. Use the customer's first name directly — no placeholders. "
+                f"Output only the message text, nothing else."
+            ),
+            messages=[{
+                "role": "user",
+                "content": f"Customer profile:\n{profile}\n\nGoal: {req.goal}",
+            }],
+        )
+        result[tone_name] = resp.content[0].text.strip() if resp.content else ""
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Main route
 # ---------------------------------------------------------------------------
 
@@ -357,5 +425,11 @@ def handle_query(req: QueryRequest):
         answer = _communication_history(email)
     else:
         answer = _free_form(question)
+
+    # Persist to Airtable Query Log (fire-and-forget — never blocks the response)
+    try:
+        log_query_to_airtable(category, question, answer, email)
+    except Exception:
+        pass
 
     return {"formatted_answer": answer, "category": category}
