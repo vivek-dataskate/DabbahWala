@@ -33,6 +33,73 @@ def normalize_name(name: str) -> str:
     return name
 
 
+def normalize_dish(name: str) -> str:
+    """Normalize dish name for matching: lowercase, strip, collapse spaces."""
+    name = name.strip()
+    name = re.sub(r'\s+', ' ', name)
+    return name
+
+
+def _load_menu_lookup(cur) -> tuple:
+    """Load alias table + master menu items into lookup dicts.
+    Returns (alias_map, master_norm_map, master_set).
+    """
+    # alias table: csv_name -> canonical_name
+    alias_map = {}
+    try:
+        cur.execute("SELECT alias, canonical_name FROM menu_item_aliases")
+        for r in cur.fetchall():
+            alias_map[r['alias']] = r['canonical_name']
+            alias_map[r['alias'].strip()] = r['canonical_name']
+    except Exception:
+        pass  # table may not exist yet
+
+    # master menu items: normalized -> actual name
+    cur.execute("SELECT id, item_name, category, is_veg, avg_price FROM menu_items WHERE is_active = true")
+    master_rows = cur.fetchall()
+    master_set = {r['item_name'] for r in master_rows}
+    master_norm = {}
+    for r in master_rows:
+        norm = r['item_name'].strip().lower()
+        master_norm[norm] = r['item_name']
+
+    return alias_map, master_norm, master_set
+
+
+def resolve_dish_name(raw_name: str, alias_map: dict, master_norm: dict, master_set: set) -> str:
+    """Resolve a CSV dish name to a canonical master menu item.
+    Priority: exact match -> alias -> normalized match -> fuzzy match -> return cleaned name.
+    """
+    cleaned = normalize_dish(raw_name)
+
+    # 1. Exact match in master
+    if cleaned in master_set:
+        return cleaned
+
+    # 2. Alias lookup (exact)
+    if cleaned in alias_map:
+        return alias_map[cleaned]
+
+    # 3. Normalized (case-insensitive) match
+    norm = cleaned.lower()
+    if norm in master_norm:
+        return master_norm[norm]
+
+    # 4. Fuzzy match against master (threshold 0.85)
+    best_score = 0
+    best_match = None
+    for master_name in master_set:
+        score = SequenceMatcher(None, norm, master_name.lower()).ratio()
+        if score > best_score and score >= 0.85:
+            best_score = score
+            best_match = master_name
+    if best_match:
+        return best_match
+
+    # 5. No match — return cleaned name (will be created as new item)
+    return cleaned
+
+
 class DailyOrderResult(BaseModel):
     date: str
     total_orders: int
@@ -43,6 +110,8 @@ class DailyOrderResult(BaseModel):
     opportunities_created: int
     lifecycle_updated: int
     campaigns_queued: int
+    menu_items_matched: int
+    menu_items_created: int
 
 
 @router.post("/process", response_model=DailyOrderResult)
@@ -65,7 +134,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
         if order_num:
             orders_grouped[order_num].append(row)
 
-    # Build contact lookup
+    # Build contact + menu lookups
     with get_cursor(commit=False) as cur:
         cur.execute("SELECT id, email, phone, first_name, last_name, total_orders, "
                      "last_order_at, lifecycle_segment, primary_source FROM contacts "
@@ -84,11 +153,15 @@ async def process_daily_orders(file: UploadFile = File(...)):
             if full:
                 name_lookup[full] = dict(r)
 
+        alias_map, master_norm, master_set = _load_menu_lookup(cur)
+
     new_contact_count = 0
     existing_contact_count = 0
     order_count = 0
     item_count = 0
     opportunity_count = 0
+    menu_matched = 0
+    menu_created = 0
     order_date_str = ''
 
     with get_cursor(commit=True) as cur:
@@ -186,15 +259,16 @@ async def process_daily_orders(file: UploadFile = File(...)):
                     phone_lookup[phone] = {'id': contact_id, 'total_orders': 0,
                                             'lifecycle_segment': 'new_customer'}
 
-            # Insert order
+            # Insert order — resolve dish names against master menu
             items = []
             total_amount = 0
             for row in item_rows:
-                dish = row.get('Dish Name', '').strip()
+                raw_dish = row.get('Dish Name', '').strip()
                 qty = int(row.get('Quantity', 1) or 1)
                 price = float(row.get('Unit Price', 0) or 0)
-                if dish:
-                    items.append((dish, qty, price, qty * price))
+                if raw_dish:
+                    canonical = resolve_dish_name(raw_dish, alias_map, master_norm, master_set)
+                    items.append((canonical, qty, price, qty * price))
                     total_amount += qty * price
 
             cur.execute(
@@ -208,13 +282,19 @@ async def process_daily_orders(file: UploadFile = File(...)):
             order_db_id = order_row['id']
             order_count += 1
 
-            # Insert items
+            # Insert items with resolved canonical names
             for dish, qty, price, line_total in items:
-                # Upsert menu item
-                cur.execute(
-                    "INSERT INTO menu_items (item_name) VALUES (%s) "
-                    "ON CONFLICT (item_name) DO NOTHING", (dish,)
-                )
+                if dish in master_set:
+                    menu_matched += 1
+                else:
+                    # New item not in master — create with price from CSV
+                    cur.execute(
+                        "INSERT INTO menu_items (item_name, avg_price) VALUES (%s, %s) "
+                        "ON CONFLICT (item_name) DO NOTHING", (dish, price)
+                    )
+                    master_set.add(dish)
+                    menu_created += 1
+
                 cur.execute(
                     "INSERT INTO order_items (order_id, menu_item_id, item_name, quantity, unit_price, line_total) "
                     "VALUES (%s, (SELECT id FROM menu_items WHERE item_name = %s LIMIT 1), %s, %s, %s, %s)",
@@ -266,6 +346,8 @@ async def process_daily_orders(file: UploadFile = File(...)):
         opportunities_created=opportunity_count,
         lifecycle_updated=lifecycle_updated,
         campaigns_queued=campaigns_queued,
+        menu_items_matched=menu_matched,
+        menu_items_created=menu_created,
     )
 
 
