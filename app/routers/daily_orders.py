@@ -117,9 +117,17 @@ class DailyOrderResult(BaseModel):
 @router.post("/process", response_model=DailyOrderResult)
 async def process_daily_orders(file: UploadFile = File(...)):
     """
+    Upload a CSV of daily orders. Columns are matched flexibly.
+    After ingestion:
+      1. Summarizes the data (revenue, by source, new vs returning).
+      2. Runs the full inference→decision→orchestration cycle for each
+         ingested contact (capped at 5 to stay within response time limits).
+      3. Returns actionable field opportunities alongside the ingest stats.
     Upload a processing-data-YYYY-MM-DD.csv and process all orders.
     Creates new contacts, records orders + items, fires events, detects opportunities.
     """
+    from collections import Counter
+
     content = await file.read()
     reader = csv.DictReader(io.StringIO(content.decode('utf-8')))
     rows = list(reader)
