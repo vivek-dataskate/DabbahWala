@@ -1,4 +1,4 @@
--- 024_instantly_campaign_routing_v2.sql
+-- 031_instantly_campaign_routing_v2.sql
 -- Map each campaign_routing row to its dedicated Instantly campaign
 -- Replaces the single-campaign mapping from migration 023
 
