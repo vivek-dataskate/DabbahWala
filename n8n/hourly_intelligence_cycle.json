@@ -106,20 +106,78 @@
     },
     {
       "parameters": {
+        "jsCode": "// Split pending actions response into individual items tagged by action type\nconst data = $('Get Pending Actions').first().json;\nconst items = [];\n\n// SMS opportunities\nfor (const sms of (data.sms_to_send || [])) {\n  items.push({ json: { ...sms, _action_type: 'send_sms' } });\n}\n\n// Sales call opportunities\nfor (const call of (data.sales_calls || [])) {\n  items.push({ json: { ...call, _action_type: 'field_sales_call' } });\n}\n\n// Email opportunities\nfor (const email of (data.emails_to_send || [])) {\n  items.push({ json: { ...email, _action_type: 'send_email' } });\n}\n\nreturn items.length > 0 ? items : [{ json: { _action_type: 'none' } }];"
+      },
+      "id": "split-actions",
+      "name": "Split Into Individual Actions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 240]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._action_type }}",
+                    "rightValue": "send_sms",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "SMS"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._action_type }}",
+                    "rightValue": "field_sales_call",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "Sales Call"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "route-by-type",
+      "name": "Route by Action Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1620, 240]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "=https://api.telnyx.com/v2/messages",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"from\": \"+18444322224\",\n  \"to\": \"+1{{ $json.phone }}\",\n  \"text\": \"{{ $json.suggested_message }}\"\n}",
+        "jsonBody": "={\n  \"from\": \"+18444322224\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.template_body || $json.suggested_message || 'Check out today\\'s fresh menu at dabbahwala.com!' }}\"\n}",
         "options": {}
       },
       "id": "send-sms",
       "name": "Send SMS via Telnyx",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1420, 150],
+      "position": [1860, 100],
       "credentials": {
         "httpHeaderAuth": {
           "id": "XnntvX8AXpdR97oQ",
@@ -130,19 +188,34 @@
     {
       "parameters": {
         "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/opportunities/{{ $('Route by Action Type').item.json.id }}/dispatched",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"airtable_record_id\": \"sms-{{ $now.toMillis() }}\"\n}",
+        "options": {}
+      },
+      "id": "mark-sms-dispatched",
+      "name": "Mark SMS Dispatched",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2080, 100]
+    },
+    {
+      "parameters": {
+        "method": "POST",
         "url": "=https://api.airtable.com/v0/appuy2VTIao6XVpIW/Field%20Sales%20Tasks",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"fields\": {\n    \"Customer Name\": \"{{ $json.first_name }} {{ $json.last_name }}\",\n    \"Phone\": \"{{ $json.phone }}\",\n    \"Priority\": \"{{ $json.priority }}\",\n    \"Reason\": \"{{ $json.reason }}\",\n    \"Suggested Action\": \"{{ $json.suggested_message }}\",\n    \"Status\": \"New\"\n  }\n}",
+        "jsonBody": "={\n  \"fields\": {\n    \"Customer Name\": \"{{ $json.first_name || '' }} {{ $json.last_name || '' }}\",\n    \"Phone\": \"{{ $json.phone || '' }}\",\n    \"Priority\": \"{{ $json.priority || 'warm' }}\",\n    \"Reason\": \"{{ $json.reason || '' }}\",\n    \"Suggested Action\": \"{{ $json.suggested_message || '' }}\",\n    \"Status\": \"New\",\n    \"Postgres Opportunity ID\": {{ $json.id || 0 }}\n  }\n}",
         "options": {}
       },
       "id": "create-airtable-task",
       "name": "Create Airtable Sales Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1420, 300],
+      "position": [1860, 300],
       "credentials": {
         "httpHeaderAuth": {
           "id": "hJpO8jdlT4Rmkjtx",
@@ -153,17 +226,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/opportunities/{{ $json.id }}/dispatched",
+        "url": "=https://dabbahwala-latest.onrender.com/api/opportunities/{{ $('Route by Action Type').item.json.id }}/dispatched",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"airtable_record_id\": \"{{ $json.airtable_id || 'n8n-' + $now.toMillis() }}\"\n}",
+        "jsonBody": "={\n  \"airtable_record_id\": \"{{ $json.id || 'n8n-' + $now.toMillis() }}\"\n}",
         "options": {}
       },
-      "id": "mark-executed",
-      "name": "Mark Actions Executed",
+      "id": "mark-call-dispatched",
+      "name": "Mark Call Dispatched",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1650, 300]
+      "position": [2080, 300]
     },
     {
       "parameters": {},
@@ -171,7 +244,15 @@
       "name": "No Pending — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1420, 450]
+      "position": [1400, 450]
+    },
+    {
+      "parameters": {},
+      "id": "skip-other",
+      "name": "Other Actions — Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1860, 450]
     }
   ],
   "connections": {
@@ -213,25 +294,44 @@
     "Has Pending Actions?": {
       "main": [
         [
-          {"node": "Send SMS via Telnyx", "type": "main", "index": 0},
-          {"node": "Create Airtable Sales Task", "type": "main", "index": 0}
+          {"node": "Split Into Individual Actions", "type": "main", "index": 0}
         ],
         [
           {"node": "No Pending — Skip", "type": "main", "index": 0}
         ]
       ]
     },
+    "Split Into Individual Actions": {
+      "main": [
+        [
+          {"node": "Route by Action Type", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Route by Action Type": {
+      "main": [
+        [
+          {"node": "Send SMS via Telnyx", "type": "main", "index": 0}
+        ],
+        [
+          {"node": "Create Airtable Sales Task", "type": "main", "index": 0}
+        ],
+        [
+          {"node": "Other Actions — Skip", "type": "main", "index": 0}
+        ]
+      ]
+    },
     "Send SMS via Telnyx": {
       "main": [
         [
-          {"node": "Mark Actions Executed", "type": "main", "index": 0}
+          {"node": "Mark SMS Dispatched", "type": "main", "index": 0}
         ]
       ]
     },
     "Create Airtable Sales Task": {
       "main": [
         [
-          {"node": "Mark Actions Executed", "type": "main", "index": 0}
+          {"node": "Mark Call Dispatched", "type": "main", "index": 0}
         ]
       ]
     }
