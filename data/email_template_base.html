@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>DabbahWala Email Template — Preview</title>
+  <!--
+    ══════════════════════════════════════════════════════════════════════
+    DabbahWala branded email template — reference / preview file
+    ──────────────────────────────────────────────────────────────────────
+    This file shows exactly what each campaign email looks like after the
+    _wrap_body() function in app/routers/campaigns.py applies the wrapper
+    at Instantly push time.
+
+    DESIGN DECISIONS
+    ─────────────────
+    • Table-based layout — works in Outlook, Gmail, Apple Mail
+    • All CSS inline — no <style> blocks (stripped by many email clients)
+    • Georgia serif body — warm, editorial, "home-cooked" feel
+    • Color palette:
+        #1a1a1a  near-black header     (premium, not harsh)
+        #c8581a  amber-orange accent   (food, warmth, energy)
+        #b8956a  muted gold tagline    (readable on dark bg)
+        #ffffff  white body            (clean contrast)
+        #f7f2ed  warm off-white bg     (not stark; warmth)
+        #252525  near-black body text  (easier than #000)
+    • Max-width 580px — safe for all desktop + mobile clients
+    • {{merge_tags}} are Instantly syntax — NOT Python format strings
+
+    HOW THE WRAPPER IS APPLIED
+    ────────────────────────────
+    • Local campaign JSON files (data/campaigns/*.json) store only the
+      inner <div> body content — the editor in the dashboard stays clean
+    • _wrap_body(inner_html) in campaigns.py concatenates:
+        _TEMPLATE_HEADER + inner_html + _TEMPLATE_FOOTER
+    • The wrapped version is pushed to Instantly; the raw version is
+      saved locally. No double-wrapping issues.
+
+    ADDING A CTA BUTTON
+    ─────────────────────
+    Paste this block before the closing </div> of the body content:
+
+      <div style="text-align:center;margin:28px 0 8px;">
+        <a href="YOUR_LINK"
+           style="display:inline-block;background-color:#c8581a;color:#ffffff;
+                  font-family:Arial,Helvetica,sans-serif;font-size:14px;
+                  font-weight:600;padding:13px 30px;border-radius:4px;
+                  text-decoration:none;letter-spacing:0.5px;">
+          Order Today
+        </a>
+      </div>
+  ══════════════════════════════════════════════════════════════════════
+  -->
+</head>
+<body style="margin:0;padding:0;background-color:#f7f2ed;">
+
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#f7f2ed">
+  <tr>
+    <td align="center" style="padding:28px 12px;">
+
+      <table role="presentation" style="max-width:580px;width:100%;" cellspacing="0" cellpadding="0" border="0">
+
+        <!-- ── HEADER ── -->
+        <tr>
+          <td style="background-color:#1a1a1a;border-radius:8px 8px 0 0;padding:24px 40px;text-align:center;">
+            <div style="font-family:Georgia,'Times New Roman',serif;font-size:24px;font-weight:bold;color:#ffffff;letter-spacing:1px;">
+              DabbahWala
+            </div>
+            <div style="font-family:Arial,Helvetica,sans-serif;font-size:10px;color:#b8956a;letter-spacing:3px;text-transform:uppercase;margin-top:6px;">
+              Fresh &nbsp;&middot;&nbsp; Cooked to Order &nbsp;&middot;&nbsp; Delivered
+            </div>
+          </td>
+        </tr>
+
+        <!-- ── ACCENT LINE ── -->
+        <tr>
+          <td bgcolor="#c8581a" style="height:3px;font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+
+        <!-- ── BODY ── -->
+        <tr>
+          <td style="background-color:#ffffff;padding:40px 48px;">
+            <div style="font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.8;color:#252525;">
+
+              <!-- ═══════════════════════════════════════════════════════ -->
+              <!-- ↓  INNER BODY CONTENT GOES HERE (from campaign JSON)  ↓ -->
+              <!-- ═══════════════════════════════════════════════════════ -->
+
+              <div>Thank you for your first order.</div>
+              <div><br></div>
+              <div>Hi <strong>{{firstName|there}}</strong>,</div>
+              <div><br></div>
+              <div>We wanted to personally welcome you to DabbahWala.</div>
+              <div><br></div>
+              <div>You just placed your first order with us — and that means a lot. Every customer who tries us for the first time is taking a chance on a kitchen they don't know yet.</div>
+              <div><br></div>
+              <div>We want to make sure that chance pays off.</div>
+              <div><br></div>
+              <div>{{RANDOM | Your meal was cooked fresh today, specifically for your order. | Everything in your order was prepared after you placed it. Fresh vegetables, lighter oils, no artificial anything. | What you received today was cooked for you. Not prepped in advance, not kept warm since the morning.}}</div>
+              <div><br></div>
+              <div>Over the next few weeks, we'll share a few things that'll help you get the most out of DabbahWala.</div>
+              <div><br></div>
+              <div>And if you have any questions or feedback — just reply to this email.</div>
+              <div><br></div>
+              <div>– DabbahWala Team</div>
+
+              <!-- ═══════════════════════════════════════════════════════ -->
+              <!-- ↑  END INNER BODY CONTENT                             ↑ -->
+              <!-- ═══════════════════════════════════════════════════════ -->
+
+            </div>
+          </td>
+        </tr>
+
+        <!-- ── FOOTER ── -->
+        <tr>
+          <td style="background-color:#f7f2ed;border-radius:0 0 8px 8px;padding:20px 40px 16px;text-align:center;">
+            <p style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#aaa;margin:0;line-height:1.8;">
+              DabbahWala &nbsp;&middot;&nbsp; Fresh meals, cooked to order<br>
+              <a href="{{unsubscribeLink}}" style="color:#aaa;text-decoration:underline;">Unsubscribe</a>
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>
