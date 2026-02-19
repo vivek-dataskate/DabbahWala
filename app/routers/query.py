@@ -194,8 +194,8 @@ def _handle_pipeline_snapshot(question: str) -> tuple[str, dict]:
     if isinstance(segments, dict):
         for seg, cnt in sorted(segments.items(), key=lambda x: -x[1]):
             pct = (cnt / total * 100) if total > 0 else 0
-            bar = "█" * int(pct / 3)
-            lines.append(f"- **{seg}**: {cnt} ({pct:.1f}%) {bar}")
+            bar = "·" * int(pct / 3)
+            lines.append(f"- **{seg}**: {cnt} ({pct:.1f}%)  {bar}")
     else:
         lines.append(str(segments))
 
