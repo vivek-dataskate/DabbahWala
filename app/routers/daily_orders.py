@@ -118,6 +118,7 @@ def resolve_dish_name(raw_name: str, alias_map: dict, master_norm: dict, master_
 class DailyOrderResult(BaseModel):
     date: str
     total_orders: int
+    rows_skipped: int
     total_items: int
     total_revenue: float
     new_contacts: int
@@ -127,6 +128,8 @@ class DailyOrderResult(BaseModel):
     campaigns_queued: int
     menu_items_matched: int
     menu_items_created: int
+    agent_analysis: list = []
+    field_opportunities: list = []
 
 
 @router.post("/process", response_model=DailyOrderResult)
@@ -222,6 +225,8 @@ async def process_daily_orders(file: UploadFile = File(...)):
     menu_matched = 0
     menu_created = 0
     order_date_str = ''
+    agent_analysis: list = []
+    field_opportunities: list = []
 
     with get_cursor(commit=True) as cur:
         for order_num, item_rows in orders_grouped.items():
@@ -241,6 +246,13 @@ async def process_daily_orders(file: UploadFile = File(...)):
             order_date_str = order_date
 
             is_sub = 'plan' in plan_name.lower() or 'subscription' in order_type.lower() or 'scheduled' in order_type.lower()
+
+            # Pre-compute order total for recommendations
+            order_total = sum(
+                float(_col(row, 'Unit Price', 'Price', 'Unit Price (USD)', 'unit_price', 'price') or 0) *
+                int(_col(row, 'Quantity', 'Qty', 'qty', 'quantity') or 1)
+                for row in item_rows
+            )
 
             # Match contact
             contact = None
@@ -299,6 +311,83 @@ async def process_daily_orders(file: UploadFile = File(...)):
                          f"Thanks for ordering direct, {first_name}! You save on fees and get priority delivery.")
                     )
                     opportunity_count += 1
+
+                # Build field agent recommendation for this contact
+                first_name = name.split()[0] if name else 'Customer'
+                if lifecycle in ('lapsed_customer', 'reactivation_candidate'):
+                    agent_analysis.append({
+                        'contact_name': name,
+                        'chosen_action': 'winback_follow_up',
+                        'chosen_channel': 'call',
+                        'reasoning_snippet': (
+                            f"{first_name} is returning after a lapse. Call to confirm satisfaction "
+                            f"and offer a loyalty reward to retain them long-term."
+                        ),
+                    })
+                    field_opportunities.append({
+                        'contact_name': name,
+                        'action': 'winback',
+                        'reasoning': (
+                            f"Lapsed customer placing a new order — high retention opportunity. "
+                            f"Personal follow-up call recommended to lock in loyalty."
+                        ),
+                    })
+                elif contact.get('primary_source') == 'Food Delivery Apps':
+                    agent_analysis.append({
+                        'contact_name': name,
+                        'chosen_action': 'direct_order_pitch',
+                        'chosen_channel': 'sms',
+                        'reasoning_snippet': (
+                            f"{first_name} previously ordered via a delivery app. Reinforce direct ordering "
+                            f"benefits — no platform fees, faster delivery, priority support."
+                        ),
+                    })
+                    field_opportunities.append({
+                        'contact_name': name,
+                        'action': 'direct_order_pitch',
+                        'reasoning': (
+                            "App-sourced customer ordering direct — offer a direct-order discount or "
+                            "subscription to prevent churn back to app platforms."
+                        ),
+                    })
+                elif prev_orders == 0:
+                    agent_analysis.append({
+                        'contact_name': name,
+                        'chosen_action': 'subscription_pitch',
+                        'chosen_channel': 'sms',
+                        'reasoning_snippet': (
+                            f"First direct order from {first_name}. Prime moment to pitch a weekly "
+                            f"subscription — saves ~20% vs daily ordering."
+                        ),
+                    })
+                    field_opportunities.append({
+                        'contact_name': name,
+                        'action': 'subscription_pitch',
+                        'reasoning': (
+                            f"First-order customer — convert to subscription while the experience is fresh "
+                            f"to maximise lifetime value."
+                        ),
+                    })
+                elif order_total > 0 and order_total < 15:
+                    agent_analysis.append({
+                        'contact_name': name,
+                        'chosen_action': 'upsell',
+                        'chosen_channel': 'whatsapp',
+                        'reasoning_snippet': (
+                            f"Order value ${order_total:.2f} — suggest add-ons (drinks, desserts) or "
+                            f"upgrade to a family plan to increase order value."
+                        ),
+                    })
+                else:
+                    agent_analysis.append({
+                        'contact_name': name,
+                        'chosen_action': 'loyalty_nurture',
+                        'chosen_channel': 'whatsapp',
+                        'reasoning_snippet': (
+                            f"Regular customer with {prev_orders} prior order(s). Thank {first_name} "
+                            f"personally and share this week's new menu highlights."
+                        ),
+                    })
             else:
                 # Create new contact
                 name_parts = name.split(None, 1)
@@ -319,6 +408,26 @@ async def process_daily_orders(file: UploadFile = File(...)):
                 if phone:
                     phone_lookup[phone] = {'id': contact_id, 'total_orders': 0,
                                             'lifecycle_segment': 'new_customer'}
+
+                # Welcome + subscription pitch for brand-new customers
+                first_name = name.split()[0] if name else 'Customer'
+                agent_analysis.append({
+                    'contact_name': name,
+                    'chosen_action': 'welcome_and_subscribe',
+                    'chosen_channel': 'sms',
+                    'reasoning_snippet': (
+                        f"New customer {first_name} — send a warm welcome, confirm delivery "
+                        f"satisfaction, and pitch a weekly subscription for ~20% savings."
+                    ),
+                })
+                field_opportunities.append({
+                    'contact_name': name,
+                    'action': 'new_customer_onboard',
+                    'reasoning': (
+                        f"First-ever order from {first_name}. High conversion window — reach out "
+                        f"within 2 hours to welcome and offer a subscription trial."
+                    ),
+                })
 
             # Insert order — resolve dish names against master menu
             items = []
@@ -418,6 +527,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
     return DailyOrderResult(
         date=order_date_str,
         total_orders=order_count,
+        rows_skipped=skipped_rows,
         total_items=item_count,
         total_revenue=round(sum(
             sum(float(r.get('Unit Price', 0) or 0) * int(r.get('Quantity', 1) or 1)
@@ -431,6 +541,8 @@ async def process_daily_orders(file: UploadFile = File(...)):
         campaigns_queued=campaigns_queued,
         menu_items_matched=menu_matched,
         menu_items_created=menu_created,
+        agent_analysis=agent_analysis,
+        field_opportunities=field_opportunities,
     )
 
 

@@ -605,11 +605,11 @@ async function uploadCSV() {
 
     // ── Stat row ──────────────────────────────────────────────────────────────
     let html = `<div class="upload-summary" style="margin-top:20px">
-      <div class="stat-box"><div class="s-label">Ingested</div><div class="s-val green">${data.ingested}</div></div>
-      <div class="stat-box"><div class="s-label">Skipped</div><div class="s-val red">${data.skipped}</div></div>
-      <div class="stat-box"><div class="s-label">Revenue</div><div class="s-val blue" style="font-size:1.4rem">USD $${(s.total_revenue||s.total_revenue_usd||s.total_revenue_aed||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
-      <div class="stat-box"><div class="s-label">New customers</div><div class="s-val" style="color:#6f42c1">${s.new_customers||0}</div></div>
-      <div class="stat-box"><div class="s-label">Returning</div><div class="s-val blue">${s.returning_customers||0}</div></div>
+      <div class="stat-box"><div class="s-label">Ingested</div><div class="s-val green">${data.total_orders}</div></div>
+      <div class="stat-box"><div class="s-label">Skipped</div><div class="s-val red">${data.rows_skipped}</div></div>
+      <div class="stat-box"><div class="s-label">Revenue</div><div class="s-val blue" style="font-size:1.4rem">USD $${(data.total_revenue||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
+      <div class="stat-box"><div class="s-label">New customers</div><div class="s-val" style="color:#6f42c1">${data.new_contacts||0}</div></div>
+      <div class="stat-box"><div class="s-label">Returning</div><div class="s-val blue">${data.existing_contacts||0}</div></div>
     </div>`;
 
     // ── Source breakdown ──────────────────────────────────────────────────────
