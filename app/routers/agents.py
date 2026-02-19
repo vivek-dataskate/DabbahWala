@@ -976,6 +976,36 @@ def run_agent_cycle_all():
     return {"processed": len(results), "errors": errors, "results": results}
 
 
+@router.get("/report/activity-data")
+def get_activity_data(report_date: Optional[str] = None):
+    """Return activity data as JSON for dashboard display (does not send email)."""
+    date = report_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    summary, detail_rows = _fetch_activity_data(date)
+    return {
+        "report_date": date,
+        "summary": summary,
+        "detail_rows": [
+            {k: str(v) if hasattr(v, "isoformat") else v for k, v in r.items()}
+            for r in detail_rows
+        ],
+    }
+
+
+@router.get("/report/outcome-data")
+def get_outcome_data(report_date: Optional[str] = None):
+    """Return outcome data as JSON for dashboard display (does not send email)."""
+    date = report_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    summary, detail_rows = _fetch_outcome_data(date)
+    return {
+        "report_date": date,
+        "summary": summary,
+        "detail_rows": [
+            {k: str(v) if hasattr(v, "isoformat") else v for k, v in r.items()}
+            for r in detail_rows
+        ],
+    }
+
+
 @router.post("/report/activity")
 def send_activity_report(req: ReportRequest):
     """Generate and email the daily activity report."""
