@@ -1,0 +1,288 @@
+{
+  "name": "DabbahWala — Telnyx Inbound Collector",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compute a window: last 10 minutes (with overlap for safety)\nconst now = new Date();\nconst from = new Date(now.getTime() - 10 * 60 * 1000);\nreturn [{ json: {\n  window_from: from.toISOString(),\n  window_to:   now.toISOString()\n}}];"
+      },
+      "id": "build-time-window",
+      "name": "Build Time Window",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.telnyx.com/v2/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "filter[direction][eq]", "value": "inbound" },
+            { "name": "filter[created_at][gte]", "value": "={{ $json.window_from }}" },
+            { "name": "page[size]", "value": "50" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "fetch-inbound-sms",
+      "name": "Fetch Inbound SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TELNYX_CREDENTIAL_ID",
+          "name": "Telnyx API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.telnyx.com/v2/recordings",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "filter[created_at][gte]", "value": "={{ $('Build Time Window').item.json.window_from }}" },
+            { "name": "page[size]", "value": "20" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      },
+      "id": "fetch-call-recordings",
+      "name": "Fetch Call Recordings",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 420],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "TELNYX_CREDENTIAL_ID",
+          "name": "Telnyx API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process inbound SMS messages\n// Classify each for order/delivery signals\nconst messages = $input.item.json.data || [];\n\nconst ORDER_KEYWORDS = [\n  'order', 'ordered', 'delivered', 'delivery', 'shipped',\n  'dispatched', 'out for delivery', 'package', 'tracking',\n  'collect', 'picked up', 'received'\n];\n\nreturn messages.map(msg => {\n  const body = (msg.text || '').toLowerCase();\n  const isOrderSignal = ORDER_KEYWORDS.some(kw => body.includes(kw));\n  const from = msg.from?.phone_number || '';\n  const to = msg.to?.[0]?.phone_number || '';\n\n  return {\n    json: {\n      telnyx_msg_id: msg.id,\n      from_number: from,\n      to_number: to,\n      body: msg.text || '',\n      direction: 'inbound',\n      status: msg.to?.[0]?.status || 'received',\n      is_delivery_staff: false,\n      is_order_signal: isOrderSignal,\n      metadata: {\n        received_at: msg.received_at,\n        telnyx_profile_id: msg.messaging_profile_id\n      }\n    }\n  };\n}).filter(m => m.json.from_number);"
+      },
+      "id": "classify-sms",
+      "name": "Classify SMS + Order Signals",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Process call recordings — extract transcript if available\nconst recordings = $input.item.json.data || [];\n\nreturn recordings.map(rec => {\n  return {\n    json: {\n      recording_id: rec.id,\n      call_leg_id: rec.call_leg_id,\n      call_session_id: rec.call_session_id,\n      recording_url: rec.download_url || rec.url || null,\n      transcript: rec.transcription?.transcript || null,\n      summary: null,\n      direction: rec.direction || 'inbound',\n      from_number: rec.from || '',\n      to_number: rec.to || '',\n      duration_sec: rec.duration_secs ? Math.round(rec.duration_secs) : null,\n      started_at: rec.start_time || null,\n      ended_at: rec.end_time || null,\n      metadata: {\n        recording_id: rec.id,\n        channels: rec.channels\n      }\n    }\n  };\n}).filter(r => r.json.from_number);"
+      },
+      "id": "process-recordings",
+      "name": "Process Call Recordings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 420]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-sms",
+              "leftValue": "={{ $json.from_number }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-sms-data",
+      "name": "Has SMS Data?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-recording",
+              "leftValue": "={{ $json.from_number }}",
+              "rightValue": "",
+              "operator": { "type": "string", "operation": "notEmpty" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-recording-data",
+      "name": "Has Recording?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 420]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/telnyx/message",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_email\": \"\",\n  \"direction\": \"{{ $json.direction }}\",\n  \"from_number\": \"{{ $json.from_number }}\",\n  \"to_number\": \"{{ $json.to_number }}\",\n  \"body\": \"{{ $json.body }}\",\n  \"telnyx_msg_id\": \"{{ $json.telnyx_msg_id }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"is_delivery_staff\": false,\n  \"metadata\": {{ JSON.stringify($json.metadata) }}\n}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "store-sms",
+      "name": "Store Inbound SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 160],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "is-order",
+              "leftValue": "={{ $('Classify SMS + Order Signals').item.json.is_order_signal }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equal" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "is-order-signal",
+      "name": "Order Signal?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1320, 280]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/events/ingest",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_email\": \"\",\n  \"event_type\": \"order_placed\",\n  \"metadata\": {\n    \"source\": \"inbound_sms\",\n    \"sms_body\": \"{{ $('Classify SMS + Order Signals').item.json.body }}\",\n    \"from_number\": \"{{ $('Classify SMS + Order Signals').item.json.from_number }}\"\n  }\n}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "ingest-order-event",
+      "name": "Ingest Order Event",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 240],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/telnyx/call",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_email\": \"\",\n  \"direction\": \"{{ $json.direction }}\",\n  \"from_number\": \"{{ $json.from_number }}\",\n  \"to_number\": \"{{ $json.to_number }}\",\n  \"duration_sec\": {{ $json.duration_sec || 0 }},\n  \"recording_url\": \"{{ $json.recording_url || '' }}\",\n  \"transcript\": \"{{ ($json.transcript || '').replace(/\"/g, '\\\\\"') }}\",\n  \"summary\": null,\n  \"is_delivery_staff\": false,\n  \"started_at\": \"{{ $json.started_at }}\",\n  \"ended_at\": \"{{ $json.ended_at }}\",\n  \"metadata\": {{ JSON.stringify($json.metadata) }}\n}",
+        "options": { "timeout": 10000 }
+      },
+      "id": "store-call",
+      "name": "Store Call + Transcript",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 420],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "skip-sms",
+      "name": "Skip SMS",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1320, 380]
+    },
+    {
+      "parameters": {},
+      "id": "skip-call",
+      "name": "Skip Call",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1320, 520]
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [[{ "node": "Build Time Window", "type": "main", "index": 0 }]]
+    },
+    "Build Time Window": {
+      "main": [[
+        { "node": "Fetch Inbound SMS", "type": "main", "index": 0 },
+        { "node": "Fetch Call Recordings", "type": "main", "index": 0 }
+      ]]
+    },
+    "Fetch Inbound SMS": {
+      "main": [[{ "node": "Classify SMS + Order Signals", "type": "main", "index": 0 }]]
+    },
+    "Fetch Call Recordings": {
+      "main": [[{ "node": "Process Call Recordings", "type": "main", "index": 0 }]]
+    },
+    "Classify SMS + Order Signals": {
+      "main": [[{ "node": "Has SMS Data?", "type": "main", "index": 0 }]]
+    },
+    "Process Call Recordings": {
+      "main": [[{ "node": "Has Recording?", "type": "main", "index": 0 }]]
+    },
+    "Has SMS Data?": {
+      "main": [
+        [{ "node": "Store Inbound SMS", "type": "main", "index": 0 }],
+        [{ "node": "Skip SMS", "type": "main", "index": 0 }]
+      ]
+    },
+    "Has Recording?": {
+      "main": [
+        [{ "node": "Store Call + Transcript", "type": "main", "index": 0 }],
+        [{ "node": "Skip Call", "type": "main", "index": 0 }]
+      ]
+    },
+    "Store Inbound SMS": {
+      "main": [[{ "node": "Order Signal?", "type": "main", "index": 0 }]]
+    },
+    "Order Signal?": {
+      "main": [
+        [{ "node": "Ingest Order Event", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [
+    { "name": "DabbahWala", "id": "dabbahwala" },
+    { "name": "Evidence Collection", "id": "evidence" }
+  ],
+  "pinData": {}
+}

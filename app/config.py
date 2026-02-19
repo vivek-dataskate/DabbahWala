@@ -13,3 +13,8 @@ API_PORT = int(os.environ.get("API_PORT", "8000"))
 AIRTABLE_API_KEY = os.environ.get("AIRTABLE_API_KEY", "")
 AIRTABLE_BASE_ID = os.environ.get("AIRTABLE_BASE_ID", "")
 AIRTABLE_FIELD_SALES_TABLE = os.environ.get("AIRTABLE_FIELD_SALES_TABLE", "Field Sales Tasks")
+
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+SENDGRID_API_KEY = os.environ.get("SENDGRID_API_KEY", "")
+REPORT_EMAIL_TO = os.environ.get("REPORT_EMAIL_TO", "core@dabbahwala.com")
+REPORT_EMAIL_FROM = os.environ.get("REPORT_EMAIL_FROM", "reports@dabbahwala.com")
