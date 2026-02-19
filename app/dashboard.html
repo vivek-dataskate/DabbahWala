@@ -563,6 +563,22 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
     </div>
   </div>
 
+  <div style="margin-bottom:14px">
+    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:8px">Agents, MCP &amp; Architecture — click to ask</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px">
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What agents exist in this system and what is each one responsible for?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the MCP (Model Context Protocol) layer work and what tools does it expose?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How do agents communicate with each other — shared state, queues, or direct calls?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the overall system architecture — monolith, microservices, or event-driven?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the orchestrator agent decide which specialist agent to delegate to?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How is agent memory or context maintained across multiple turns or sessions?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What guardrails prevent agents from taking harmful or unintended actions?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How are agent tool calls logged, traced, and debugged in production?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What is the role of n8n in the architecture and how does it integrate with the agents?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How would you add a new agent or MCP tool to this system?</button>
+    </div>
+  </div>
+
   <div class="chat-input-row">
     <textarea id="cb-question" placeholder="Type your question about the system and press Enter or click Ask…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
     <button class="btn" id="cb-btn" onclick="sendChat()">Ask</button>
