@@ -276,6 +276,58 @@ def _fetch_playbook_rules() -> str:
         return ""
 
 
+def _fetch_order_preferences(contact_id: int) -> dict:
+    """Return this customer's top menu items and typical ordering day — fed to intent agent."""
+    with get_cursor(commit=False) as cur:
+        # Top 5 items this customer has ordered (by quantity)
+        cur.execute(
+            """
+            SELECT oi.item_name, SUM(oi.quantity) AS qty
+            FROM order_items oi
+            JOIN orders o ON o.id = oi.order_id
+            WHERE o.contact_id = %s
+            GROUP BY oi.item_name
+            ORDER BY qty DESC
+            LIMIT 5
+            """,
+            (contact_id,),
+        )
+        top_items = [{"item": r["item_name"], "qty": r["qty"]} for r in cur.fetchall()]
+
+        # Most common ordering day of week
+        cur.execute(
+            """
+            SELECT TRIM(TO_CHAR(order_date, 'Day')) AS day_name,
+                   COUNT(*) AS order_count
+            FROM orders
+            WHERE contact_id = %s
+            GROUP BY day_name
+            ORDER BY order_count DESC
+            LIMIT 3
+            """,
+            (contact_id,),
+        )
+        preferred_days = [r["day_name"] for r in cur.fetchall()]
+
+        # Subscription vs one-time split
+        cur.execute(
+            """
+            SELECT order_type, COUNT(*) AS cnt
+            FROM orders
+            WHERE contact_id = %s AND order_type IS NOT NULL AND order_type != ''
+            GROUP BY order_type
+            """,
+            (contact_id,),
+        )
+        order_types = {r["order_type"]: r["cnt"] for r in cur.fetchall()}
+
+    return {
+        "top_items": top_items,
+        "preferred_order_days": preferred_days,
+        "order_type_breakdown": order_types,
+    }
+
+
 def _fetch_latest_inference(contact_id: int) -> Optional[dict]:
     logger.debug("Fetching latest inference for contact_id=%s", contact_id)
     with get_cursor(commit=False) as cur:
@@ -447,6 +499,7 @@ def _run_intent_agent(
     comms: list,
     outcomes: list,
     playbook: str,
+    order_prefs: Optional[dict] = None,
 ) -> dict:
     """Classify purchase intent.
 
@@ -485,12 +538,28 @@ def _run_intent_agent(
         + outcome_summary
         + playbook
     )
+    prefs_section = ""
+    if order_prefs:
+        items = ", ".join(
+            f"{p['item']} (×{p['qty']})" for p in (order_prefs.get("top_items") or [])
+        )
+        days = ", ".join(order_prefs.get("preferred_order_days") or [])
+        types = order_prefs.get("order_type_breakdown") or {}
+        prefs_section = (
+            f"\n\nCustomer order preferences (lifetime data):\n"
+            f"  Top items: {items or 'unknown'}\n"
+            f"  Preferred order days: {days or 'unknown'}\n"
+            f"  Order type breakdown: {json.dumps(types)}\n"
+            "Use this to personalise intent assessment — a customer who always orders "
+            "on Thursdays and hasn't ordered this Thursday yet is likely in buying mode."
+        )
     user = (
         f"Customer: {contact.get('first_name', '')} {contact.get('last_name', '')} | "
         f"Lifecycle: {contact.get('lifecycle_segment', 'unknown')} | "
         f"Orders: {contact.get('total_orders', 0)} | "
         f"Opens (7d/30d): {contact.get('opens_7d', 0)}/{contact.get('opens_30d', 0)} | "
-        f"Clicks (7d/30d): {contact.get('clicks_7d', 0)}/{contact.get('clicks_30d', 0)}\n\n"
+        f"Clicks (7d/30d): {contact.get('clicks_7d', 0)}/{contact.get('clicks_30d', 0)}"
+        f"{prefs_section}\n\n"
         f"Recent events ({len(events)} total, showing first 25):\n"
         f"{json.dumps(events[:25], indent=2, default=str)}\n\n"
         f"Recent communications ({len(comms)} total, showing first 10):\n"
@@ -1137,8 +1206,9 @@ def _run_full_cycle(contact_id: int) -> dict:
 
     # Layer 1 — inference (3 agents, outcome feedback + playbook injected)
     logger.info("--- Layer 1: Inference ---")
+    order_prefs = _fetch_order_preferences(contact_id)
     sentiment = _run_sentiment_agent(client, contact, comms, outcomes, playbook)
-    intent = _run_intent_agent(client, contact, events, comms, outcomes, playbook)
+    intent = _run_intent_agent(client, contact, events, comms, outcomes, playbook, order_prefs)
     engagement = _run_engagement_agent(client, contact, events, playbook)
     inference_id = _store_inference(contact_id, goal_id, sentiment, intent, engagement)
 
@@ -1251,10 +1321,17 @@ def _send_email_via_smtp(to: str, subject: str, html_body: str, csv_filename: st
 def _run_activity_report_agent(client: anthropic.Anthropic, report_date: str, raw: dict) -> str:
     """Generate prose activity summary via Claude."""
     system = (
-        "You are the Daily Activity Report Agent for DabbahWala food delivery. "
+        "You are the Daily Activity Report Agent for DabbahWala food delivery in Atlanta, GA. "
         "Generate a concise, professional HTML email body summarising today's operational activity. "
         "Use <h2> for section headers, <p> for paragraphs. No CSS, inline only. "
-        "Be factual and data-driven. End with one sentence on what to watch tomorrow."
+        "Sections to cover:\n"
+        "1. System Activity — agent runs, actions queued, SMS/calls sent\n"
+        "2. Field Agent Performance — if field_agent_reviews data is present, give an honest "
+        "   assessment of each agent: pitch quality score, did they ask for the order, "
+        "   customer signals. Call out any agent who had a low score or never asked for the order. "
+        "   Be direct — the business owner needs to know who is underperforming.\n"
+        "3. What to Watch Tomorrow — one specific action item.\n"
+        "Be factual, data-driven, and do not sugarcoat poor field agent performance."
     )
     user = (
         f"Date: {report_date}\n\n"
@@ -1272,10 +1349,21 @@ def _run_activity_report_agent(client: anthropic.Anthropic, report_date: str, ra
 def _run_outcome_report_agent(client: anthropic.Anthropic, report_date: str, raw: dict) -> str:
     """Generate prose outcome summary via Claude."""
     system = (
-        "You are the Daily Outcome Report Agent for DabbahWala food delivery. "
-        "Generate a concise, professional HTML email body summarising what was achieved today — "
-        "orders detected, customers who responded, emails opened, goals achieved. "
-        "Use <h2> for section headers, <p> for paragraphs. No CSS, inline only. "
+        "You are the Daily Outcome Report Agent for DabbahWala food delivery in Atlanta, GA. "
+        "Generate a concise, professional HTML email body. Use <h2> for section headers, "
+        "<p> for paragraphs, <ul>/<li> for lists. No CSS, inline only.\n\n"
+        "Sections to cover:\n"
+        "1. Orders & Revenue — orders detected today, revenue if available.\n"
+        "2. Order Patterns (last 30 days) — which day of the week drives the most orders, "
+        "   which menu items are trending up or down, customer frequency breakdown "
+        "   (weekly subscribers vs occasional buyers). Surface 2–3 actionable insights.\n"
+        "3. Field Agent Results — if scorecard data is present, score each agent on: "
+        "   calls made, orders closed, ask-for-order rate. Flag any agent who is consistently "
+        "   NOT asking for the order. Be direct — 'Agent X made 5 calls but only asked for "
+        "   the order once and closed zero orders. Needs coaching.'\n"
+        "4. Suggestions — 2–3 specific improvements based on the pattern data "
+        "   (e.g. 'Schedule more outreach on Thursdays — highest order day', "
+        "   'Promote Thali Box — your #1 item by quantity, mention it in every call').\n"
         "Highlight wins. If there were no orders, say so clearly without sugarcoating."
     )
     user = (
@@ -1334,6 +1422,21 @@ def _fetch_activity_data(report_date: str) -> tuple[dict, list]:
         )
         inference_runs = cur.fetchone()["c"]
 
+        # Field agent call reviews today
+        cur.execute(
+            """
+            SELECT r.agent_name, r.pitch_quality_score, r.asked_for_order,
+                   r.customer_signal, r.honest_assessment, r.recommended_next_action,
+                   c.first_name, c.last_name
+            FROM field_agent_reviews r
+            JOIN contacts c ON c.id = r.contact_id
+            WHERE DATE(r.reviewed_at) = %s::date
+            ORDER BY r.reviewed_at DESC
+            """,
+            (report_date,),
+        )
+        field_agent_reviews_today = [dict(r) for r in cur.fetchall()]
+
         # Detail rows
         cur.execute(
             """
@@ -1355,6 +1458,7 @@ def _fetch_activity_data(report_date: str) -> tuple[dict, list]:
         "actions_queued": actions_queued,
         "orchestrator_runs": orch_runs,
         "inference_runs": inference_runs,
+        "field_agent_reviews_today": field_agent_reviews_today,
     }
     return summary, detail_rows
 
@@ -1427,12 +1531,52 @@ def _fetch_outcome_data(report_date: str) -> tuple[dict, list]:
         )
         order_customers = [dict(r) for r in cur.fetchall()]
 
+        # Order patterns — day of week breakdown (last 30 days)
+        cur.execute("SELECT get_order_day_patterns(30)")
+        raw_days = cur.fetchone()["get_order_day_patterns"]
+        order_day_patterns = (
+            json.loads(raw_days) if isinstance(raw_days, str) else (raw_days or [])
+        )
+
+        # Top menu items (last 30 days)
+        cur.execute("SELECT get_top_menu_items(30, 10)")
+        raw_menu = cur.fetchone()["get_top_menu_items"]
+        top_menu_items = (
+            json.loads(raw_menu) if isinstance(raw_menu, str) else (raw_menu or [])
+        )
+
+        # Customer frequency segments (last 30 days)
+        cur.execute("SELECT get_customer_frequency_segments(30)")
+        raw_seg = cur.fetchone()["get_customer_frequency_segments"]
+        customer_segments = (
+            json.loads(raw_seg) if isinstance(raw_seg, str) else (raw_seg or [])
+        )
+
+        # Field agent scorecard (last 7 days)
+        cur.execute("SELECT get_field_agent_scorecard(7)")
+        raw_scorecard = cur.fetchone()["get_field_agent_scorecard"]
+        field_agent_scorecard = (
+            json.loads(raw_scorecard) if isinstance(raw_scorecard, str) else (raw_scorecard or [])
+        )
+
+        # Recent field agent call reviews (last 7 days)
+        cur.execute("SELECT get_recent_field_agent_reviews(7)")
+        raw_reviews = cur.fetchone()["get_recent_field_agent_reviews"]
+        field_agent_reviews = (
+            json.loads(raw_reviews) if isinstance(raw_reviews, str) else (raw_reviews or [])
+        )
+
     summary = {
         "orders_detected": orders,
         "email_opens": email_opens,
         "email_clicks": email_clicks,
         "inbound_sms_replies": sms_replies,
         "goals_achieved": goals_achieved,
+        "order_day_patterns_30d": order_day_patterns,
+        "top_menu_items_30d": top_menu_items,
+        "customer_frequency_segments_30d": customer_segments,
+        "field_agent_scorecard_7d": field_agent_scorecard,
+        "field_agent_call_reviews_7d": field_agent_reviews,
     }
     return summary, order_customers
 

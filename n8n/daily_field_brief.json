@@ -1,0 +1,111 @@
+{
+  "name": "DabbahWala — Daily Field Brief",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 7 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily at 7:30 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/field-agent/daily-brief",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "generate-brief",
+      "name": "Generate Daily Call List",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-calls",
+              "leftValue": "={{ $json.created }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-created",
+      "name": "Any Opportunities Created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const brief = $json.brief || [];\nconst created = $json.created || 0;\nconst lines = brief.map((c, i) => {\n  const rank = i + 1;\n  const name = `${c.first_name || ''} ${c.last_name || ''}`.trim();\n  const days = c.days_since_last_order || 0;\n  const orders = c.total_orders || 0;\n  const spend = c.lifetime_spend || 0;\n  const urgency = c.urgency_note || '';\n  return `#${rank} ${name} — ${orders} orders, $${spend} spend, ${days}d since last — ${urgency}`;\n});\n\nconst body = [\n  `DabbahWala Field Brief — ${new Date().toLocaleDateString('en-US', {weekday:'long', month:'short', day:'numeric'})}`,\n  `${created} call opportunities created today`,\n  '',\n  ...lines,\n  '',\n  'Open Airtable Field Sales Tasks to see full call scripts.',\n].join('\\n');\n\nreturn [{ json: { summary: body, created, count: brief.length } }];"
+      },
+      "id": "format-brief",
+      "name": "Format Brief Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 220]
+    },
+    {
+      "parameters": {
+        "jsCode": "// No eligible contacts today — log and continue\nconsole.log('Daily field brief: no eligible contacts found — all may have open opportunities already');\nreturn [{ json: { status: 'skipped', reason: 'no_eligible_contacts' } }];"
+      },
+      "id": "log-skip",
+      "name": "Log No Contacts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 400]
+    }
+  ],
+  "connections": {
+    "Daily at 7:30 AM": {
+      "main": [
+        [{"node": "Generate Daily Call List", "type": "main", "index": 0}]
+      ]
+    },
+    "Generate Daily Call List": {
+      "main": [
+        [{"node": "Any Opportunities Created?", "type": "main", "index": 0}]
+      ]
+    },
+    "Any Opportunities Created?": {
+      "main": [
+        [{"node": "Format Brief Summary", "type": "main", "index": 0}],
+        [{"node": "Log No Contacts", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["field-agent", "daily-brief"],
+  "triggerCount": 1,
+  "updatedAt": "2026-02-19T00:00:00.000Z",
+  "versionId": "1"
+}
