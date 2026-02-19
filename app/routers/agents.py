@@ -4,16 +4,19 @@ Inference → Decision → Orchestrator → Action Queue
 Plus daily Activity and Outcome reporting agents.
 """
 
-import base64
 import csv
 import io
 import json
 import os
+import smtplib
+from email import encoders
+from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import anthropic
-import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -616,37 +619,38 @@ def _run_full_cycle(contact_id: int) -> dict:
 # LAYER 4 — Report Agents
 # ---------------------------------------------------------------------------
 
-def _send_email_via_sendgrid(to: str, subject: str, html_body: str, csv_filename: str, csv_content: str) -> None:
-    api_key = os.environ.get("SENDGRID_API_KEY", "")
+def _send_email_via_smtp(to: str, subject: str, html_body: str, csv_filename: str, csv_content: str) -> None:
+    """Send report email with CSV attachment using SMTP.
+    Works with Gmail (App Password), Outlook, or any SMTP relay.
+    Required env vars: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, REPORT_EMAIL_FROM.
+    """
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    smtp_user = os.environ.get("SMTP_USER", "")
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")
     from_email = os.environ.get("REPORT_EMAIL_FROM", "reports@dabbahwala.com")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="SENDGRID_API_KEY not configured")
 
-    csv_b64 = base64.b64encode(csv_content.encode("utf-8")).decode("utf-8")
+    if not smtp_user or not smtp_password:
+        raise HTTPException(status_code=500, detail="SMTP_USER and SMTP_PASSWORD not configured")
 
-    payload = {
-        "personalizations": [{"to": [{"email": to}]}],
-        "from": {"email": from_email, "name": "DabbahWala Reports"},
-        "subject": subject,
-        "content": [{"type": "text/html", "value": html_body}],
-        "attachments": [
-            {
-                "content": csv_b64,
-                "type": "text/csv",
-                "filename": csv_filename,
-                "disposition": "attachment",
-            }
-        ],
-    }
+    msg = MIMEMultipart()
+    msg["From"] = f"DabbahWala Reports <{from_email}>"
+    msg["To"] = to
+    msg["Subject"] = subject
 
-    with httpx.Client(timeout=15) as http:
-        resp = http.post(
-            "https://api.sendgrid.com/v3/mail/send",
-            json=payload,
-            headers={"Authorization": f"Bearer {api_key}"},
-        )
-    if resp.status_code not in (200, 202):
-        raise HTTPException(status_code=502, detail=f"SendGrid error {resp.status_code}: {resp.text}")
+    msg.attach(MIMEText(html_body, "html"))
+
+    attachment = MIMEBase("text", "csv")
+    attachment.set_payload(csv_content.encode("utf-8"))
+    encoders.encode_base64(attachment)
+    attachment.add_header("Content-Disposition", f'attachment; filename="{csv_filename}"')
+    msg.attach(attachment)
+
+    with smtplib.SMTP(smtp_host, smtp_port) as server:
+        server.ehlo()
+        server.starttls()
+        server.login(smtp_user, smtp_password)
+        server.sendmail(from_email, to, msg.as_string())
 
 
 def _run_activity_report_agent(client: anthropic.Anthropic, report_date: str, raw: dict) -> str:
@@ -959,7 +963,7 @@ def send_activity_report(req: ReportRequest):
     html_body = _run_activity_report_agent(client, report_date, summary)
     csv_content = _rows_to_csv(detail_rows)
 
-    _send_email_via_sendgrid(
+    _send_email_via_smtp(
         to=to_email,
         subject=f"DabbahWala Activity Report — {report_date}",
         html_body=html_body,
@@ -980,7 +984,7 @@ def send_outcome_report(req: ReportRequest):
     html_body = _run_outcome_report_agent(client, report_date, summary)
     csv_content = _rows_to_csv(detail_rows)
 
-    _send_email_via_sendgrid(
+    _send_email_via_smtp(
         to=to_email,
         subject=f"DabbahWala Results Report — {report_date}",
         html_body=html_body,
