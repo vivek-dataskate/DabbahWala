@@ -126,16 +126,6 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 .row2 { display: flex; gap: 12px; }
 .row2 > * { flex: 1; }
 
-/* About */
-.about-section { background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 22px; margin-bottom: 16px; }
-.about-section h2 { font-size: 0.95rem; font-weight: 700; margin-bottom: 12px; color: #1a1a2e; }
-.about-section p { font-size: 0.88rem; color: #555; line-height: 1.65; margin-bottom: 10px; }
-.about-section p:last-child { margin-bottom: 0; }
-.about-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-top: 14px; }
-.about-chip { background: #f4f4f7; border-radius: 8px; padding: 10px 14px; font-size: 0.82rem; }
-.about-chip .chip-label { font-size: 0.72rem; text-transform: uppercase; font-weight: 700; color: #999; margin-bottom: 3px; }
-.about-chip .chip-val { font-weight: 600; color: #1a1a2e; }
-
 /* Chatbot suggestion chips */
 .suggestion-chip {
   padding: 6px 13px; font-size: 0.8rem; font-weight: 500;
@@ -180,7 +170,6 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="tab" onclick="switchTab('upload')">📤 Upload CSV</div>
   <div class="tab" onclick="switchTab('reports')">📋 Reports</div>
   <div class="tab" onclick="switchTab('chatbot')">💬 AI Assistant</div>
-  <div class="tab" onclick="switchTab('about')">ℹ️ About</div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ QUERY -->
@@ -386,90 +375,12 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div id="cb-history" class="chat-history"></div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════ ABOUT -->
-<div id="panel-about" class="panel">
-  <div class="panel-title">About DabbahWala Marketing System</div>
-  <div class="panel-desc">DabbahWala is an automated, AI-driven marketing orchestration platform for a fresh Indian food delivery service in Atlanta. It combines a 4-layer Claude AI agent pipeline with rule-based lifecycle automation and multi-channel outreach.</div>
-
-  <div class="about-section">
-    <h2>System Architecture</h2>
-    <p>Events from Telnyx (SMS/calls), Shipday (delivery), Instantly (email), and daily CSV order uploads flow into FastAPI. The 4-layer Claude agent pipeline analyses each contact and enqueues actions for n8n workflows to execute.</p>
-    <div style="background:#f4f4f7;border-radius:8px;padding:14px;font-family:monospace;font-size:0.82rem;line-height:1.8;color:#555;margin-top:12px">
-      Inputs → FastAPI (Render) → Agent Pipeline → action_queue → n8n → Telnyx / Instantly / Airtable
-    </div>
-  </div>
-
-  <div class="about-section">
-    <h2>4-Layer Claude Agent Pipeline</h2>
-    <p><strong>Layer 1 — Inference (3 parallel calls):</strong> Sentiment agent · Intent agent · Engagement agent</p>
-    <p><strong>Layer 2 — Decision (4 parallel calls):</strong> Stage agent · Channel agent · Offer agent · Escalation agent</p>
-    <p><strong>Layer 3 — Orchestrator (1 final decision):</strong> Combines all Layer 2 recommendations, applies delivery overrides and guardrails, outputs one action: send_sms / move_campaign / escalate_airtable / none</p>
-    <p><strong>Layer 4 — Report agents (daily):</strong> Activity report at 8:00 AM · Outcome report at 8:30 AM</p>
-  </div>
-
-  <div class="about-section">
-    <h2>Tech Stack</h2>
-    <div class="about-grid">
-      <div class="about-chip"><div class="chip-label">Backend</div><div class="chip-val">FastAPI (Python 3.11)</div></div>
-      <div class="about-chip"><div class="chip-label">Database</div><div class="chip-val">PostgreSQL 16 + pgvector</div></div>
-      <div class="about-chip"><div class="chip-label">AI Model</div><div class="chip-val">Claude Sonnet 4.5</div></div>
-      <div class="about-chip"><div class="chip-label">Automation</div><div class="chip-val">n8n (15 workflows)</div></div>
-      <div class="about-chip"><div class="chip-label">SMS / Voice</div><div class="chip-val">Telnyx</div></div>
-      <div class="about-chip"><div class="chip-label">Email</div><div class="chip-val">Instantly (5 campaigns)</div></div>
-      <div class="about-chip"><div class="chip-label">CRM</div><div class="chip-val">Airtable</div></div>
-      <div class="about-chip"><div class="chip-label">Delivery</div><div class="chip-val">Shipday</div></div>
-      <div class="about-chip"><div class="chip-label">Deployment</div><div class="chip-val">Render (Oregon)</div></div>
-      <div class="about-chip"><div class="chip-label">Claude Desktop</div><div class="chip-val">MCP Server (30+ tools)</div></div>
-    </div>
-  </div>
-
-  <div class="about-section">
-    <h2>Lifecycle Segments</h2>
-    <p>Contacts progress through 8 segments driven by order frequency, engagement signals, and time-based rules:</p>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
-      <span style="background:#e9ecef;color:#444;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">cold</span>
-      <span style="color:#aaa;font-size:1rem;line-height:2">→</span>
-      <span style="background:#d1ecf1;color:#0c5460;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">engaged</span>
-      <span style="color:#aaa;font-size:1rem;line-height:2">→</span>
-      <span style="background:#d4f4e2;color:#155724;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">active_customer</span>
-      <span style="color:#aaa;font-size:1rem;line-height:2">→</span>
-      <span style="background:#cce5ff;color:#004085;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">new_customer</span>
-      <span style="color:#aaa;font-size:1rem;line-height:2">→</span>
-      <span style="background:#fff3cd;color:#856404;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">lapsed_customer</span>
-      <span style="color:#aaa;font-size:1rem;line-height:2">→</span>
-      <span style="background:#f8d7da;color:#842029;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">reactivation_candidate</span>
-      <span style="color:#aaa;font-size:1rem;line-height:2">→</span>
-      <span style="background:#f0f0f6;color:#555;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">cooling</span>
-      <span style="color:#aaa;font-size:1rem;line-height:2">→</span>
-      <span style="background:#f4f4f7;color:#999;padding:4px 12px;border-radius:20px;font-size:0.8rem;font-weight:600">optout</span>
-    </div>
-  </div>
-
-  <div class="about-section">
-    <h2>Key API Routes</h2>
-    <div style="font-size:0.83rem;color:#555;line-height:2">
-      <code style="background:#f4f4f7;padding:2px 6px;border-radius:4px">POST /api/agents/cycle/run-for-contact</code> — Run full 3-layer cycle for one contact<br>
-      <code style="background:#f4f4f7;padding:2px 6px;border-radius:4px">POST /api/agents/cycle/run-all</code> — Batch cycle for all active contacts<br>
-      <code style="background:#f4f4f7;padding:2px 6px;border-radius:4px">POST /api/intelligence/run-cycle</code> — Hourly 5-phase intelligence cycle<br>
-      <code style="background:#f4f4f7;padding:2px 6px;border-radius:4px">POST /api/daily-orders/upload-csv</code> — Ingest daily orders CSV<br>
-      <code style="background:#f4f4f7;padding:2px 6px;border-radius:4px">POST /api/query</code> — Self-service marketing intelligence<br>
-      <code style="background:#f4f4f7;padding:2px 6px;border-radius:4px">POST /api/chatbot/ask</code> — AI system documentation Q&amp;A<br>
-      <code style="background:#f4f4f7;padding:2px 6px;border-radius:4px">GET /health</code> — Health check
-    </div>
-  </div>
-
-  <div class="about-section">
-    <h2>n8n Automation (15 workflows)</h2>
-    <p style="font-size:0.83rem">Agent Orchestration Cron (3h) · Action Queue Executor (30min) · SMS Dispatch (10min) · Lifecycle Cycle Runner (hourly) · Hourly Intelligence Cycle · Airtable Outcome Sync (15min) · Airtable Playbook Sync (15min) · Telnyx Inbound Collector (30min) · Shipday Delivery Collector (30min) · Daily Order Upload (1 PM EST) · Daily Activity Report (8 AM) · Daily Outcome Report (8:30 AM) · Marketing Query Form · Google Docs Sync (30min) · Daily Report Generator (11 PM)</p>
-  </div>
-</div>
-
 <script>
 // ─── state ───────────────────────────────────────────────────────────────────
 let _toneDrafts = {};
 
 // ─── tabs ────────────────────────────────────────────────────────────────────
-const TAB_NAMES = ['query','agent','tone','upload','reports','chatbot','about'];
+const TAB_NAMES = ['query','agent','tone','upload','reports','chatbot'];
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
