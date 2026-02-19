@@ -318,6 +318,19 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
     <input type="file" id="u-file" accept=".csv" style="padding:8px;background:#fafafe">
   </div>
 
+  <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:8px;padding:13px;margin-bottom:18px;display:flex;align-items:flex-start;gap:10px">
+    <input type="checkbox" id="u-shipday-toggle" style="margin-top:3px;flex-shrink:0">
+    <div>
+      <label for="u-shipday-toggle" style="font-size:0.88rem;font-weight:600;color:#0c5460;cursor:pointer;display:inline">
+        Create Shipday delivery orders automatically
+      </label>
+      <div style="font-size:0.8rem;color:#6c757d;margin-top:3px;line-height:1.4">
+        Only tick this if Shipday orders for this date have <strong>not</strong> already been created manually.
+        Ticking this when orders already exist in Shipday will create duplicates.
+      </div>
+    </div>
+  </div>
+
   <button class="btn" id="u-btn" onclick="uploadCSV()">Upload &amp; Process</button>
   <div id="u-result"></div>
 
@@ -759,10 +772,15 @@ const CAMPAIGN_COLOR = {
 async function uploadCSV() {
   const fileInput = document.getElementById('u-file');
   if (!fileInput.files.length) { setError('u-result', 'Please select a CSV file.'); return; }
-  setLoading('u-result', 'Uploading, ingesting orders, pushing to Shipday, and running agent analysis… (may take 30–60 s)');
+  const pushShipday = document.getElementById('u-shipday-toggle').checked;
+  const loadMsg = pushShipday
+    ? 'Uploading, ingesting orders, pushing to Shipday, and running agent analysis… (may take 30–60 s)'
+    : 'Uploading and ingesting orders… (may take 30–60 s)';
+  setLoading('u-result', loadMsg);
   setBtn('u-btn', true, 'Processing…');
   const formData = new FormData();
   formData.append('file', fileInput.files[0]);
+  formData.append('push_to_shipday', pushShipday ? 'true' : 'false');
   try {
     const res  = await fetch('/api/daily-orders/upload-csv', { method: 'POST', body: formData });
     const data = await res.json();

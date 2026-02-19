@@ -15,7 +15,7 @@ from datetime import datetime
 from difflib import SequenceMatcher
 
 import httpx
-from fastapi import APIRouter, HTTPException, UploadFile, File
+from fastapi import APIRouter, Form, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from app.db import get_cursor
@@ -288,7 +288,10 @@ class DailyOrderResult(BaseModel):
 
 @router.post("/process", response_model=DailyOrderResult)
 @router.post("/upload-csv", response_model=DailyOrderResult)
-async def process_daily_orders(file: UploadFile = File(...)):
+async def process_daily_orders(
+    file: UploadFile = File(...),
+    push_to_shipday: str = Form("false"),
+):
     """
     Upload a CSV of daily orders. Columns are matched flexibly.
     After ingestion:
@@ -776,13 +779,18 @@ async def process_daily_orders(file: UploadFile = File(...)):
                                task.get('first_name'), task.get('last_name'), e)
         logger.info("Airtable sync complete: %d/%d pushed", airtable_synced, len(airtable_tasks))
 
-    # Auto-push all orders to Shipday so drivers are notified immediately
-    logger.info("Pushing %d orders to Shipday", len(orders_grouped))
-    shipday_result = await _push_orders_to_shipday(
-        orders_grouped,
-        restaurant_name=os.environ.get("SHIPDAY_RESTAURANT_NAME", "DabbahWala"),
-        restaurant_address=os.environ.get("SHIPDAY_RESTAURANT_ADDRESS", ""),
-    )
+    # Push orders to Shipday only when the caller explicitly opts in
+    _do_shipday = push_to_shipday.strip().lower() in ("true", "1", "yes")
+    if _do_shipday:
+        logger.info("Pushing %d orders to Shipday (opted-in)", len(orders_grouped))
+        shipday_result = await _push_orders_to_shipday(
+            orders_grouped,
+            restaurant_name=os.environ.get("SHIPDAY_RESTAURANT_NAME", "DabbahWala"),
+            restaurant_address=os.environ.get("SHIPDAY_RESTAURANT_ADDRESS", ""),
+        )
+    else:
+        logger.info("Shipday push skipped — push_to_shipday not set")
+        shipday_result = {}
 
     return DailyOrderResult(
         date=order_date_str,
