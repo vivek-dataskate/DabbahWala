@@ -179,8 +179,60 @@ def _ensure_indexed() -> None:
     logger.info("Reindex complete: %d total chunks", total)
 
 
+def _ensure_tables() -> None:
+    """Create chatbot tables if they don't exist (guards against skipped migrations)."""
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chatbot_doc_chunks (
+                id           SERIAL PRIMARY KEY,
+                source_file  TEXT    NOT NULL,
+                chunk_index  INTEGER NOT NULL,
+                content      TEXT    NOT NULL,
+                content_tsv  TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', content)) STORED,
+                created_at   TIMESTAMPTZ DEFAULT NOW()
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_doc_chunks_tsv ON chatbot_doc_chunks USING GIN (content_tsv)"
+        )
+        cur.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_doc_chunks_source_chunk ON chatbot_doc_chunks (source_file, chunk_index)"
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chatbot_doc_meta (
+                key        TEXT PRIMARY KEY,
+                value      TEXT        NOT NULL,
+                updated_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chatbot_interactions (
+                id         SERIAL PRIMARY KEY,
+                question   TEXT        NOT NULL,
+                answer     TEXT        NOT NULL,
+                sources    TEXT[]      DEFAULT '{}',
+                model      TEXT        DEFAULT 'claude-sonnet-4-5-20250929',
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chatbot_interactions_created ON chatbot_interactions (created_at DESC)"
+        )
+
+
 def sync_docs_on_startup() -> None:
     """Called from FastAPI startup event to auto-reindex if docs have changed."""
+    try:
+        _ensure_tables()
+    except Exception as exc:
+        logger.error("Failed to ensure chatbot tables: %s", exc)
+        return
     try:
         _ensure_indexed()
     except Exception as exc:
