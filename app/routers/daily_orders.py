@@ -373,7 +373,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
                     agent_analysis.append({
                         'contact_name': name,
                         'chosen_action': 'upsell',
-                        'chosen_channel': 'whatsapp',
+                        'chosen_channel': 'sms',
                         'reasoning_snippet': (
                             f"Order value ${order_total:.2f} — suggest add-ons (drinks, desserts) or "
                             f"upgrade to a family plan to increase order value."
@@ -383,7 +383,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
                     agent_analysis.append({
                         'contact_name': name,
                         'chosen_action': 'loyalty_nurture',
-                        'chosen_channel': 'whatsapp',
+                        'chosen_channel': 'sms',
                         'reasoning_snippet': (
                             f"Regular customer with {prev_orders} prior order(s). Thank {first_name} "
                             f"personally and share this week's new menu highlights."
