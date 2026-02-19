@@ -21,7 +21,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/lifecycle/run",
+        "url": "={{$vars.DABBAHWALA_API_URL}}/api/lifecycle/run",
         "options": {
           "timeout": 60000
         }
@@ -64,7 +64,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/campaigns/pending",
+        "url": "={{$vars.DABBAHWALA_API_URL}}/api/campaigns/pending",
         "options": {}
       },
       "id": "fetch-campaigns",
@@ -86,25 +86,150 @@
     },
     {
       "parameters": {
-        "jsCode": "// Route campaign move to appropriate ESP/tool\nconst campaign = $input.item.json.to_campaign;\nconst email = $input.item.json.contact_email;\nconst phone = $input.item.json.contact_phone;\nconst queueId = $input.item.json.queue_id;\n\n// This is where you'd integrate with Mailchimp/Klaviyo/SendGrid\n// For now, log the move and mark executed\nreturn {\n  json: {\n    queue_id: queueId,\n    email: email,\n    phone: phone,\n    to_campaign: campaign,\n    action: 'move_contact_to_campaign',\n    esp_payload: {\n      list_id: campaign,\n      subscriber_email: email\n    }\n  }\n};"
+        "jsCode": "// Map internal campaign names to Instantly campaign IDs\nconst INSTANTLY_IDS = {\n  'NURTURE_SLOW':            '90ecd160-22cc-46b1-9fa5-9342fe970837',\n  'PROMO_STANDARD':          '30292b3d-9f39-4ef3-b0ba-ea15c634acef',\n  'PROMO_AGGRESSIVE':        'c9af877a-77ac-491c-a5ee-a8ea7646416b',\n  'NEW_CUSTOMER_ONBOARDING': 'c4c42e73-83fd-4d43-b629-db5b11be66ae',\n  'REACTIVATION':            '0c760ec8-3415-48cd-87ff-b58babc17dde'\n};\n\nconst item = $input.item.json;\n\nconst toCampaignId   = INSTANTLY_IDS[item.to_campaign];\nconst fromCampaignId = item.from_campaign ? INSTANTLY_IDS[item.from_campaign] : null;\n\nif (!toCampaignId) {\n  throw new Error(`Unknown campaign name: ${item.to_campaign}`);\n}\n\nreturn {\n  json: {\n    queue_id:                 item.queue_id,\n    email:                    item.contact_email,\n    phone:                    item.contact_phone || null,\n    to_campaign:              item.to_campaign,\n    from_campaign:            item.from_campaign || null,\n    instantly_to_campaign_id: toCampaignId,\n    instantly_from_campaign_id: fromCampaignId\n  }\n};"
       },
-      "id": "route-campaign",
-      "name": "Route to ESP",
+      "id": "prepare-instantly-payload",
+      "name": "Prepare Instantly Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [1320, 240]
     },
     {
       "parameters": {
+        "method": "DELETE",
+        "url": "=https://api.instantly.ai/api/v2/leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "campaign_id",
+              "value": "={{ $json.instantly_from_campaign_id }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.email }}"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "instantly-api-key",
+          "name": "Instantly API Key"
+        }
+      },
+      "id": "remove-from-old-campaign",
+      "name": "Remove from Old Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 160],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "skip-removal",
+      "name": "Skip Removal",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1540, 340]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-from-campaign",
+              "leftValue": "={{ $json.instantly_from_campaign_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-from-campaign",
+      "name": "Has Old Campaign?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1430, 240]
+    },
+    {
+      "parameters": {
+        "mode": "passThrough",
+        "output": "input1"
+      },
+      "id": "merge-removal-paths",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1760, 240]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "={{$env.DABBAHWALA_API_URL}}/api/campaigns/{{ $json.queue_id }}/executed",
+        "url": "=https://api.instantly.ai/api/v2/leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "campaign_id",
+              "value": "={{ $json.instantly_to_campaign_id }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.email }}"
+            },
+            {
+              "name": "phone",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "skip_if_in_workspace",
+              "value": "=false"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "instantly-api-key",
+          "name": "Instantly API Key"
+        }
+      },
+      "id": "add-to-new-campaign",
+      "name": "Add Lead to New Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 240]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.DABBAHWALA_API_URL}}/api/campaigns/{{ $json.queue_id }}/executed",
         "options": {}
       },
       "id": "mark-executed",
       "name": "Mark Campaign Executed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 240]
+      "position": [2200, 240]
     },
     {
       "parameters": {},
@@ -171,14 +296,76 @@
       "main": [
         [
           {
-            "node": "Route to ESP",
+            "node": "Prepare Instantly Payload",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Route to ESP": {
+    "Prepare Instantly Payload": {
+      "main": [
+        [
+          {
+            "node": "Has Old Campaign?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Old Campaign?": {
+      "main": [
+        [
+          {
+            "node": "Remove from Old Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Skip Removal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Remove from Old Campaign": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Removal": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Add Lead to New Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add Lead to New Campaign": {
       "main": [
         [
           {
