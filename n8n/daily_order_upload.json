@@ -1,43 +1,30 @@
 {
-  "name": "DabbahWala - Daily Order Upload",
+  "name": "DabbahWala — Daily Order Upload",
   "nodes": [
     {
-      "id": "trigger",
-      "name": "Daily at 1PM (after orders processed)",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "position": [100, 300],
       "parameters": {
         "rule": {
           "interval": [{"field": "cronExpression", "expression": "0 13 * * *"}]
         }
       },
-      "notes": "Runs daily at 1PM EST after morning orders are processed"
+      "id": "schedule-trigger",
+      "name": "Daily at 1PM EST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
     },
     {
-      "id": "manual_trigger",
+      "parameters": {},
+      "id": "manual-trigger",
       "name": "Manual Upload",
       "type": "n8n-nodes-base.manualTrigger",
-      "position": [100, 450],
-      "notes": "Manual trigger for ad-hoc uploads"
+      "typeVersion": 1,
+      "position": [100, 450]
     },
     {
-      "id": "read_file",
-      "name": "Read Processing Data CSV",
-      "type": "n8n-nodes-base.readBinaryFiles",
-      "position": [300, 300],
-      "parameters": {
-        "fileSelector": "={{$env.ORDER_DATA_PATH || '/data/processing-data-' + $now.format('yyyy-MM-dd') + '.csv'}}"
-      },
-      "notes": "Read today's processing-data-YYYY-MM-DD.csv file"
-    },
-    {
-      "id": "upload_to_api",
-      "name": "Upload to DabbahWala API",
-      "type": "n8n-nodes-base.httpRequest",
-      "position": [500, 300],
       "parameters": {
         "method": "POST",
-        "url": "{{$env.DABBAHWALA_API_URL}}/api/daily-orders/process",
+        "url": "=https://dabbahwala-latest.onrender.com/api/daily-orders/process",
         "sendBody": true,
         "contentType": "multipart-form-data",
         "bodyParameters": {
@@ -45,66 +32,131 @@
             {"name": "file", "parameterType": "formBinaryData", "inputDataFieldName": "data"}
           ]
         },
-        "options": {"timeout": 300000}
+        "options": {
+          "timeout": 300000
+        }
       },
-      "notes": "POST CSV to /api/daily-orders/process endpoint"
+      "id": "upload-to-api",
+      "name": "Upload CSV to API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
     },
     {
-      "id": "check_result",
-      "name": "Check Processing Result",
-      "type": "n8n-nodes-base.if",
-      "position": [700, 300],
       "parameters": {
         "conditions": {
-          "number": [{"value1": "={{$json.total_orders}}", "operation": "larger", "value2": 0}]
-        }
-      }
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-orders",
+              "leftValue": "={{ $json.total_orders }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-result",
+      "name": "Has Orders?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
     },
     {
-      "id": "run_intelligence",
-      "name": "Run Intelligence Cycle",
-      "type": "n8n-nodes-base.httpRequest",
-      "position": [900, 250],
       "parameters": {
         "method": "POST",
-        "url": "{{$env.DABBAHWALA_API_URL}}/api/intelligence/run-cycle",
-        "options": {"timeout": 120000}
+        "url": "=https://dabbahwala-latest.onrender.com/api/intelligence/run-cycle",
+        "options": {
+          "timeout": 120000
+        }
       },
-      "notes": "Run full intelligence cycle after order data is loaded"
+      "id": "run-intelligence",
+      "name": "Run Intelligence Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 250]
     },
     {
-      "id": "notify_success",
-      "name": "Notify: Orders Processed",
-      "type": "n8n-nodes-base.slack",
-      "position": [1100, 250],
       "parameters": {
-        "channel": "={{$env.SLACK_CHANNEL || '#dabbahwala-ops'}}",
-        "text": "Daily orders processed!\n- Date: {{$json.date}}\n- Orders: {{$json.total_orders}}\n- Revenue: ${{$json.total_revenue}}\n- New customers: {{$json.new_contacts}}\n- Opportunities: {{$json.opportunities_created}}"
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/placeholder",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"Daily orders processed!\\n- Date: {{ $json.date }}\\n- Orders: {{ $json.total_orders }}\\n- Revenue: ${{ $json.total_revenue }}\\n- New customers: {{ $json.new_contacts }}\\n- Opportunities: {{ $json.opportunities_created }}\"\n}",
+        "options": {}
       },
-      "notes": "Send summary to Slack"
+      "id": "notify-success",
+      "name": "Notify Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 250]
     },
     {
-      "id": "notify_failure",
-      "name": "Notify: No Orders or Error",
-      "type": "n8n-nodes-base.slack",
-      "position": [900, 400],
       "parameters": {
-        "channel": "={{$env.SLACK_CHANNEL || '#dabbahwala-ops'}}",
-        "text": "Daily order upload had issues. Check logs."
-      }
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/placeholder",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"Daily order upload had issues. Check logs.\"\n}",
+        "options": {}
+      },
+      "id": "notify-failure",
+      "name": "Notify Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
     }
   ],
   "connections": {
-    "trigger": {"main": [[{"node": "read_file"}]]},
-    "manual_trigger": {"main": [[{"node": "read_file"}]]},
-    "read_file": {"main": [[{"node": "upload_to_api"}]]},
-    "upload_to_api": {"main": [[{"node": "check_result"}]]},
-    "check_result": {"main": [[{"node": "run_intelligence"}], [{"node": "notify_failure"}]]},
-    "run_intelligence": {"main": [[{"node": "notify_success"}]]}
+    "Daily at 1PM EST": {
+      "main": [
+        [
+          {"node": "Upload CSV to API", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Manual Upload": {
+      "main": [
+        [
+          {"node": "Upload CSV to API", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Upload CSV to API": {
+      "main": [
+        [
+          {"node": "Has Orders?", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Has Orders?": {
+      "main": [
+        [
+          {"node": "Run Intelligence Cycle", "type": "main", "index": 0}
+        ],
+        [
+          {"node": "Notify Failure", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Run Intelligence Cycle": {
+      "main": [
+        [
+          {"node": "Notify Success", "type": "main", "index": 0}
+        ]
+      ]
+    }
   },
-  "env_variables_needed": [
-    "DABBAHWALA_API_URL",
-    "ORDER_DATA_PATH",
-    "SLACK_CHANNEL"
-  ]
+  "settings": {
+    "executionOrder": "v1"
+  }
 }

@@ -54,23 +54,22 @@
       "schedule": "Daily at 11 PM"
     },
     "airtable_playbook_sync": {
-      "id": "KCcrA7aYXnB9Ad1B",
+      "id": "EVwS9TSfk7c8avtZ",
       "name": "DabbahWala — Airtable Playbook Sync",
       "schedule": "Every 15 minutes",
       "active": true
     },
     "daily_order_upload": {
-      "id": "aKKZkOwqyRdiVOA9",
+      "id": "8F4wigbdVaAE8WsV",
       "name": "DabbahWala — Daily Order Upload",
       "schedule": "Daily at 1 PM EST",
       "active": true
     },
     "hourly_intelligence_cycle": {
-      "id": "gERNbCmll5hfAgAY",
+      "id": "TOBTV4lcSx7sUNXX",
       "name": "DabbahWala — Hourly Intelligence Cycle",
       "schedule": "Every hour",
-      "active": false,
-      "note": "Needs manual activation in n8n UI — switch node has a property option issue"
+      "active": true
     }
   }
 }
