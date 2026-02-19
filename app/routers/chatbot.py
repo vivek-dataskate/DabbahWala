@@ -6,7 +6,7 @@ into PostgreSQL full-text search chunks. Each user question retrieves relevant c
 similar previous interactions, builds a context-rich prompt for Claude, and saves the
 Q&A pair to chatbot_interactions for future retrieval.
 """
-import hashlib
+import datetime
 import logging
 import os
 import re
@@ -24,16 +24,9 @@ logger = logging.getLogger(__name__)
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
 
-# Markdown files to index — paths relative to project root
-MD_FILES = [
-    "README.md",
-    "ARCHITECTURE.md",
-    "IMPLEMENTATION_PLAN.md",
-    "data/sql/README.md",
-]
-
 CHUNK_SIZE = 900       # characters per chunk
 CHUNK_OVERLAP = 120    # overlap between consecutive chunks
+REINDEX_INTERVAL_DAYS = 30  # reindex at most once per month
 
 
 # ---------------------------------------------------------------------------
@@ -60,20 +53,35 @@ def _project_root() -> Path:
 
 
 def _load_md_files() -> list[dict]:
-    """Load each markdown file and return [{source, content}]."""
+    """Discover and load all .md files (project-wide) and all migrations/*.sql files."""
     base = _project_root()
     docs = []
-    for rel in MD_FILES:
-        path = base / rel
-        if path.exists():
+
+    # All markdown files recursively (skip hidden dirs and node_modules)
+    for path in sorted(base.rglob("*.md")):
+        parts = path.parts
+        if any(p.startswith(".") or p == "node_modules" for p in parts):
+            continue
+        rel = str(path.relative_to(base))
+        try:
+            content = path.read_text(encoding="utf-8")
+            docs.append({"source": rel, "content": content})
+            logger.info("Loaded doc %s (%d chars)", rel, len(content))
+        except Exception as exc:
+            logger.warning("Cannot read %s: %s", rel, exc)
+
+    # All SQL migration files
+    migrations_dir = base / "migrations"
+    if migrations_dir.is_dir():
+        for path in sorted(migrations_dir.glob("*.sql")):
+            rel = str(path.relative_to(base))
             try:
                 content = path.read_text(encoding="utf-8")
                 docs.append({"source": rel, "content": content})
                 logger.info("Loaded doc %s (%d chars)", rel, len(content))
             except Exception as exc:
                 logger.warning("Cannot read %s: %s", rel, exc)
-        else:
-            logger.warning("Doc not found: %s", path)
+
     return docs
 
 
@@ -100,38 +108,28 @@ def _split_chunks(text: str) -> list[str]:
     return chunks
 
 
-def _compute_docs_hash(docs: list[dict]) -> str:
-    """Return a SHA-256 hex digest of all doc contents combined."""
-    h = hashlib.sha256()
-    for doc in sorted(docs, key=lambda d: d["source"]):
-        h.update(doc["source"].encode())
-        h.update(doc["content"].encode())
-    return h.hexdigest()
-
-
-def _stored_docs_hash() -> str | None:
-    """Read the previously stored docs hash from chatbot_doc_meta, or None."""
+def _last_indexed_at():
+    """Return the datetime of the last successful index, or None."""
     try:
         with get_cursor(commit=False) as cur:
             cur.execute(
-                "SELECT value FROM chatbot_doc_meta WHERE key = 'docs_hash'",
+                "SELECT updated_at FROM chatbot_doc_meta WHERE key = 'last_indexed_at'",
             )
             row = cur.fetchone()
-            return row["value"] if row else None
+            return row["updated_at"] if row else None
     except Exception:
         return None
 
 
-def _save_docs_hash(hash_value: str) -> None:
+def _save_last_indexed_at() -> None:
     with get_cursor(commit=True) as cur:
         cur.execute(
             """
             INSERT INTO chatbot_doc_meta (key, value, updated_at)
-            VALUES ('docs_hash', %s, NOW())
+            VALUES ('last_indexed_at', 'ok', NOW())
             ON CONFLICT (key) DO UPDATE
-              SET value = EXCLUDED.value, updated_at = NOW()
+              SET value = 'ok', updated_at = NOW()
             """,
-            (hash_value,),
         )
 
 
@@ -156,27 +154,23 @@ def _do_index(docs: list[dict]) -> int:
 
 
 def _ensure_indexed() -> None:
-    """Index markdown docs; reindex automatically if file contents have changed."""
+    """Index all docs; reindex at most once per month."""
+    last_at = _last_indexed_at()
+    if last_at is not None:
+        age_days = (datetime.datetime.now(datetime.timezone.utc) - last_at).days
+        if age_days < REINDEX_INTERVAL_DAYS:
+            logger.debug("Chatbot docs indexed %d days ago — skipping reindex", age_days)
+            return
+
     docs = _load_md_files()
     if not docs:
-        logger.warning("No markdown docs to index")
+        logger.warning("No docs to index")
         return
 
-    current_hash = _compute_docs_hash(docs)
-    stored_hash = _stored_docs_hash()
-
-    if stored_hash == current_hash:
-        logger.debug("Chatbot docs unchanged (hash match) — skipping reindex")
-        return
-
-    logger.info(
-        "Chatbot docs changed (stored=%s current=%s) — reindexing",
-        stored_hash,
-        current_hash[:12],
-    )
+    logger.info("Reindexing chatbot docs (%d files)", len(docs))
     total = _do_index(docs)
-    _save_docs_hash(current_hash)
-    logger.info("Reindex complete: %d total chunks", total)
+    _save_last_indexed_at()
+    logger.info("Reindex complete: %d total chunks from %d files", total, len(docs))
 
 
 def _ensure_tables() -> None:
@@ -479,7 +473,7 @@ async def reindex():
 
     try:
         total = _do_index(docs)
-        _save_docs_hash(_compute_docs_hash(docs))
+        _save_last_indexed_at()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Indexing failed: {exc}")
 
