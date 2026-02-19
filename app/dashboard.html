@@ -184,9 +184,13 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
       <option value="who_to_contact">📞  Who to Contact Today — Prioritized outreach list</option>
       <option value="daily_summary">📅  Daily Summary — Today's orders and activity</option>
       <option value="order_analytics">🍽️  Order Analytics — Top dishes, revenue, trends</option>
+      <option value="order_summary_by_delivery_date">📦  Orders by Delivery Date — Per-date breakdown</option>
       <option value="campaign_performance">📧  Campaign Performance — Email campaign stats</option>
       <option value="customer_lookup">🔍  Customer Lookup — Full contact profile</option>
       <option value="communication_history">💬  Communication History — SMS / call log</option>
+      <option value="ground_team_notes">📋  Ground Team Notes — Field notes from the team</option>
+      <option value="ad_copies">📣  Ad Copies — Social media ad copy library</option>
+      <option value="submit_input">✏️  Submit Note / Observation — Add a team entry</option>
       <option value="free_form">🧠  Ask Anything (AI) — Free-form question</option>
     </select>
   </div>
@@ -505,6 +509,20 @@ function onCategoryChange() {
   const needsEmail = ['customer_lookup','communication_history'].includes(cat);
   const hint = document.getElementById('q-email-hint');
   hint.textContent = needsEmail ? '(required)' : '(optional)';
+  // Relabel name field for submit_input
+  const nameLabel = document.querySelector('#q-name-group label');
+  if (nameLabel) nameLabel.innerHTML = cat === 'submit_input'
+    ? 'Your name <span class="hint">(optional — shown as author)</span>'
+    : 'Customer name <span class="hint">(optional)</span>';
+  // Update question placeholder
+  const qta = document.getElementById('q-question');
+  const placeholders = {
+    'order_summary_by_delivery_date': 'Enter a date for detail view, e.g. 2026-02-19 (or leave blank for last 30 days)',
+    'ground_team_notes': 'Search keyword (optional — leave blank for recent notes)',
+    'ad_copies': 'Search keyword (optional — leave blank for recent copies)',
+    'submit_input': 'Enter your observation, note, or question here…',
+  };
+  qta.placeholder = placeholders[cat] || 'e.g. How many lapsed customers came back this week?';
 }
 
 async function runQuery() {
@@ -517,7 +535,7 @@ async function runQuery() {
   try {
     const res  = await fetch('/api/query', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null }),
+      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null, author: cat === 'submit_input' ? (name || null) : null }),
     });
     const data = await res.json();
     if (!res.ok) { setError('q-result', data.detail || JSON.stringify(data)); return; }
