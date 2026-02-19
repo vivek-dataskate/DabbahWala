@@ -77,6 +77,22 @@
       "schedule": "On-demand (form submission)",
       "active": true,
       "note": "Import marketing_query_form.json into n8n, then update this ID. Form URL will be: https://digitalworker.dataskate.io/form/<webhook-id>"
+    },
+    "google_docs_sync": {
+      "id": "PENDING_IMPORT",
+      "name": "DabbahWala — Google Docs Sync",
+      "schedule": "Every 30 minutes",
+      "active": true,
+      "note": "Requires Google Drive + Google Docs OAuth2 credentials in n8n. Set GOOGLE_DRIVE_TEAM_FOLDER_ID env var in n8n."
+    }
+  },
+
+  "google_docs": {
+    "note": "Set up Google Drive + Google Docs OAuth2 credentials in n8n. Set GOOGLE_DRIVE_TEAM_FOLDER_ID as n8n env var.",
+    "folder_env_var": "GOOGLE_DRIVE_TEAM_FOLDER_ID",
+    "classification": {
+      "ad_copy": "Title contains: ad copy, social media, facebook, instagram, social post",
+      "ground_note": "Title contains: field note, ground, delivery note, driver (or default)"
     }
   }
 }
