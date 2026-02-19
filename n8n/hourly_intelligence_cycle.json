@@ -1,0 +1,215 @@
+{
+  "name": "DabbahWala - Hourly Intelligence Cycle",
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [100, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "hours", "hoursInterval": 1}]
+        }
+      }
+    },
+    {
+      "id": "poll_instantly",
+      "name": "Poll Instantly Campaign Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [300, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.instantly.ai/api/v1/analytics/campaign/{{$env.INSTANTLY_CAMPAIGN_ID}}/events",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer {{$env.INSTANTLY_API_KEY}}"}
+          ]
+        },
+        "queryParameters": {
+          "parameters": [
+            {"name": "limit", "value": "100"},
+            {"name": "since", "value": "={{$now.minus(2, 'hours').toISO()}}"}
+          ]
+        }
+      },
+      "notes": "Poll Instantly for opens/clicks/replies in last 2 hours"
+    },
+    {
+      "id": "ingest_instantly",
+      "name": "Ingest Instantly Events to DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [500, 200],
+      "parameters": {
+        "method": "POST",
+        "url": "{{$env.DABBAHWALA_API_URL}}/api/intelligence/ingest-instantly-events",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "events", "value": "={{$json.events || []}}"}
+          ]
+        }
+      },
+      "notes": "Send Instantly events to our DB for processing"
+    },
+    {
+      "id": "run_cycle",
+      "name": "Run Intelligence Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [700, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "{{$env.DABBAHWALA_API_URL}}/api/intelligence/run-cycle",
+        "options": {"timeout": 120000}
+      },
+      "notes": "INTAKE -> EVIDENCE -> INFERENCE -> DECISION -> EXECUTION"
+    },
+    {
+      "id": "get_actions",
+      "name": "Get Pending Actions",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [900, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "{{$env.DABBAHWALA_API_URL}}/api/intelligence/pending-actions"
+      },
+      "notes": "Fetch all pending actions: SMS, emails, campaign moves, sales calls"
+    },
+    {
+      "id": "split_actions",
+      "name": "Route Actions",
+      "type": "n8n-nodes-base.switch",
+      "position": [1100, 300],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{$json.summary.total_pending}}",
+        "rules": {
+          "rules": [
+            {"value2": "0", "operation": "equal", "output": 0},
+            {"value2": "0", "operation": "notEqual", "output": 1}
+          ]
+        }
+      },
+      "notes": "Skip if no pending actions"
+    },
+    {
+      "id": "process_sms",
+      "name": "Send SMS via Telnyx",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1300, 150],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telnyx.com/v2/messages",
+        "authentication": "genericCredentialType",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer {{$env.TELNYX_API_KEY}}"}
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "from", "value": "{{$env.TELNYX_FROM_NUMBER}}"},
+            {"name": "to", "value": "+1{{$json.phone}}"},
+            {"name": "text", "value": "={{$json.suggested_message}}"}
+          ]
+        }
+      },
+      "notes": "Send each SMS action via Telnyx. Iterate over sms_to_send array."
+    },
+    {
+      "id": "process_campaigns",
+      "name": "Move Contacts in Instantly",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1300, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.instantly.ai/api/v1/lead/add",
+        "authentication": "genericCredentialType",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer {{$env.INSTANTLY_API_KEY}}"}
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "campaign_id", "value": "={{$json.instantly_campaign_id}}"},
+            {"name": "email", "value": "={{$json.email}}"},
+            {"name": "first_name", "value": "={{$json.first_name}}"},
+            {"name": "last_name", "value": "={{$json.last_name}}"}
+          ]
+        }
+      },
+      "notes": "Add contact to their new Instantly campaign"
+    },
+    {
+      "id": "process_calls",
+      "name": "Create Airtable Task for Sales Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1300, 450],
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/Sales%20Calls",
+        "authentication": "genericCredentialType",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer {{$env.AIRTABLE_API_KEY}}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"records\": [{\"fields\": {\"Contact Name\": \"{{$json.first_name}} {{$json.last_name}}\", \"Phone\": \"{{$json.phone}}\", \"Priority\": \"{{$json.priority}}\", \"Reason\": \"{{$json.reason}}\", \"Script\": \"{{$json.suggested_message}}\", \"Status\": \"Pending\"}}]}"
+      },
+      "notes": "Create Airtable record for sales team to call"
+    },
+    {
+      "id": "mark_executed",
+      "name": "Mark Actions Executed",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1500, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/opportunities/{{$json.id}}/dispatched",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {"name": "airtable_record_id", "value": "={{$json.airtable_id || 'n8n-' + $now.toMillis()}}"}
+          ]
+        }
+      },
+      "notes": "Mark each opportunity as dispatched so it doesn't get re-processed"
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [[{"node": "poll_instantly"}]]},
+    "poll_instantly": {"main": [[{"node": "ingest_instantly"}]]},
+    "ingest_instantly": {"main": [[{"node": "run_cycle"}]]},
+    "run_cycle": {"main": [[{"node": "get_actions"}]]},
+    "get_actions": {"main": [[{"node": "split_actions"}]]},
+    "split_actions": {"main": [[], [{"node": "process_sms"}, {"node": "process_campaigns"}, {"node": "process_calls"}]]},
+    "process_sms": {"main": [[{"node": "mark_executed"}]]},
+    "process_campaigns": {"main": [[{"node": "mark_executed"}]]},
+    "process_calls": {"main": [[{"node": "mark_executed"}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "env_variables_needed": [
+    "DABBAHWALA_API_URL",
+    "INSTANTLY_API_KEY",
+    "INSTANTLY_CAMPAIGN_ID",
+    "TELNYX_API_KEY",
+    "TELNYX_FROM_NUMBER",
+    "AIRTABLE_BASE_ID",
+    "AIRTABLE_API_KEY"
+  ]
+}

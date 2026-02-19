@@ -1,0 +1,134 @@
+{
+  "name": "DabbahWala - Airtable Playbook Sync",
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [100, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "minutes", "minutesInterval": 15}]
+        }
+      },
+      "notes": "Poll Airtable every 15 min for playbook rule changes"
+    },
+    {
+      "id": "manual_trigger",
+      "name": "Manual Sync",
+      "type": "n8n-nodes-base.manualTrigger",
+      "position": [100, 450],
+      "notes": "Manual trigger for immediate sync after Airtable edits"
+    },
+    {
+      "id": "fetch_airtable",
+      "name": "Fetch Playbook Rules from Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [350, 350],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.airtable.com/v0/{{$env.AIRTABLE_BASE_ID}}/Agent%20Playbook",
+        "authentication": "genericCredentialType",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer {{$env.AIRTABLE_API_KEY}}"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "queryParameters": {
+          "parameters": [
+            {"name": "view", "value": "Grid view"},
+            {"name": "filterByFormula", "value": "{Active}=TRUE()"}
+          ]
+        }
+      },
+      "notes": "GET all active playbook rules from Airtable 'Agent Playbook' table"
+    },
+    {
+      "id": "transform_records",
+      "name": "Transform Airtable Records",
+      "type": "n8n-nodes-base.code",
+      "position": [600, 350],
+      "parameters": {
+        "jsCode": "// Transform Airtable records to our API format\nconst airtableRecords = $input.first().json.records || [];\n\nconst records = airtableRecords.map(record => ({\n  airtable_id: record.id,\n  rule_name: record.fields['Rule Name'] || '',\n  category: (record.fields['Category'] || 'general').toLowerCase(),\n  instruction: record.fields['Instruction'] || '',\n  priority: record.fields['Priority'] || 50,\n  active: record.fields['Active'] !== false\n})).filter(r => r.rule_name && r.instruction);\n\nreturn [{ json: { records } }];"
+      },
+      "notes": "Map Airtable field names to our API format. Airtable fields: Rule Name, Category, Instruction, Priority, Active"
+    },
+    {
+      "id": "sync_to_api",
+      "name": "Sync Rules to DabbahWala API",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [850, 350],
+      "parameters": {
+        "method": "POST",
+        "url": "{{$env.DABBAHWALA_API_URL}}/api/playbook/sync-from-airtable",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}",
+        "options": {"timeout": 30000}
+      },
+      "notes": "POST transformed records to our sync endpoint. API handles create/update/deactivate."
+    },
+    {
+      "id": "check_result",
+      "name": "Check Sync Result",
+      "type": "n8n-nodes-base.if",
+      "position": [1100, 350],
+      "parameters": {
+        "conditions": {
+          "number": [{"value1": "={{$json.synced}}", "operation": "larger", "value2": 0}]
+        }
+      }
+    },
+    {
+      "id": "notify_success",
+      "name": "Notify: Playbook Synced",
+      "type": "n8n-nodes-base.slack",
+      "position": [1350, 250],
+      "parameters": {
+        "channel": "={{$env.SLACK_CHANNEL || '#dabbahwala-ops'}}",
+        "text": "Playbook synced from Airtable!\n- Total records: {{$json.synced}}\n- Created: {{$json.created}}\n- Updated: {{$json.updated}}\n- Deactivated: {{$json.deactivated}}"
+      },
+      "notes": "Only notify when there are actual changes"
+    },
+    {
+      "id": "no_changes",
+      "name": "No Changes (Silent)",
+      "type": "n8n-nodes-base.noOp",
+      "position": [1350, 450],
+      "notes": "Silent pass-through when no rules changed"
+    }
+  ],
+  "connections": {
+    "trigger": {"main": [[{"node": "fetch_airtable"}]]},
+    "manual_trigger": {"main": [[{"node": "fetch_airtable"}]]},
+    "fetch_airtable": {"main": [[{"node": "transform_records"}]]},
+    "transform_records": {"main": [[{"node": "sync_to_api"}]]},
+    "sync_to_api": {"main": [[{"node": "check_result"}]]},
+    "check_result": {"main": [[{"node": "notify_success"}], [{"node": "no_changes"}]]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "env_variables_needed": [
+    "DABBAHWALA_API_URL",
+    "AIRTABLE_BASE_ID",
+    "AIRTABLE_API_KEY",
+    "SLACK_CHANNEL"
+  ],
+  "airtable_setup": {
+    "table_name": "Agent Playbook",
+    "fields": [
+      {"name": "Rule Name", "type": "Single line text", "required": true},
+      {"name": "Category", "type": "Single select", "options": ["inference", "decision", "messaging", "exclusion", "priority", "general"]},
+      {"name": "Instruction", "type": "Long text", "required": true, "description": "Natural language instruction for Claude agent"},
+      {"name": "Priority", "type": "Number", "default": 50, "description": "1-100, higher = more important"},
+      {"name": "Active", "type": "Checkbox", "default": true},
+      {"name": "Created By", "type": "Single line text"}
+    ],
+    "views": ["Grid view"]
+  }
+}
