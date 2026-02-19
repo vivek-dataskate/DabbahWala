@@ -72,18 +72,18 @@
       "active": true
     },
     "marketing_query_form": {
-      "id": "PENDING_IMPORT",
+      "id": "gwJPYPHlhHmPxeRu",
       "name": "DabbahWala — Marketing Query Form",
       "schedule": "On-demand (form submission)",
       "active": true,
-      "note": "Import marketing_query_form.json into n8n, then update this ID. Form URL will be: https://digitalworker.dataskate.io/form/<webhook-id>"
+      "form_url": "https://digitalworker.dataskate.io/form/marketing-query-form"
     },
     "google_docs_sync": {
-      "id": "PENDING_IMPORT",
+      "id": "KMTKHGoHbhI4C2WS",
       "name": "DabbahWala — Google Docs Sync",
       "schedule": "Every 30 minutes",
-      "active": true,
-      "note": "Requires Google Drive + Google Docs OAuth2 credentials in n8n. Set GOOGLE_DRIVE_TEAM_FOLDER_ID env var in n8n."
+      "active": false,
+      "note": "Inactive until Google Drive + Google Docs OAuth2 credentials are configured in n8n. Set GOOGLE_DRIVE_TEAM_FOLDER_ID env var."
     }
   },
 
