@@ -1,0 +1,181 @@
+{
+  "name": "DabbahWala — Airtable Playbook Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "minutes", "minutesInterval": 15}]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Sync",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [100, 450]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appuy2VTIao6XVpIW/Agent%20Playbook",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {"name": "view", "value": "Grid view"},
+            {"name": "filterByFormula", "value": "{Active}=TRUE()"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "fetch-airtable",
+      "name": "Fetch Playbook Rules",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [350, 350],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hJpO8jdlT4Rmkjtx",
+          "name": "Airtable API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Transform Airtable records to our API format\nconst airtableRecords = $input.first().json.records || [];\n\nconst records = airtableRecords.map(record => ({\n  airtable_id: record.id,\n  rule_name: record.fields['Rule Name'] || '',\n  category: (record.fields['Category'] || 'general').toLowerCase(),\n  instruction: record.fields['Instruction'] || '',\n  priority: record.fields['Priority'] || 50,\n  active: record.fields['Active'] !== false\n})).filter(r => r.rule_name && r.instruction);\n\nreturn [{ json: { records } }];"
+      },
+      "id": "transform-records",
+      "name": "Transform Airtable Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [600, 350]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/playbook/sync-from-airtable",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "sync-to-api",
+      "name": "Sync Rules to API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 350]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-synced",
+              "leftValue": "={{ $json.synced }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-result",
+      "name": "Has Changes?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 350]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/placeholder",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"Playbook synced from Airtable!\\n- Synced: {{ $json.synced }}\\n- Created: {{ $json.created }}\\n- Updated: {{ $json.updated }}\\n- Deactivated: {{ $json.deactivated }}\"\n}",
+        "options": {}
+      },
+      "id": "notify-success",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1350, 250]
+    },
+    {
+      "parameters": {},
+      "id": "no-changes",
+      "name": "No Changes — Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1350, 450]
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {
+      "main": [
+        [
+          {"node": "Fetch Playbook Rules", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Manual Sync": {
+      "main": [
+        [
+          {"node": "Fetch Playbook Rules", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Fetch Playbook Rules": {
+      "main": [
+        [
+          {"node": "Transform Airtable Records", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Transform Airtable Records": {
+      "main": [
+        [
+          {"node": "Sync Rules to API", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Sync Rules to API": {
+      "main": [
+        [
+          {"node": "Has Changes?", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Has Changes?": {
+      "main": [
+        [
+          {"node": "Notify Slack", "type": "main", "index": 0}
+        ],
+        [
+          {"node": "No Changes — Skip", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

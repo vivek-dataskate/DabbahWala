@@ -1,0 +1,242 @@
+{
+  "name": "DabbahWala — Hourly Intelligence Cycle",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "hours", "hoursInterval": 1}]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.instantly.ai/api/v1/analytics/campaign/summary",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {"name": "limit", "value": "100"},
+            {"name": "since", "value": "={{ $now.minus(2, 'hours').toISO() }}"}
+          ]
+        },
+        "options": {}
+      },
+      "id": "poll-instantly",
+      "name": "Poll Instantly Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [300, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/intelligence/ingest-instantly-events",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ events: $json.events || [] }) }}",
+        "options": {}
+      },
+      "id": "ingest-events",
+      "name": "Ingest Events to DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [520, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/intelligence/run-cycle",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "run-cycle",
+      "name": "Run Intelligence Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dabbahwala-latest.onrender.com/api/intelligence/pending-actions",
+        "options": {}
+      },
+      "id": "get-actions",
+      "name": "Get Pending Actions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [960, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-pending",
+              "leftValue": "={{ $json.summary?.total_pending || 0 }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-actions",
+      "name": "Has Pending Actions?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1180, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.telnyx.com/v2/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"from\": \"+18444322224\",\n  \"to\": \"+1{{ $json.phone }}\",\n  \"text\": \"{{ $json.suggested_message }}\"\n}",
+        "options": {}
+      },
+      "id": "send-sms",
+      "name": "Send SMS via Telnyx",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 150],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "XnntvX8AXpdR97oQ",
+          "name": "Telnyx API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/appuy2VTIao6XVpIW/Field%20Sales%20Tasks",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"fields\": {\n    \"Customer Name\": \"{{ $json.first_name }} {{ $json.last_name }}\",\n    \"Phone\": \"{{ $json.phone }}\",\n    \"Priority\": \"{{ $json.priority }}\",\n    \"Reason\": \"{{ $json.reason }}\",\n    \"Suggested Action\": \"{{ $json.suggested_message }}\",\n    \"Status\": \"New\"\n  }\n}",
+        "options": {}
+      },
+      "id": "create-airtable-task",
+      "name": "Create Airtable Sales Task",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1420, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hJpO8jdlT4Rmkjtx",
+          "name": "Airtable API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/opportunities/{{ $json.id }}/dispatched",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"airtable_record_id\": \"{{ $json.airtable_id || 'n8n-' + $now.toMillis() }}\"\n}",
+        "options": {}
+      },
+      "id": "mark-executed",
+      "name": "Mark Actions Executed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1650, 300]
+    },
+    {
+      "parameters": {},
+      "id": "no-actions",
+      "name": "No Pending — Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1420, 450]
+    }
+  ],
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [
+          {"node": "Poll Instantly Events", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Poll Instantly Events": {
+      "main": [
+        [
+          {"node": "Ingest Events to DB", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Ingest Events to DB": {
+      "main": [
+        [
+          {"node": "Run Intelligence Cycle", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Run Intelligence Cycle": {
+      "main": [
+        [
+          {"node": "Get Pending Actions", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Get Pending Actions": {
+      "main": [
+        [
+          {"node": "Has Pending Actions?", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Has Pending Actions?": {
+      "main": [
+        [
+          {"node": "Send SMS via Telnyx", "type": "main", "index": 0},
+          {"node": "Create Airtable Sales Task", "type": "main", "index": 0}
+        ],
+        [
+          {"node": "No Pending — Skip", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Send SMS via Telnyx": {
+      "main": [
+        [
+          {"node": "Mark Actions Executed", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Create Airtable Sales Task": {
+      "main": [
+        [
+          {"node": "Mark Actions Executed", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
