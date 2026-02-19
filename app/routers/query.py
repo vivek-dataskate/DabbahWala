@@ -13,7 +13,6 @@ import traceback
 from datetime import date, datetime, timedelta
 
 import anthropic
-import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -61,8 +60,37 @@ class QueryResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _handle_customer_lookup(question: str, contact_email: str | None) -> tuple[str, dict]:
+    # If no email, try name search using the question text
     if not contact_email:
-        return "Please provide a customer email address to look up.", {}
+        name = question.strip()
+        if not name:
+            return "Please provide a customer email address or name to look up.", {}
+
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT id, first_name, last_name, email, lifecycle_segment, total_orders
+                FROM contacts
+                WHERE first_name ILIKE %s OR last_name ILIKE %s
+                ORDER BY last_name, first_name
+                LIMIT 10
+            """, (f"%{name}%", f"%{name}%"))
+            matches = [dict(r) for r in cur.fetchall()]
+
+        if not matches:
+            return f"No customer found with name matching '{name}'.", {}
+
+        if len(matches) > 1:
+            lines = [f"## {len(matches)} customers found for '{name}'", ""]
+            for m in matches:
+                lines.append(
+                    f"- **{m['first_name']} {m['last_name']}** — {m['email']} "
+                    f"({m.get('lifecycle_segment', 'N/A')}, {m.get('total_orders', 0)} orders)"
+                )
+            lines.append("\nEnter the email address to get full details.")
+            return "\n".join(lines), {"matches": matches}
+
+        # Exactly one match — use their email for full detail lookup
+        contact_email = matches[0]["email"]
 
     with get_cursor(commit=False) as cur:
         cur.execute("SELECT get_contact_detail(%s)", (contact_email,))
@@ -469,14 +497,25 @@ def _handle_communication_history(question: str, contact_email: str | None) -> t
         return "Please provide a customer email address to look up their communication history.", {}
 
     with get_cursor(commit=False) as cur:
-        # Find contact
-        cur.execute("SELECT id, first_name, last_name FROM contacts WHERE email = %s", (contact_email,))
+        # Find contact — include phone so we can report it
+        cur.execute(
+            "SELECT id, first_name, last_name, phone FROM contacts WHERE email = %s",
+            (contact_email,),
+        )
         contact = cur.fetchone()
         if not contact:
             return f"No customer found with email: {contact_email}", {}
 
         cid = contact["id"]
         name = f"{contact['first_name'] or ''} {contact['last_name'] or ''}".strip()
+        phone = (contact.get("phone") or "").strip() or None
+
+        if not phone:
+            return (
+                f"No phone number on file for **{name}** ({contact_email}). "
+                "Communication history via SMS/calls cannot be retrieved without a phone number.",
+                {"phone_resolved": False},
+            )
 
         # SMS
         cur.execute("""
@@ -502,7 +541,7 @@ def _handle_communication_history(question: str, contact_email: str | None) -> t
         """, (cid,))
         deliveries = [dict(r) for r in cur.fetchall()]
 
-    lines = [f"## Communication History: {name} ({contact_email})", ""]
+    lines = [f"## Communication History: {name}", f"**Email**: {contact_email} | **Phone**: {phone}", ""]
 
     if sms:
         lines.append(f"### SMS Messages ({len(sms)})")
@@ -533,7 +572,7 @@ def _handle_communication_history(question: str, contact_email: str | None) -> t
     if not sms and not calls and not deliveries:
         lines.append("No communication history found for this customer.")
 
-    data = {"sms_count": len(sms), "calls_count": len(calls), "deliveries_count": len(deliveries)}
+    data = {"phone": phone, "sms_count": len(sms), "calls_count": len(calls), "deliveries_count": len(deliveries)}
     return "\n".join(lines), data
 
 
@@ -655,6 +694,8 @@ async def _handle_free_form(question: str) -> tuple[str, dict]:
     """Answer any question by giving Claude real data context."""
     if not ANTHROPIC_API_KEY:
         return "AI queries require ANTHROPIC_API_KEY to be configured.", {}
+    if not question.strip():
+        return "Please type a question before submitting.", {}
 
     # Gather context data for Claude
     context_parts = []
@@ -774,25 +815,14 @@ Rules:
 - Format with markdown (headers, lists, bold) for readability.
 - If the question is about a specific customer, say you need their email."""
 
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": ANTHROPIC_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": CLAUDE_MODEL,
-                "max_tokens": 1500,
-                "system": system_prompt,
-                "messages": [{"role": "user", "content": question}],
-            },
-        )
-        if resp.status_code != 200:
-            return f"AI service error (status {resp.status_code}). Try a specific category instead.", {}
-        response_data = resp.json()
-        answer = response_data.get("content", [{}])[0].get("text", "No response generated.")
+    ai_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
+    resp = await ai_client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1500,
+        system=system_prompt,
+        messages=[{"role": "user", "content": question}],
+    )
+    answer = resp.content[0].text if resp.content else "No response generated."
 
     return answer, {"model": CLAUDE_MODEL, "data_sources": list(segments.keys())}
 
