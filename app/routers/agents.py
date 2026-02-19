@@ -63,7 +63,7 @@ def _fetch_contact(contact_id: int) -> dict:
             """
             SELECT c.id, c.first_name, c.last_name, c.email, c.phone,
                    c.lifecycle_segment, c.total_orders, c.sms_level,
-                   c.last_order_date, c.created_at,
+                   c.last_order_at, c.created_at,
                    er.opens_7d, er.opens_30d, er.clicks_7d, er.clicks_30d,
                    er.sms_sent_30d, er.orders_90d
             FROM contacts c
@@ -180,7 +180,7 @@ def _run_sentiment_agent(client: anthropic.Anthropic, contact: dict, comms: list
         f"Customer: {contact.get('first_name', '')} {contact.get('last_name', '')} | "
         f"Lifecycle: {contact.get('lifecycle_segment', 'unknown')} | "
         f"Total orders: {contact.get('total_orders', 0)} | "
-        f"Last order: {contact.get('last_order_date', 'never')}\n\n"
+        f"Last order: {contact.get('last_order_at', 'never')}\n\n"
         f"Recent communications:\n{json.dumps(comms, indent=2, default=str)}"
     )
     tool = {

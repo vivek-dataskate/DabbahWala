@@ -901,7 +901,7 @@ def tone_drafts(req: ToneRequest):
 
     with get_cursor(commit=False) as cur:
         cur.execute("""
-            SELECT first_name, last_name, lifecycle_segment, total_orders, last_order_date
+            SELECT first_name, last_name, lifecycle_segment, total_orders, last_order_at
             FROM contacts WHERE email = %s
         """, (req.contact_email,))
         row = cur.fetchone()
@@ -915,7 +915,7 @@ def tone_drafts(req: ToneRequest):
         f"Customer name: {name}\n"
         f"Lifecycle stage: {c.get('lifecycle_segment')}\n"
         f"Total orders: {c.get('total_orders', 0)}\n"
-        f"Last order: {c.get('last_order_date') or 'never'}"
+        f"Last order: {c.get('last_order_at') or 'never'}"
     )
 
     client = anthropic.Anthropic(api_key=api_key)
