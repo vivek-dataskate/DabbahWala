@@ -326,7 +326,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
             for row in item_rows:
                 raw_dish = _col(row, 'Dish Name', 'Item Name', 'Product', 'dish_name', 'item_name', 'Item').strip()
                 qty = int(_col(row, 'Quantity', 'Qty', 'qty', 'quantity') or 1)
-                price = float(_col(row, 'Unit Price', 'Price', 'Unit Price (AED)', 'unit_price', 'price') or 0)
+                price = float(_col(row, 'Unit Price', 'Price', 'Unit Price (USD)', 'unit_price', 'price') or 0)
                 if raw_dish:
                     canonical = resolve_dish_name(raw_dish, alias_map, master_norm, master_set)
                     items.append((canonical, qty, price, qty * price))

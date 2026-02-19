@@ -927,7 +927,7 @@ def tone_drafts(req: ToneRequest):
             max_tokens=200,
             system=(
                 f"You write marketing SMS/WhatsApp messages for DabbahWala, a food delivery "
-                f"business in the UAE. Write ONE short message (max 160 chars) in a {tone_name} "
+                f"service based in Atlanta, GA. Write ONE short message (max 160 chars) in a {tone_name} "
                 f"tone: {tone_desc}. Use the customer's first name directly — no placeholders. "
                 f"Output only the message text, nothing else."
             ),
