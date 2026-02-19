@@ -1,186 +1,255 @@
 {
-  "name": "DabbahWala \u2014 Marketing Query Form",
+  "name": "DabbahWala — Marketing Query Form",
   "nodes": [
     {
-      "id": "m1",
-      "name": "Marketing Query Form",
-      "type": "n8n-nodes-base.formTrigger",
-      "typeVersion": 2.2,
-      "position": [
-        160,
-        360
-      ],
       "parameters": {
-        "formTitle": "DabbahWala Marketing Query",
-        "formDescription": "Submit a query or team input. Contact info required to route to the agent pipeline.",
+        "formTitle": "DabbahWala Marketing Intelligence",
+        "formDescription": "Ask questions about customers, campaigns, orders, and more. Select a category for fast answers, choose 'Ask Anything (AI)' for free-form questions, or submit your own observations.",
         "formFields": {
           "values": [
             {
-              "fieldLabel": "Name",
-              "fieldType": "text",
-              "requiredField": true
-            },
-            {
-              "fieldLabel": "Email",
-              "fieldType": "email",
-              "requiredField": false
-            },
-            {
-              "fieldLabel": "Phone",
-              "fieldType": "text",
-              "requiredField": false
-            },
-            {
-              "fieldLabel": "Category",
+              "fieldLabel": "Query Category",
               "fieldType": "dropdown",
+              "requiredField": true,
               "fieldOptions": {
                 "values": [
-                  {
-                    "option": "General Query"
-                  },
-                  {
-                    "option": "Reorder Nudge"
-                  },
-                  {
-                    "option": "Complaint"
-                  },
-                  {
-                    "option": "Team Note"
-                  },
-                  {
-                    "option": "Marketing Input"
-                  }
+                  {"option": "Pipeline Snapshot — Lifecycle stage distribution"},
+                  {"option": "Who to Contact Today — Prioritized outreach list"},
+                  {"option": "Daily Summary — Today's orders and activity"},
+                  {"option": "Order Analytics — Top dishes, revenue, trends"},
+                  {"option": "Campaign Performance — Email campaign stats"},
+                  {"option": "Customer Lookup — Look up a specific customer"},
+                  {"option": "Communication History — SMS/call history for a customer"},
+                  {"option": "Ground Team Notes — Browse field team observations"},
+                  {"option": "Ad Copies — Browse social media ad copies"},
+                  {"option": "Submit New Input — Add your own observation or note"},
+                  {"option": "Ask Anything (AI) — Free-form question answered by AI"}
                 ]
-              },
-              "requiredField": true
+              }
             },
             {
-              "fieldLabel": "Query / Note",
+              "fieldLabel": "Your Question or Details",
               "fieldType": "textarea",
-              "requiredField": true
+              "requiredField": true,
+              "placeholder": "e.g., 'How many lapsed customers came back this week?' or your observation text"
+            },
+            {
+              "fieldLabel": "Customer Email (if looking up a specific customer)",
+              "fieldType": "text",
+              "requiredField": false,
+              "placeholder": "customer@example.com"
+            },
+            {
+              "fieldLabel": "Your Name (for Submit New Input)",
+              "fieldType": "text",
+              "requiredField": false,
+              "placeholder": "e.g., John D."
+            },
+            {
+              "fieldLabel": "Input Type (for Submit New Input)",
+              "fieldType": "dropdown",
+              "requiredField": false,
+              "fieldOptions": {
+                "values": [
+                  {"option": "Ground Note — Field observation"},
+                  {"option": "Ad Copy — Social media content"},
+                  {"option": "Observation — General insight"},
+                  {"option": "Question — Something to investigate"}
+                ]
+              }
             }
           ]
         },
-        "options": {}
-      }
+        "options": {
+          "respondWithData": true,
+          "formSubmittedText": "={{$json.formatted_answer}}"
+        }
+      },
+      "id": "form-trigger",
+      "name": "Marketing Query Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [200, 300],
+      "webhookId": "marketing-query-form"
     },
     {
-      "id": "m2",
+      "parameters": {
+        "jsCode": "// Map the form dropdown selection to our API category\nconst categoryMap = {\n  'Pipeline Snapshot — Lifecycle stage distribution': 'pipeline_snapshot',\n  'Who to Contact Today — Prioritized outreach list': 'who_to_contact',\n  'Daily Summary — Today\\'s orders and activity': 'daily_summary',\n  'Order Analytics — Top dishes, revenue, trends': 'order_analytics',\n  'Campaign Performance — Email campaign stats': 'campaign_performance',\n  'Customer Lookup — Look up a specific customer': 'customer_lookup',\n  'Communication History — SMS/call history for a customer': 'communication_history',\n  'Ground Team Notes — Browse field team observations': 'ground_team_notes',\n  'Ad Copies — Browse social media ad copies': 'ad_copies',\n  'Submit New Input — Add your own observation or note': 'submit_input',\n  'Ask Anything (AI) — Free-form question answered by AI': 'free_form',\n};\n\nconst inputTypeMap = {\n  'Ground Note — Field observation': 'ground_note',\n  'Ad Copy — Social media content': 'ad_copy',\n  'Observation — General insight': 'observation',\n  'Question — Something to investigate': 'question',\n};\n\nconst formCategory = $input.first().json['Query Category'];\nconst category = categoryMap[formCategory] || 'free_form';\nconst inputType = inputTypeMap[$input.first().json['Input Type (for Submit New Input)'] || ''] || 'observation';\n\nreturn [{\n  json: {\n    category: category,\n    question: $input.first().json['Your Question or Details'] || '',\n    contact_email: $input.first().json['Customer Email (if looking up a specific customer)'] || null,\n    author: $input.first().json['Your Name (for Submit New Input)'] || null,\n    input_type: inputType,\n    original_category: formCategory,\n    is_submission: category === 'submit_input',\n  }\n}];"
+      },
+      "id": "map-category",
       "name": "Map Category",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        400,
-        360
-      ],
-      "parameters": {
-        "jsCode": "\nconst row = $input.first().json;\nconst cat = (row['Category'] || 'general').toLowerCase().replace(/[^a-z]/g,'_');\nreturn [{json:{\n  name: row['Name'] || '',\n  email: row['Email'] || '',\n  phone: row['Phone'] || '',\n  category: cat,\n  query: row['Query / Note'] || '',\n  submitted_at: new Date().toISOString()\n}}];\n"
-      }
+      "position": [450, 300]
     },
     {
-      "id": "m3",
-      "name": "Run Agent Cycle for Contact",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [
-        640,
-        280
-      ],
       "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/agents/cycle/run-for-contact",
+        "url": "https://dabbahwala-latest.onrender.com/api/query",
         "sendBody": true,
-        "contentType": "json",
-        "body": {
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ email: $json.email || undefined, phone: $json.phone || undefined }) }}"
-        },
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ category: $json.category, question: $json.question, contact_email: $json.contact_email, author: $json.author, input_type: $json.input_type }) }}",
         "options": {
-          "response": {
-            "response": {
-              "responseFormat": "json"
-            }
-          },
-          "allowUnauthorizedCerts": false
+          "timeout": 90000
         }
-      }
+      },
+      "id": "call-query-api",
+      "name": "Call Query API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300]
     },
     {
-      "id": "m4",
-      "name": "Store in Airtable",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
-      "position": [
-        900,
-        360
-      ],
       "parameters": {
+        "jsCode": "// Format the API response for display on the form completion page\nconst response = $input.first().json;\nconst answer = response.answer || 'No answer received.';\nconst category = response.category || 'unknown';\nconst question = response.question || '';\n\n// Build a formatted response\nlet formatted = '';\nformatted += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';\nformatted += 'DabbahWala Marketing Intelligence\\n';\nformatted += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n';\nformatted += 'Category: ' + category.replace(/_/g, ' ').toUpperCase() + '\\n';\nif (question) {\n  formatted += 'Question: ' + question + '\\n';\n}\nformatted += '\\n' + answer + '\\n';\nformatted += '\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';\nformatted += 'Powered by DabbahWala Intelligence Engine\\n';\n\nreturn [{\n  json: {\n    formatted_answer: formatted,\n    raw_answer: answer,\n    category: category,\n    question: question,\n    timestamp: new Date().toISOString(),\n    is_submission: $('Map Category').first().json.is_submission || false,\n    author: $('Map Category').first().json.author || 'Anonymous',\n    input_type: $('Map Category').first().json.input_type || 'observation',\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [950, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "is-submission",
+              "leftValue": "={{ $json.is_submission }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "is-submission-check",
+      "name": "Is Submission?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "resource": "record",
         "operation": "create",
-        "base": {
+        "application": {
+          "__rl": true,
           "value": "appuy2VTIao6XVpIW",
           "mode": "id"
         },
         "table": {
+          "__rl": true,
           "value": "Team Inputs",
           "mode": "name"
         },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
-            "Name": "={{ $('Map Category').item.json.name }}",
-            "Email": "={{ $('Map Category').item.json.email }}",
-            "Phone": "={{ $('Map Category').item.json.phone }}",
-            "Category": "={{ $('Map Category').item.json.category }}",
-            "Query": "={{ $('Map Category').item.json.query }}",
-            "Submitted At": "={{ $('Map Category').item.json.submitted_at }}",
-            "Agent Status": "={{ $json.status || 'no_contact' }}",
-            "Agent Action": "={{ $json.chosen_action || '' }}"
+            "Author": "={{ $json.author }}",
+            "Type": "={{ $json.input_type }}",
+            "Content": "={{ $json.question }}",
+            "Date": "={{ $json.timestamp }}",
+            "Status": "New"
           }
         }
-      }
+      },
+      "id": "create-team-input-airtable",
+      "name": "Store in Airtable Team Inputs",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1450, 200],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "hJpO8jdlT4Rmkjtx",
+          "name": "Airtable API Key"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "create",
+        "application": {
+          "__rl": true,
+          "value": "appuy2VTIao6XVpIW",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Marketing Queries",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Category": "={{ $json.category }}",
+            "Question": "={{ $json.question }}",
+            "Answer": "={{ $json.raw_answer.substring(0, 10000) }}",
+            "Timestamp": "={{ $json.timestamp }}"
+          }
+        }
+      },
+      "id": "log-to-airtable",
+      "name": "Log to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1450, 400],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "hJpO8jdlT4Rmkjtx",
+          "name": "Airtable API Key"
+        }
+      },
+      "continueOnFail": true
     }
   ],
   "connections": {
     "Marketing Query Form": {
       "main": [
-        [
-          {
-            "node": "Map Category",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Map Category", "type": "main", "index": 0}]
       ]
     },
     "Map Category": {
       "main": [
-        [
-          {
-            "node": "Run Agent Cycle for Contact",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Call Query API", "type": "main", "index": 0}]
       ]
     },
-    "Run Agent Cycle for Contact": {
+    "Call Query API": {
       "main": [
-        [
-          {
-            "node": "Store in Airtable",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Format Response", "type": "main", "index": 0}]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [{"node": "Is Submission?", "type": "main", "index": 0}]
+      ]
+    },
+    "Is Submission?": {
+      "main": [
+        [{"node": "Store in Airtable Team Inputs", "type": "main", "index": 0}],
+        [{"node": "Log to Airtable", "type": "main", "index": 0}]
+      ]
+    },
+    "Store in Airtable Team Inputs": {
+      "main": [
+        [{"node": "Log to Airtable", "type": "main", "index": 0}]
       ]
     }
   },
   "settings": {
-    "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
+    "executionOrder": "v1"
   },
-  "staticData": null,
-  "tags": [],
-  "pinData": null
+  "meta": {
+    "instanceId": "digitalworker-dataskate"
+  },
+  "tags": [
+    {"name": "DabbahWala"},
+    {"name": "Marketing"},
+    {"name": "Query Form"}
+  ]
 }

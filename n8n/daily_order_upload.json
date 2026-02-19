@@ -1,206 +1,162 @@
 {
-  "name": "DabbahWala \u2014 Daily Order Upload",
+  "name": "DabbahWala — Daily Order Upload",
   "nodes": [
     {
-      "id": "n1",
-      "name": "Daily at 1PM EST",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.1,
-      "position": [
-        160,
-        300
-      ],
       "parameters": {
         "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "0 18 * * 1-6"
-            }
-          ]
+          "interval": [{"field": "cronExpression", "expression": "0 13 * * *"}]
         }
-      }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily at 1PM EST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
     },
     {
-      "id": "n2",
+      "parameters": {},
+      "id": "manual-trigger",
       "name": "Manual Upload",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [
-        160,
-        460
-      ],
-      "parameters": {}
+      "position": [100, 450]
     },
     {
-      "id": "n3",
-      "name": "Upload Orders to API",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [
-        400,
-        380
-      ],
       "parameters": {
         "method": "POST",
         "url": "=https://dabbahwala-latest.onrender.com/api/daily-orders/process",
         "sendBody": true,
-        "contentType": "json",
-        "body": {
-          "specifyBody": "json",
-          "jsonBody": "={{ JSON.stringify({ orders: $input.all().map(i => i.json) }) }}"
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "file", "parameterType": "formBinaryData", "inputDataFieldName": "data"}
+          ]
         },
         "options": {
-          "response": {
-            "response": {
-              "responseFormat": "json"
-            }
-          }
+          "timeout": 300000
         }
-      }
+      },
+      "id": "upload-to-api",
+      "name": "Upload CSV to API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
     },
     {
-      "id": "n4",
-      "name": "Has Orders?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        640,
-        380
-      ],
       "parameters": {
         "conditions": {
           "options": {
-            "caseSensitive": true
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
           },
           "conditions": [
             {
-              "id": "c1",
-              "leftValue": "={{ $json.ingested }}",
+              "id": "check-orders",
+              "leftValue": "={{ $json.total_orders }}",
               "rightValue": 0,
               "operator": {
                 "type": "number",
                 "operation": "gt"
               }
             }
-          ]
-        }
-      }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-result",
+      "name": "Has Orders?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
     },
     {
-      "id": "n5",
-      "name": "Run Agent Cycle",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.1,
-      "position": [
-        880,
-        280
-      ],
       "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/agents/cycle/run-all",
+        "url": "=https://dabbahwala-latest.onrender.com/api/intelligence/run-cycle",
         "options": {
-          "response": {
-            "response": {
-              "responseFormat": "json"
-            }
-          }
+          "timeout": 120000
         }
-      }
+      },
+      "id": "run-intelligence",
+      "name": "Run Intelligence Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 250]
     },
     {
-      "id": "n6",
-      "name": "No Orders \u2014 Skip",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        880,
-        480
-      ],
-      "parameters": {}
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/placeholder",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"Daily orders processed!\\n- Date: {{ $json.date }}\\n- Orders: {{ $json.total_orders }}\\n- Revenue: ${{ $json.total_revenue }}\\n- New customers: {{ $json.new_contacts }}\\n- Opportunities: {{ $json.opportunities_created }}\"\n}",
+        "options": {}
+      },
+      "id": "notify-success",
+      "name": "Notify Success",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 250]
     },
     {
-      "id": "n7",
-      "name": "Done",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        1120,
-        280
-      ],
-      "parameters": {}
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/placeholder",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"Daily order upload had issues. Check logs.\"\n}",
+        "options": {}
+      },
+      "id": "notify-failure",
+      "name": "Notify Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 400]
     }
   ],
   "connections": {
     "Daily at 1PM EST": {
       "main": [
         [
-          {
-            "node": "Upload Orders to API",
-            "type": "main",
-            "index": 0
-          }
+          {"node": "Upload CSV to API", "type": "main", "index": 0}
         ]
       ]
     },
     "Manual Upload": {
       "main": [
         [
-          {
-            "node": "Upload Orders to API",
-            "type": "main",
-            "index": 0
-          }
+          {"node": "Upload CSV to API", "type": "main", "index": 0}
         ]
       ]
     },
-    "Upload Orders to API": {
+    "Upload CSV to API": {
       "main": [
         [
-          {
-            "node": "Has Orders?",
-            "type": "main",
-            "index": 0
-          }
+          {"node": "Has Orders?", "type": "main", "index": 0}
         ]
       ]
     },
     "Has Orders?": {
       "main": [
         [
-          {
-            "node": "Run Agent Cycle",
-            "type": "main",
-            "index": 0
-          }
+          {"node": "Run Intelligence Cycle", "type": "main", "index": 0}
         ],
         [
-          {
-            "node": "No Orders \u2014 Skip",
-            "type": "main",
-            "index": 0
-          }
+          {"node": "Notify Failure", "type": "main", "index": 0}
         ]
       ]
     },
-    "Run Agent Cycle": {
+    "Run Intelligence Cycle": {
       "main": [
         [
-          {
-            "node": "Done",
-            "type": "main",
-            "index": 0
-          }
+          {"node": "Notify Success", "type": "main", "index": 0}
         ]
       ]
     }
   },
   "settings": {
-    "executionOrder": "v1",
-    "callerPolicy": "workflowsFromSameOwner",
-    "availableInMCP": false
-  },
-  "staticData": null,
-  "tags": [],
-  "pinData": null
+    "executionOrder": "v1"
+  }
 }
