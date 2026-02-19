@@ -501,12 +501,9 @@ def _handle_order_analytics(question: str) -> tuple[str, dict]:
 
 
 def _parse_date_range(date_from: str | None, date_to: str | None) -> tuple[date | None, date | None]:
-    """Parse date_from / date_to strings (YYYY-MM-DD) into date objects."""
     def _p(s: str | None) -> date | None:
-        if not s:
-            return None
         try:
-            return datetime.strptime(s.strip(), "%Y-%m-%d").date()
+            return datetime.strptime(s.strip(), "%Y-%m-%d").date() if s else None
         except ValueError:
             return None
     return _p(date_from), _p(date_to)
@@ -515,28 +512,24 @@ def _parse_date_range(date_from: str | None, date_to: str | None) -> tuple[date 
 def _handle_order_summary_by_delivery_date(
     question: str, date_from: str | None = None, date_to: str | None = None
 ) -> tuple[str, dict]:
-    """Orders grouped by delivery date with per-date counts, revenue, and top items."""
+    """Orders grouped by delivery date (order_date used as proxy) with per-date breakdown."""
     d_from, d_to = _parse_date_range(date_from, date_to)
-    # Default: last 30 days
     if not d_from:
         d_from = date.today() - timedelta(days=30)
     if not d_to:
         d_to = date.today()
-
     single_day = d_from == d_to
 
     with get_cursor(commit=False) as cur:
         cur.execute("""
-            SELECT
-                o.order_date::date AS delivery_date,
-                count(DISTINCT o.id) AS order_count,
-                count(DISTINCT o.contact_id) AS unique_customers,
-                coalesce(sum(o.total_amount), 0) AS revenue,
-                coalesce(avg(o.total_amount), 0) AS avg_order_value
-            FROM orders o
-            WHERE o.order_date::date BETWEEN %s AND %s
-            GROUP BY delivery_date
-            ORDER BY delivery_date DESC
+            SELECT order_date::date AS delivery_date,
+                   count(DISTINCT id) AS order_count,
+                   count(DISTINCT contact_id) AS unique_customers,
+                   coalesce(sum(total_amount), 0) AS revenue,
+                   coalesce(avg(total_amount), 0) AS avg_order_value
+            FROM orders
+            WHERE order_date::date BETWEEN %s AND %s
+            GROUP BY delivery_date ORDER BY delivery_date DESC
         """, (d_from, d_to))
         day_rows = [dict(r) for r in cur.fetchall()]
 
@@ -551,8 +544,7 @@ def _handle_order_summary_by_delivery_date(
             items = [dict(r) for r in cur.fetchall()]
 
     if not day_rows:
-        label = str(d_from) if single_day else f"{d_from} to {d_to}"
-        return f"No orders found for {label}.", {}
+        return f"No orders found for {d_from} to {d_to}.", {}
 
     total_orders = sum(r["order_count"] for r in day_rows)
     total_revenue = sum(float(r["revenue"]) for r in day_rows)
@@ -561,11 +553,8 @@ def _handle_order_summary_by_delivery_date(
         d = day_rows[0]
         lines = [
             f"## Orders for {d_from.strftime('%A, %B %d, %Y')}",
-            "",
-            f"- **Orders**: {d['order_count']}",
-            f"- **Unique Customers**: {d['unique_customers']}",
-            f"- **Revenue**: ${float(d['revenue']):.2f}",
-            f"- **Avg Order Value**: ${float(d['avg_order_value']):.2f}",
+            "", f"- **Orders**: {d['order_count']}", f"- **Unique Customers**: {d['unique_customers']}",
+            f"- **Revenue**: ${float(d['revenue']):.2f}", f"- **Avg Order Value**: ${float(d['avg_order_value']):.2f}",
         ]
         if items:
             lines.extend(["", "### Items Ordered"])
@@ -574,21 +563,13 @@ def _handle_order_summary_by_delivery_date(
     else:
         lines = [
             f"## Orders by Delivery Date ({d_from} → {d_to})",
-            "",
-            f"**Total Orders**: {total_orders}  |  **Total Revenue**: ${total_revenue:.2f}",
-            "",
-            "| Date | Orders | Customers | Revenue | Avg |",
-            "|------|--------|-----------|---------|-----|",
+            "", f"**Total Orders**: {total_orders}  |  **Total Revenue**: ${total_revenue:.2f}",
+            "", "| Date | Orders | Customers | Revenue | Avg |", "|------|--------|-----------|---------|-----|",
         ]
         for r in day_rows:
-            lines.append(
-                f"| {r['delivery_date']} | {r['order_count']} | "
-                f"{r['unique_customers']} | ${float(r['revenue']):.2f} | "
-                f"${float(r['avg_order_value']):.2f} |"
-            )
+            lines.append(f"| {r['delivery_date']} | {r['order_count']} | {r['unique_customers']} | ${float(r['revenue']):.2f} | ${float(r['avg_order_value']):.2f} |")
 
-    data = {"days": day_rows, "total_orders": total_orders, "total_revenue": total_revenue}
-    return "\n".join(lines), data
+    return "\n".join(lines), {"days": day_rows, "total_orders": total_orders, "total_revenue": total_revenue}
 
 
 def _handle_order_summary_by_order_date(
@@ -603,23 +584,19 @@ def _handle_order_summary_by_order_date(
 
     with get_cursor(commit=False) as cur:
         cur.execute("""
-            SELECT
-                order_date::date AS order_day,
-                count(DISTINCT id) AS order_count,
-                count(DISTINCT contact_id) AS unique_customers,
-                coalesce(sum(total_amount), 0) AS revenue,
-                coalesce(avg(total_amount), 0) AS avg_order_value
-            FROM orders
-            WHERE order_date::date BETWEEN %s AND %s
-            GROUP BY order_day
-            ORDER BY order_day DESC
+            SELECT order_date::date AS order_day,
+                   count(DISTINCT id) AS order_count,
+                   count(DISTINCT contact_id) AS unique_customers,
+                   coalesce(sum(total_amount), 0) AS revenue,
+                   coalesce(avg(total_amount), 0) AS avg_order_value
+            FROM orders WHERE order_date::date BETWEEN %s AND %s
+            GROUP BY order_day ORDER BY order_day DESC
         """, (d_from, d_to))
         day_rows = [dict(r) for r in cur.fetchall()]
 
         cur.execute("""
             SELECT source, count(*) AS cnt, coalesce(sum(total_amount), 0) AS revenue
-            FROM orders
-            WHERE order_date::date BETWEEN %s AND %s
+            FROM orders WHERE order_date::date BETWEEN %s AND %s
             GROUP BY source ORDER BY cnt DESC
         """, (d_from, d_to))
         sources = [dict(r) for r in cur.fetchall()]
@@ -632,26 +609,18 @@ def _handle_order_summary_by_order_date(
 
     lines = [
         f"## Orders by Order Date ({d_from} → {d_to})",
-        "",
-        f"**Total Orders**: {total_orders}  |  **Total Revenue**: ${total_revenue:.2f}",
-        "",
-        "| Date | Orders | Customers | Revenue | Avg |",
-        "|------|--------|-----------|---------|-----|",
+        "", f"**Total Orders**: {total_orders}  |  **Total Revenue**: ${total_revenue:.2f}",
+        "", "| Date | Orders | Customers | Revenue | Avg |", "|------|--------|-----------|---------|-----|",
     ]
     for r in day_rows:
-        lines.append(
-            f"| {r['order_day']} | {r['order_count']} | "
-            f"{r['unique_customers']} | ${float(r['revenue']):.2f} | "
-            f"${float(r['avg_order_value']):.2f} |"
-        )
+        lines.append(f"| {r['order_day']} | {r['order_count']} | {r['unique_customers']} | ${float(r['revenue']):.2f} | ${float(r['avg_order_value']):.2f} |")
 
     if sources:
         lines.extend(["", "### By Source"])
         for s in sources:
             lines.append(f"- **{s['source'] or 'Unknown'}**: {s['cnt']} orders  (${float(s['revenue']):.2f})")
 
-    data = {"days": day_rows, "sources": sources, "total_orders": total_orders, "total_revenue": total_revenue}
-    return "\n".join(lines), data
+    return "\n".join(lines), {"days": day_rows, "sources": sources, "total_orders": total_orders, "total_revenue": total_revenue}
 
 
 def _handle_revenue_trends(
@@ -665,31 +634,23 @@ def _handle_revenue_trends(
         d_to = date.today()
 
     with get_cursor(commit=False) as cur:
-        # Weekly totals
         cur.execute("""
-            SELECT
-                date_trunc('week', order_date)::date AS week_start,
-                count(DISTINCT id) AS orders,
-                count(DISTINCT contact_id) AS customers,
-                coalesce(sum(total_amount), 0) AS revenue,
-                coalesce(avg(total_amount), 0) AS avg_order
-            FROM orders
-            WHERE order_date::date BETWEEN %s AND %s
-            GROUP BY week_start
-            ORDER BY week_start DESC
+            SELECT date_trunc('week', order_date)::date AS week_start,
+                   count(DISTINCT id) AS orders,
+                   count(DISTINCT contact_id) AS customers,
+                   coalesce(sum(total_amount), 0) AS revenue,
+                   coalesce(avg(total_amount), 0) AS avg_order
+            FROM orders WHERE order_date::date BETWEEN %s AND %s
+            GROUP BY week_start ORDER BY week_start DESC
         """, (d_from, d_to))
         weeks = [dict(r) for r in cur.fetchall()]
 
-        # Monthly totals
         cur.execute("""
-            SELECT
-                date_trunc('month', order_date)::date AS month_start,
-                count(DISTINCT id) AS orders,
-                coalesce(sum(total_amount), 0) AS revenue
-            FROM orders
-            WHERE order_date::date BETWEEN %s AND %s
-            GROUP BY month_start
-            ORDER BY month_start DESC
+            SELECT date_trunc('month', order_date)::date AS month_start,
+                   count(DISTINCT id) AS orders,
+                   coalesce(sum(total_amount), 0) AS revenue
+            FROM orders WHERE order_date::date BETWEEN %s AND %s
+            GROUP BY month_start ORDER BY month_start DESC
         """, (d_from, d_to))
         months = [dict(r) for r in cur.fetchall()]
 
@@ -701,14 +662,10 @@ def _handle_revenue_trends(
 
     lines = [
         f"## Revenue Trends ({d_from} → {d_to})",
-        "",
-        f"**Total Revenue**: ${total_revenue:.2f}  |  **Total Orders**: {total_orders}",
-        "",
-        "### Weekly Breakdown",
-        "| Week | Orders | Revenue | Avg Order | WoW |",
-        "|------|--------|---------|-----------|-----|",
+        "", f"**Total Revenue**: ${total_revenue:.2f}  |  **Total Orders**: {total_orders}",
+        "", "### Weekly Breakdown",
+        "| Week | Orders | Revenue | Avg Order | WoW |", "|------|--------|---------|-----------|-----|",
     ]
-
     for i, w in enumerate(weeks):
         prev_rev = float(weeks[i + 1]["revenue"]) if i + 1 < len(weeks) else None
         curr_rev = float(w["revenue"])
@@ -716,18 +673,14 @@ def _handle_revenue_trends(
         if prev_rev and prev_rev > 0:
             pct = (curr_rev - prev_rev) / prev_rev * 100
             wow = f"{'▲' if pct >= 0 else '▼'} {abs(pct):.1f}%"
-        lines.append(
-            f"| {w['week_start']} | {w['orders']} | ${curr_rev:.2f} | "
-            f"${float(w['avg_order']):.2f} | {wow} |"
-        )
+        lines.append(f"| {w['week_start']} | {w['orders']} | ${curr_rev:.2f} | ${float(w['avg_order']):.2f} | {wow} |")
 
     if months:
         lines.extend(["", "### Monthly Summary"])
         for m in months:
             lines.append(f"- **{m['month_start'].strftime('%B %Y')}**: {m['orders']} orders, ${float(m['revenue']):.2f}")
 
-    data = {"weeks": weeks, "months": months, "total_revenue": total_revenue, "total_orders": total_orders}
-    return "\n".join(lines), data
+    return "\n".join(lines), {"weeks": weeks, "months": months, "total_revenue": total_revenue, "total_orders": total_orders}
 
 
 def _handle_communication_history(

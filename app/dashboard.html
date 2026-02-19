@@ -680,13 +680,11 @@ function onCategoryChange() {
   document.getElementById('q-email-hint').textContent        = needsEmail   ? '(required)' : '(optional)';
   if (needsDate) document.getElementById('q-daterange-label').textContent = Q_DATE_LABELS[cat] || 'Date range';
 
-  // Relabel name field for submit_input
   const nameLabel = document.querySelector('#q-name-group label');
   if (nameLabel) nameLabel.innerHTML = cat === 'submit_input'
     ? 'Your name <span class="hint">(optional — shown as author)</span>'
     : 'Customer name <span class="hint">(optional)</span>';
 
-  // Update question placeholder
   document.getElementById('q-question').placeholder =
     Q_PLACEHOLDERS[cat] || 'e.g. How many lapsed customers came back this week?';
 }
