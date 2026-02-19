@@ -25,7 +25,7 @@ class LifecycleResult(BaseModel):
 # --- Campaign queue ---
 class CampaignMove(BaseModel):
     queue_id: int
-    contact_email: str
+    contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
     from_campaign: Optional[str] = None
     to_campaign: str
