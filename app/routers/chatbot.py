@@ -117,7 +117,7 @@ def _stored_docs_hash() -> str | None:
                 "SELECT value FROM chatbot_doc_meta WHERE key = 'docs_hash'",
             )
             row = cur.fetchone()
-            return row[0] if row else None
+            return row["value"] if row else None
     except Exception:
         return None
 
@@ -253,7 +253,7 @@ def _relevant_chunks(question: str, limit: int = 8) -> list[dict]:
                 "SELECT source_file, content FROM chatbot_doc_chunks ORDER BY id LIMIT %s",
                 (limit,),
             )
-            return [{"source": r[0], "content": r[1]} for r in cur.fetchall()]
+            return [{"source": r["source_file"], "content": r["content"]} for r in cur.fetchall()]
 
     tsquery = " | ".join(words[:12])
     with get_cursor(commit=False) as cur:
@@ -271,7 +271,7 @@ def _relevant_chunks(question: str, limit: int = 8) -> list[dict]:
         rows = cur.fetchall()
 
     if rows:
-        return [{"source": r[0], "content": r[1]} for r in rows]
+        return [{"source": r["source_file"], "content": r["content"]} for r in rows]
 
     # Fallback: ILIKE keyword search
     top_words = words[:5]
@@ -282,7 +282,7 @@ def _relevant_chunks(question: str, limit: int = 8) -> list[dict]:
             f"SELECT DISTINCT source_file, content FROM chatbot_doc_chunks WHERE {conditions} LIMIT %s",
             params,
         )
-        return [{"source": r[0], "content": r[1]} for r in cur.fetchall()]
+        return [{"source": r["source_file"], "content": r["content"]} for r in cur.fetchall()]
 
 
 def _similar_history(question: str, limit: int = 3) -> list[dict]:
@@ -302,7 +302,7 @@ def _similar_history(question: str, limit: int = 3) -> list[dict]:
             """,
             params,
         )
-        return [{"question": r[0], "answer": r[1]} for r in cur.fetchall()]
+        return [{"question": r["question"], "answer": r["answer"]} for r in cur.fetchall()]
 
 
 def _save_interaction(question: str, answer: str, sources: list[str]) -> None:
