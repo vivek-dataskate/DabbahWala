@@ -1,10 +1,22 @@
+import logging
 import os
 import traceback
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, campaigns, daily_orders, delivery, events, intelligence, lifecycle, opportunities, playbook, query, reports, sms, team_content, telnyx
+from app.routers import agents, agent, campaigns, daily_orders, delivery, events, intelligence, lifecycle, opportunities, playbook, query, reports, shipday_historical, sms, team_content, telnyx
+
+# ---------------------------------------------------------------------------
+# Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+logger.info("DabbahWala API starting — log_level=%s", os.environ.get("LOG_LEVEL", "INFO"))
 
 app = FastAPI(
     title="DabbahWala Marketing System",
@@ -15,6 +27,14 @@ app = FastAPI(
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(
+        "Unhandled exception %s %s: %s [%s]",
+        request.method,
+        request.url.path,
+        exc,
+        type(exc).__name__,
+        exc_info=True,
+    )
     traceback.print_exc()
     return JSONResponse(
         status_code=500,
@@ -30,6 +50,7 @@ app.include_router(delivery.router, prefix="/api/delivery", tags=["delivery"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opportunities"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
+app.include_router(shipday_historical.router, prefix="/api/shipday", tags=["shipday"])
 app.include_router(daily_orders.router, prefix="/api/daily-orders", tags=["daily-orders"])
 app.include_router(intelligence.router, prefix="/api/intelligence", tags=["intelligence"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
@@ -49,12 +70,15 @@ def dashboard():
 @app.get("/health")
 def health():
     from fastapi.responses import JSONResponse
+    logger.debug("Health check requested")
     try:
         from app.db import get_cursor
         with get_cursor(commit=False) as cur:
             cur.execute("SELECT 1")
+        logger.debug("Health check OK — DB connected")
         return {"status": "ok", "db": "connected"}
     except Exception as e:
+        logger.error("Health check FAILED — DB unreachable: %s", e, exc_info=True)
         return JSONResponse(
             status_code=503,
             content={"status": "degraded", "db": str(e)},
@@ -64,18 +88,20 @@ def health():
 @app.post("/admin/migrate/{migration_number}")
 def run_migration(migration_number: int, secret: str = ""):
     """Run a specific migration file by number. Requires admin secret."""
-    import os
+    import glob
+    from fastapi import HTTPException
     admin_secret = os.environ.get("ADMIN_SECRET", "")
     if not admin_secret or secret != admin_secret:
-        from fastapi import HTTPException
+        logger.warning("Migration %03d blocked — invalid admin secret", migration_number)
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    import glob
     matches = glob.glob(f"migrations/{migration_number:03d}_*.sql")
     if not matches:
+        logger.warning("Migration %03d not found — no file matches", migration_number)
         return {"error": f"No migration file found for {migration_number:03d}"}
 
     migration_file = matches[0]
+    logger.info("Running migration: %s", migration_file)
     with open(migration_file) as f:
         sql = f.read()
 
@@ -83,13 +109,14 @@ def run_migration(migration_number: int, secret: str = ""):
     with get_cursor(commit=True) as cur:
         cur.execute(sql)
 
+    logger.info("Migration %s executed successfully", migration_file)
     return {"status": "ok", "migration": migration_file, "executed": True}
 
 
 @app.post("/admin/query")
 async def run_query(request: Request, secret: str = "", sql: str = ""):
     """Run a read-only SQL query. Accepts SQL via query param or JSON body."""
-    import os
+    from fastapi import HTTPException
     admin_secret = os.environ.get("ADMIN_SECRET", "")
 
     # Try JSON body if query params empty
@@ -102,26 +129,30 @@ async def run_query(request: Request, secret: str = "", sql: str = ""):
             pass
 
     if not admin_secret or secret != admin_secret:
-        from fastapi import HTTPException
+        logger.warning("Admin query blocked — invalid secret from %s", request.client)
         raise HTTPException(status_code=403, detail="Forbidden")
 
     if not sql.strip():
+        logger.debug("Admin query called with empty SQL — ignoring")
         return {"error": "No SQL provided"}
 
+    logger.info("Admin query: %.120s…", sql.strip())
     from app.db import get_cursor
     with get_cursor(commit=False) as cur:
         cur.execute(sql)
         try:
             rows = cur.fetchall()
+            logger.debug("Admin query returned %d rows", len(rows))
             return {"status": "ok", "rows": rows, "count": len(rows)}
-        except Exception:
+        except Exception as e:
+            logger.warning("Admin query fetchall failed (probably DDL): %s", e)
             return {"status": "ok", "rows": [], "count": 0}
 
 
 @app.post("/admin/exec")
 async def run_exec(request: Request, secret: str = "", sql: str = ""):
     """Run a DDL/DML SQL statement. Accepts SQL via query param or JSON body."""
-    import os
+    from fastapi import HTTPException
     admin_secret = os.environ.get("ADMIN_SECRET", "")
 
     # Try JSON body if query params empty
@@ -134,14 +165,17 @@ async def run_exec(request: Request, secret: str = "", sql: str = ""):
             pass
 
     if not admin_secret or secret != admin_secret:
-        from fastapi import HTTPException
+        logger.warning("Admin exec blocked — invalid secret from %s", request.client)
         raise HTTPException(status_code=403, detail="Forbidden")
 
     if not sql.strip():
+        logger.debug("Admin exec called with empty SQL — ignoring")
         return {"error": "No SQL provided"}
 
+    logger.info("Admin exec: %.120s…", sql.strip())
     from app.db import get_cursor
     with get_cursor(commit=True) as cur:
         cur.execute(sql)
 
+    logger.info("Admin exec completed successfully")
     return {"status": "ok", "executed": True}

@@ -1,10 +1,12 @@
 import json
+import logging
 
 from fastapi import APIRouter, HTTPException
 
 from app.db import get_cursor
 from app.models import EventIngest, EventResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -29,6 +31,7 @@ def _resolve_email(contact_email: str | None, contact_phone: str | None) -> str:
 @router.post("/ingest", response_model=EventResponse)
 def ingest_event(payload: EventIngest):
     email = _resolve_email(payload.contact_email, payload.contact_phone)
+    logger.info("ingest_event: type=%s email=%s", payload.event_type, email)
     with get_cursor() as cur:
         try:
             cur.execute(
@@ -36,9 +39,13 @@ def ingest_event(payload: EventIngest):
                 (email, payload.event_type, str(payload.metadata).replace("'", '"')),
             )
             row = cur.fetchone()
-            return EventResponse(event_id=row["ingest_event"])
+            event_id = row["ingest_event"]
+            logger.debug("ingest_event: stored id=%s type=%s email=%s", event_id, payload.event_type, email)
+            return EventResponse(event_id=event_id)
         except Exception as e:
             error_msg = str(e)
             if "Contact not found" in error_msg:
+                logger.warning("ingest_event: contact not found email=%s", email)
                 raise HTTPException(status_code=404, detail=error_msg)
+            logger.error("ingest_event: error type=%s email=%s: %s", payload.event_type, email, e, exc_info=True)
             raise HTTPException(status_code=400, detail=error_msg)

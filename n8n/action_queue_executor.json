@@ -358,7 +358,7 @@
     }
   ],
   "connections": {
-    "Every 5 Minutes": {
+    "Every 30 Minutes": {
       "main": [
         [
           {

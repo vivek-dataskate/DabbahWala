@@ -42,7 +42,8 @@ class SmsPending(BaseModel):
 
 # --- Telnyx message ---
 class TelnyxMessageIn(BaseModel):
-    contact_email: str
+    contact_email: Optional[str] = None   # resolved from contact_phone if absent
+    contact_phone: Optional[str] = None   # fallback for inbound SMS (customer's phone)
     direction: str
     from_number: str
     to_number: str
@@ -55,7 +56,8 @@ class TelnyxMessageIn(BaseModel):
 
 # --- Telnyx call ---
 class TelnyxCallIn(BaseModel):
-    contact_email: str
+    contact_email: Optional[str] = None   # resolved from contact_phone if absent
+    contact_phone: Optional[str] = None   # fallback for inbound calls (customer's phone)
     direction: str
     from_number: str
     to_number: str

@@ -1,10 +1,12 @@
 import json
+import logging
 
 from fastapi import APIRouter, HTTPException
 
 from app.db import get_cursor
 from app.models import FieldAgentSmsIn, IdResponse, TelnyxCallIn, TelnyxMessageIn
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -15,6 +17,7 @@ def _resolve_email(phone: str | None, email: str | None) -> str:
     if not phone:
         raise HTTPException(status_code=400, detail="contact_phone or contact_email is required")
     normalized = "".join(c for c in phone if c.isdigit() or c == "+")
+    logger.debug("Resolving contact email from phone=%s", phone)
     with get_cursor(commit=False) as cur:
         cur.execute(
             "SELECT email FROM contacts WHERE phone = %s OR phone = %s LIMIT 1",
@@ -22,18 +25,26 @@ def _resolve_email(phone: str | None, email: str | None) -> str:
         )
         row = cur.fetchone()
     if not row:
+        logger.warning("Contact not found for phone=%s", phone)
         raise HTTPException(status_code=404, detail=f"Contact not found for phone: {phone}")
     return row["email"]
 
 
 @router.post("/message", response_model=IdResponse)
 def store_message(payload: TelnyxMessageIn):
+    # For inbound SMS, we have from_number (customer phone) but not email — resolve it
+    inbound_phone = payload.from_number if payload.direction == "inbound" else None
+    contact_email = _resolve_email(payload.contact_phone or inbound_phone, payload.contact_email)
+    logger.info(
+        "store_message: dir=%s from=%s to=%s email=%s",
+        payload.direction, payload.from_number, payload.to_number, contact_email,
+    )
     with get_cursor() as cur:
         try:
             cur.execute(
                 "SELECT store_telnyx_message(%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)",
                 (
-                    payload.contact_email,
+                    contact_email,
                     payload.direction,
                     payload.from_number,
                     payload.to_number,
@@ -45,21 +56,33 @@ def store_message(payload: TelnyxMessageIn):
                 ),
             )
             row = cur.fetchone()
-            return IdResponse(id=row["store_telnyx_message"])
+            msg_id = row["store_telnyx_message"]
+            logger.info("store_message: stored id=%s email=%s", msg_id, contact_email)
+            return IdResponse(id=msg_id)
         except Exception as e:
             if "Contact not found" in str(e):
-                raise HTTPException(status_code=404, detail=f"Contact not found: {payload.contact_email}")
+                logger.warning("store_message: contact not found email=%s", contact_email)
+                raise HTTPException(status_code=404, detail=f"Contact not found: {contact_email}")
+            logger.error("store_message: unexpected error: %s", e, exc_info=True)
             raise
 
 
 @router.post("/call", response_model=IdResponse)
 def store_call(payload: TelnyxCallIn):
+    # For inbound calls, from_number is the customer's phone — resolve to email
+    inbound_phone = payload.from_number if payload.direction == "inbound" else None
+    contact_email = _resolve_email(payload.contact_phone or inbound_phone, payload.contact_email)
+    logger.info(
+        "store_call: dir=%s from=%s to=%s email=%s dur=%s",
+        payload.direction, payload.from_number, payload.to_number,
+        contact_email, payload.duration_sec,
+    )
     with get_cursor() as cur:
         try:
             cur.execute(
                 "SELECT store_telnyx_call(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s, %s)",
                 (
-                    payload.contact_email,
+                    contact_email,
                     payload.direction,
                     payload.from_number,
                     payload.to_number,
@@ -74,10 +97,14 @@ def store_call(payload: TelnyxCallIn):
                 ),
             )
             row = cur.fetchone()
-            return IdResponse(id=row["store_telnyx_call"])
+            call_id = row["store_telnyx_call"]
+            logger.info("store_call: stored id=%s email=%s", call_id, contact_email)
+            return IdResponse(id=call_id)
         except Exception as e:
             if "Contact not found" in str(e):
-                raise HTTPException(status_code=404, detail=f"Contact not found: {payload.contact_email}")
+                logger.warning("store_call: contact not found email=%s", contact_email)
+                raise HTTPException(status_code=404, detail=f"Contact not found: {contact_email}")
+            logger.error("store_call: unexpected error: %s", e, exc_info=True)
             raise
 
 
