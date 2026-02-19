@@ -113,12 +113,19 @@ def _populate_recipients_all_customers(cur, job_id: int, channels: list[str]) ->
 
 
 def _populate_recipients_active_orders(cur, job_id: int, channels: list[str], target_date: date) -> int:
-    """Insert recipients for contacts with orders on target_date (delay alert)."""
+    """Insert recipients for contacts with deliveries on target_date.
+    Uses delivery_date when available (set during CSV intake), falls back to order_date
+    for legacy records without a delivery_date.
+    """
     cur.execute(
         """
         INSERT INTO broadcast_recipients (job_id, contact_id, channel)
         SELECT %s, o.contact_id, ch.channel
-        FROM (SELECT DISTINCT contact_id FROM orders WHERE order_date = %s) o
+        FROM (
+            SELECT DISTINCT contact_id
+            FROM orders
+            WHERE COALESCE(delivery_date, order_date) = %s
+        ) o
         JOIN contacts c ON c.id = o.contact_id
         CROSS JOIN UNNEST(%s::text[]) AS ch(channel)
         WHERE c.lifecycle_segment NOT IN ('optout')
