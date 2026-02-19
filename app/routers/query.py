@@ -278,7 +278,7 @@ def _handle_who_to_contact(question: str) -> tuple[str, dict]:
     with get_cursor(commit=False) as cur:
         # Pending opportunities (prioritized)
         cur.execute("""
-            SELECT o.id, o.action, o.priority, o.reason,
+            SELECT o.id, o.contact_id, o.action, o.priority, o.reason,
                    o.suggested_message, o.confidence_score,
                    c.first_name, c.last_name, c.email, c.phone,
                    c.lifecycle_segment, c.total_orders
@@ -333,7 +333,26 @@ def _handle_who_to_contact(question: str) -> tuple[str, dict]:
             name = f"{r.get('first_name', '')} {r.get('last_name', '')}".strip()
             lines.append(f"- {name} — {r.get('total_orders', 0)} orders, last: {r.get('last_order_at', 'N/A')}")
 
-    return "\n".join(lines), {"opportunities": len(opps), "reactivation": len(reactivation)}
+    actionable = [
+        {
+            "opportunity_id": o["id"],
+            "contact_id": o["contact_id"],
+            "name": f"{o.get('first_name', '')} {o.get('last_name', '')}".strip() or o.get("email", "Unknown"),
+            "action_type": o["action"],
+            "priority": o["priority"],
+            "phone": o.get("phone"),
+            "email": o.get("email"),
+            "message": o.get("suggested_message") or "",
+            "reason": o.get("reason") or "",
+        }
+        for o in opps
+        if o["action"] in ("send_sms", "send_email")
+    ]
+    return "\n".join(lines), {
+        "opportunities": len(opps),
+        "reactivation": len(reactivation),
+        "actionable_contacts": actionable,
+    }
 
 
 def _handle_daily_summary(question: str) -> tuple[str, dict]:
@@ -415,56 +434,74 @@ def _handle_daily_summary(question: str) -> tuple[str, dict]:
     return "\n".join(lines), data
 
 
-def _handle_order_analytics(question: str) -> tuple[str, dict]:
+def _handle_order_analytics(
+    question: str, date_from: str | None = None, date_to: str | None = None
+) -> tuple[str, dict]:
+    d_from, d_to = _parse_date_range(date_from, date_to)
+    if not d_from:
+        d_from = date.today() - timedelta(days=30)
+    if not d_to:
+        d_to = date.today()
+
+    date_label = f"{d_from} to {d_to}"
+
     with get_cursor(commit=False) as cur:
-        # Top dishes by quantity
+        # Top dishes by quantity within date range
         cur.execute("""
             SELECT oi.item_name, sum(oi.quantity) as total_qty,
                    count(DISTINCT o.id) as order_count,
                    sum(oi.line_total) as total_revenue
             FROM order_items oi JOIN orders o ON o.id = oi.order_id
+            WHERE o.order_date::date BETWEEN %s AND %s
             GROUP BY oi.item_name ORDER BY total_qty DESC LIMIT 15
-        """)
+        """, (d_from, d_to))
         top_dishes = [dict(r) for r in cur.fetchall()]
 
-        # Orders per day (last 14 days)
+        # Orders per day within date range
         cur.execute("""
             SELECT order_date::date as day, count(*) as orders,
                    coalesce(sum(total_amount), 0) as revenue
             FROM orders
-            WHERE order_date > now() - interval '14 days'
+            WHERE order_date::date BETWEEN %s AND %s
             GROUP BY day ORDER BY day DESC
-        """)
+        """, (d_from, d_to))
         daily = [dict(r) for r in cur.fetchall()]
 
-        # Avg order value
+        # Avg order value within date range
         cur.execute("""
             SELECT avg(total_amount) as avg_order, count(*) as total_orders
-            FROM orders WHERE total_amount > 0
-        """)
+            FROM orders
+            WHERE total_amount > 0
+              AND order_date::date BETWEEN %s AND %s
+        """, (d_from, d_to))
         avg_row = cur.fetchone()
 
-        # Repeat rate
+        # Repeat rate within date range
         cur.execute("""
             SELECT
                 count(*) as total_customers,
                 count(*) FILTER (WHERE order_count > 1) as repeat_customers
             FROM (
                 SELECT contact_id, count(*) as order_count
-                FROM orders GROUP BY contact_id
+                FROM orders
+                WHERE order_date::date BETWEEN %s AND %s
+                GROUP BY contact_id
             ) sub
-        """)
+        """, (d_from, d_to))
         repeat_row = cur.fetchone()
 
-        # Source breakdown
+        # Source breakdown within date range
         cur.execute("""
             SELECT source, count(*) as cnt
-            FROM orders GROUP BY source ORDER BY cnt DESC
-        """)
+            FROM orders
+            WHERE order_date::date BETWEEN %s AND %s
+            GROUP BY source ORDER BY cnt DESC
+        """, (d_from, d_to))
         sources = [dict(r) for r in cur.fetchall()]
 
     lines = [
         "## Order Analytics",
+        f"*Period: {date_label}*",
         "",
         "### Key Metrics",
         f"- Total Orders: {avg_row['total_orders']}",
@@ -473,7 +510,7 @@ def _handle_order_analytics(question: str) -> tuple[str, dict]:
         f"- Repeat Customers: {repeat_row['repeat_customers']} "
         f"({repeat_row['repeat_customers'] / max(repeat_row['total_customers'], 1) * 100:.1f}%)",
         "",
-        "### Top 15 Dishes (All Time)",
+        f"### Top 15 Dishes ({date_label})",
     ]
 
     for d in top_dishes:
@@ -483,7 +520,7 @@ def _handle_order_analytics(question: str) -> tuple[str, dict]:
         )
 
     if daily:
-        lines.extend(["", "### Daily Orders (Last 14 Days)"])
+        lines.extend(["", f"### Daily Orders ({date_label})"])
         for d in daily:
             lines.append(f"- {d['day']}: {d['orders']} orders, ${float(d['revenue']):.2f}")
 
@@ -1211,7 +1248,7 @@ async def handle_query(req: QueryRequest):
         elif category == "daily_summary":
             answer, data = _handle_daily_summary(question)
         elif category == "order_analytics":
-            answer, data = _handle_order_analytics(question)
+            answer, data = _handle_order_analytics(question, date_from, date_to)
         elif category == "order_summary_by_order_date":
             answer, data = _handle_order_summary_by_order_date(question, date_from, date_to)
         elif category == "order_summary_by_delivery_date":
@@ -1252,3 +1289,49 @@ async def handle_query(req: QueryRequest):
 def list_categories():
     """Return available query categories for the form dropdown."""
     return {"categories": CATEGORIES}
+
+
+@router.post("/execute-opportunity/{opportunity_id}")
+def execute_opportunity(opportunity_id: int):
+    """Enqueue an opportunity action for execution (SMS or email via n8n)."""
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            SELECT o.id, o.contact_id, o.action, o.suggested_message, o.priority,
+                   c.first_name, c.last_name, c.email, c.phone
+            FROM opportunities o
+            JOIN contacts c ON c.id = o.contact_id
+            WHERE o.id = %s AND o.status = 'pending'
+            """,
+            (opportunity_id,),
+        )
+        opp = cur.fetchone()
+        if not opp:
+            raise HTTPException(status_code=404, detail="Opportunity not found or already actioned")
+
+        opp = dict(opp)
+        payload = {
+            "message": opp.get("suggested_message") or "",
+            "phone": opp.get("phone"),
+            "email": opp.get("email"),
+            "first_name": opp.get("first_name"),
+            "priority": opp.get("priority"),
+            "source": "dashboard_manual",
+        }
+        cur.execute(
+            """
+            INSERT INTO action_queue (contact_id, action_type, payload)
+            VALUES (%s, %s, %s::jsonb)
+            RETURNING id
+            """,
+            (opp["contact_id"], opp["action"], json.dumps(payload)),
+        )
+        action_id = cur.fetchone()["id"]
+
+        cur.execute(
+            "UPDATE opportunities SET status = 'actioned' WHERE id = %s",
+            (opportunity_id,),
+        )
+
+    name = f"{opp.get('first_name', '')} {opp.get('last_name', '')}".strip()
+    return {"status": "queued", "action_id": action_id, "contact": name, "action_type": opp["action"]}

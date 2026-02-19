@@ -72,6 +72,26 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
 }
 .result-box.error pre { color: #842029; }
 
+/* Contact action cards (who to contact today) */
+.contact-action-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px; margin-top: 18px;
+}
+.contact-action-card {
+  background: #fff; border: 1.5px solid #e0e0ea; border-radius: 10px;
+  padding: 14px 16px; display: flex; flex-direction: column; gap: 6px;
+  transition: opacity 0.3s;
+}
+.contact-action-header { display: flex; align-items: center; gap: 8px; }
+.contact-action-name { font-weight: 600; font-size: 0.95rem; color: #1a1a2e; flex: 1; }
+.contact-action-priority {
+  font-size: 0.68rem; font-weight: 700; color: #fff;
+  padding: 2px 7px; border-radius: 20px; letter-spacing: 0.04em;
+}
+.contact-action-dest { font-size: 0.8rem; color: #555; font-family: 'SF Mono', monospace; }
+.contact-action-msg { font-size: 0.78rem; color: #444; line-height: 1.45; font-style: italic; }
+.contact-action-btn { margin-top: 6px; font-size: 0.82rem; padding: 6px 14px; }
+
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ccc; border-top-color: #1a1a2e; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-msg { margin-top: 16px; color: #888; font-size: 0.88rem; }
@@ -644,15 +664,17 @@ function resetSmsEditor() {
 }
 
 // ─── query ───────────────────────────────────────────────────────────────────
-const Q_DATE_CATS    = ['order_summary_by_order_date','order_summary_by_delivery_date','revenue_trends','broadcast_history'];
+const Q_DATE_CATS    = ['order_summary_by_order_date','order_summary_by_delivery_date','revenue_trends','broadcast_history','order_analytics'];
 const Q_CONTACT_CATS = ['customer_lookup','communication_history'];
 const Q_HIDE_CONTACT = ['pipeline_snapshot','daily_summary','order_summary_by_order_date',
                         'order_summary_by_delivery_date','order_analytics','revenue_trends',
-                        'campaign_performance','broadcast_history','ground_team_notes','ad_copies'];
+                        'campaign_performance','broadcast_history','ground_team_notes','ad_copies',
+                        'who_to_contact'];
 const Q_DATE_LABELS  = {
   order_summary_by_order_date:    'Order date range',
   order_summary_by_delivery_date: 'Delivery date range',
   revenue_trends:                 'Period (leave blank for last 12 weeks)',
+  order_analytics:                'Order date range (leave blank for last 30 days)',
 };
 const Q_PLACEHOLDERS = {
   order_summary_by_order_date:    'Leave blank to use the date range above',
@@ -700,8 +722,54 @@ async function runQuery() {
     });
     const data = await res.json();
     if (!res.ok) { setError('q-result', data.detail || JSON.stringify(data)); return; }
-    setPreResult('q-result', data.answer);
+    if (cat === 'who_to_contact' && data.data && data.data.actionable_contacts && data.data.actionable_contacts.length) {
+      renderContactActions('q-result', data.answer, data.data.actionable_contacts);
+    } else {
+      setPreResult('q-result', data.answer);
+    }
   } catch(e) { setError('q-result', 'Network error: ' + e.message); }
+}
+
+function renderContactActions(id, answerText, contacts) {
+  const ACTION_LABEL = { send_sms: '📱 Send SMS', send_email: '✉️ Send Email' };
+  const PRIORITY_COLOR = { hot: '#e53e3e', warm: '#dd6b20' };
+  let cards = contacts.map(c => {
+    const color = PRIORITY_COLOR[c.priority] || '#718096';
+    const label = ACTION_LABEL[c.action_type] || c.action_type;
+    const dest = c.action_type === 'send_sms' ? (c.phone || '') : (c.email || '');
+    const msgPreview = c.message ? esc(c.message.slice(0, 100)) + (c.message.length > 100 ? '…' : '') : '';
+    return `<div class="contact-action-card" id="opp-card-${c.opportunity_id}">
+      <div class="contact-action-header">
+        <span class="contact-action-name">${esc(c.name)}</span>
+        <span class="contact-action-priority" style="background:${color}">${c.priority.toUpperCase()}</span>
+      </div>
+      <div class="contact-action-dest">${esc(dest)}</div>
+      ${msgPreview ? `<div class="contact-action-msg">${msgPreview}</div>` : ''}
+      <button class="btn contact-action-btn" id="opp-btn-${c.opportunity_id}"
+        onclick="executeOpportunity(${c.opportunity_id})">${label}</button>
+    </div>`;
+  }).join('');
+  document.getElementById(id).innerHTML =
+    `<div class="result-box"><pre>${esc(answerText)}</pre></div>` +
+    `<div class="contact-action-grid">${cards}</div>`;
+}
+
+async function executeOpportunity(oppId) {
+  const btn = document.getElementById(`opp-btn-${oppId}`);
+  const card = document.getElementById(`opp-card-${oppId}`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try {
+    const res = await fetch(`/api/query/execute-opportunity/${oppId}`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      if (btn) { btn.disabled = false; btn.textContent = '⚠ Error — retry'; }
+      return;
+    }
+    if (card) card.style.opacity = '0.5';
+    if (btn) { btn.textContent = '✓ Queued'; btn.style.background = '#38a169'; }
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '⚠ Network error'; }
+  }
 }
 
 // ─── agent ───────────────────────────────────────────────────────────────────
