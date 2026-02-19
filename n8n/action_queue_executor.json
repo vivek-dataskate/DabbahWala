@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Action Queue Executor",
+  "name": "DabbahWala \u2014 Action Queue Executor",
   "nodes": [
     {
       "parameters": {
@@ -16,30 +16,43 @@
       "name": "Every 30 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "={{https://dabbahwala-latest.onrender.com}}/api/agents/action-queue/pending",
+        "url": "https://dabbahwala-latest.onrender.com/api/agents/action-queue/pending",
         "options": {}
       },
       "id": "fetch-pending-actions",
       "name": "Fetch Pending Actions",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "has-actions",
               "leftValue": "={{ Array.isArray($json) ? $json.length : 0 }}",
               "rightValue": 0,
-              "operator": { "type": "number", "operation": "gt" }
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
             }
           ],
           "combinator": "and"
@@ -50,7 +63,10 @@
       "name": "Has Pending Actions?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -61,7 +77,10 @@
       "name": "Split Actions",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [880, 240]
+      "position": [
+        880,
+        240
+      ]
     },
     {
       "parameters": {
@@ -69,12 +88,19 @@
           "values": [
             {
               "conditions": {
-                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.action_type }}",
                     "rightValue": "send_sms",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -84,12 +110,19 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.action_type }}",
                     "rightValue": "move_campaign",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -99,12 +132,19 @@
             },
             {
               "conditions": {
-                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.action_type }}",
                     "rightValue": "escalate_airtable",
-                    "operator": { "type": "string", "operation": "equals" }
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
                   }
                 ],
                 "combinator": "and"
@@ -120,7 +160,10 @@
       "name": "Route by Action Type",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [1100, 240]
+      "position": [
+        1100,
+        240
+      ]
     },
     {
       "parameters": {
@@ -137,7 +180,10 @@
       "name": "Send SMS via Telnyx",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 100],
+      "position": [
+        1320,
+        100
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "TELNYX_CREDENTIAL_ID",
@@ -149,7 +195,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{https://dabbahwala-latest.onrender.com}}/api/telnyx/message",
+        "url": "https://dabbahwala-latest.onrender.com/api/telnyx/message",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"contact_email\": \"{{ $('Split Actions').item.json.email }}\",\n  \"direction\": \"outbound\",\n  \"from_number\": \"{{$env.TELNYX_FROM_NUMBER}}\",\n  \"to_number\": \"{{ $('Split Actions').item.json.phone }}\",\n  \"body\": \"{{ $('Split Actions').item.json.payload.message_body || '' }}\",\n  \"telnyx_msg_id\": \"{{ $json.data?.id || '' }}\",\n  \"status\": \"sent\",\n  \"is_delivery_staff\": false,\n  \"metadata\": { \"source\": \"action_queue\", \"action_id\": {{ $('Split Actions').item.json.id }} }\n}",
@@ -159,20 +205,26 @@
       "name": "Store Sent SMS",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 100],
+      "position": [
+        1540,
+        100
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{https://dabbahwala-latest.onrender.com}}/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "url": "https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
         "options": {}
       },
       "id": "mark-sms-done",
       "name": "Mark SMS Done",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1760, 100]
+      "position": [
+        1760,
+        100
+      ]
     },
     {
       "parameters": {
@@ -189,7 +241,10 @@
       "name": "Create Airtable Escalation",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 320],
+      "position": [
+        1320,
+        320
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "AIRTABLE_CREDENTIAL_ID",
@@ -201,14 +256,17 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{https://dabbahwala-latest.onrender.com}}/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "url": "https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
         "options": {}
       },
       "id": "mark-escalation-done",
       "name": "Mark Escalation Done",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 320]
+      "position": [
+        1540,
+        320
+      ]
     },
     {
       "parameters": {
@@ -219,10 +277,22 @@
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            { "name": "campaign_id", "value": "={{ $json.payload.instantly_campaign_id || '' }}" },
-            { "name": "email", "value": "={{ $json.email }}" },
-            { "name": "phone", "value": "={{ $json.phone }}" },
-            { "name": "skip_if_in_workspace", "value": "=false" }
+            {
+              "name": "campaign_id",
+              "value": "={{ $json.payload.instantly_campaign_id || '' }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.email }}"
+            },
+            {
+              "name": "phone",
+              "value": "={{ $json.phone }}"
+            },
+            {
+              "name": "skip_if_in_workspace",
+              "value": "=false"
+            }
           ]
         },
         "options": {}
@@ -231,7 +301,10 @@
       "name": "Move to Campaign (Instantly)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 520],
+      "position": [
+        1320,
+        520
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "instantly-api-key",
@@ -243,63 +316,163 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{https://dabbahwala-latest.onrender.com}}/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "url": "https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
         "options": {}
       },
       "id": "mark-campaign-done",
       "name": "Mark Campaign Done",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 520]
+      "position": [
+        1540,
+        520
+      ]
     },
     {
       "parameters": {},
       "id": "no-actions",
-      "name": "No Actions — Skip",
+      "name": "No Actions \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [880, 400]
+      "position": [
+        880,
+        400
+      ]
     }
   ],
   "connections": {
     "Every 5 Minutes": {
-      "main": [[{ "node": "Fetch Pending Actions", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Fetch Pending Actions": {
-      "main": [[{ "node": "Has Pending Actions?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Has Pending Actions?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Has Pending Actions?": {
       "main": [
-        [{ "node": "Split Actions", "type": "main", "index": 0 }],
-        [{ "node": "No Actions — Skip", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Split Actions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Actions \u2014 Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Split Actions": {
-      "main": [[{ "node": "Route by Action Type", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Route by Action Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Route by Action Type": {
-      "send_sms":          [{ "node": "Send SMS via Telnyx", "type": "main", "index": 0 }],
-      "escalate_airtable": [{ "node": "Create Airtable Escalation", "type": "main", "index": 0 }],
-      "move_campaign":     [{ "node": "Move to Campaign (Instantly)", "type": "main", "index": 0 }]
+      "send_sms": [
+        {
+          "node": "Send SMS via Telnyx",
+          "type": "main",
+          "index": 0
+        }
+      ],
+      "escalate_airtable": [
+        {
+          "node": "Create Airtable Escalation",
+          "type": "main",
+          "index": 0
+        }
+      ],
+      "move_campaign": [
+        {
+          "node": "Move to Campaign (Instantly)",
+          "type": "main",
+          "index": 0
+        }
+      ]
     },
     "Send SMS via Telnyx": {
-      "main": [[{ "node": "Store Sent SMS", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Store Sent SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Store Sent SMS": {
-      "main": [[{ "node": "Mark SMS Done", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Mark SMS Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Create Airtable Escalation": {
-      "main": [[{ "node": "Mark Escalation Done", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Mark Escalation Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Move to Campaign (Instantly)": {
-      "main": [[{ "node": "Mark Campaign Done", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Mark Campaign Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
-  "settings": { "executionOrder": "v1" },
+  "settings": {
+    "executionOrder": "v1"
+  },
   "staticData": null,
   "tags": [
-    { "name": "DabbahWala", "id": "dabbahwala" },
-    { "name": "Agent Intelligence", "id": "agents" }
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Agent Intelligence",
+      "id": "agents"
+    }
   ],
   "pinData": {}
 }

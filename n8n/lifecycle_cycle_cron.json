@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Lifecycle Cycle Runner",
+  "name": "DabbahWala \u2014 Lifecycle Cycle Runner",
   "nodes": [
     {
       "parameters": {
@@ -16,12 +16,15 @@
       "name": "Every Hour",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{https://dabbahwala-latest.onrender.com}}/api/lifecycle/run",
+        "url": "https://dabbahwala-latest.onrender.com/api/lifecycle/run",
         "options": {
           "timeout": 60000
         }
@@ -30,7 +33,10 @@
       "name": "Run Lifecycle Cycle",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -59,19 +65,25 @@
       "name": "Campaigns Queued?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "={{https://dabbahwala-latest.onrender.com}}/api/campaigns/pending",
+        "url": "https://dabbahwala-latest.onrender.com/api/campaigns/pending",
         "options": {}
       },
       "id": "fetch-campaigns",
       "name": "Fetch Pending Campaigns",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, 240]
+      "position": [
+        880,
+        240
+      ]
     },
     {
       "parameters": {
@@ -82,7 +94,10 @@
       "name": "Split Campaign Moves",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [1100, 240]
+      "position": [
+        1100,
+        240
+      ]
     },
     {
       "parameters": {
@@ -92,7 +107,10 @@
       "name": "Prepare Instantly Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 240]
+      "position": [
+        1320,
+        240
+      ]
     },
     {
       "parameters": {
@@ -127,7 +145,10 @@
       "name": "Remove from Old Campaign",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 160],
+      "position": [
+        1540,
+        160
+      ],
       "onError": "continueRegularOutput"
     },
     {
@@ -136,7 +157,10 @@
       "name": "Skip Removal",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1540, 340]
+      "position": [
+        1540,
+        340
+      ]
     },
     {
       "parameters": {
@@ -165,7 +189,10 @@
       "name": "Has Old Campaign?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1430, 240]
+      "position": [
+        1430,
+        240
+      ]
     },
     {
       "parameters": {
@@ -176,7 +203,10 @@
       "name": "Merge",
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3,
-      "position": [1760, 240]
+      "position": [
+        1760,
+        240
+      ]
     },
     {
       "parameters": {
@@ -217,27 +247,36 @@
       "name": "Add Lead to New Campaign",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1980, 240]
+      "position": [
+        1980,
+        240
+      ]
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "={{https://dabbahwala-latest.onrender.com}}/api/campaigns/{{ $json.queue_id }}/executed",
+        "url": "https://dabbahwala-latest.onrender.com/api/campaigns/{{ $json.queue_id }}/executed",
         "options": {}
       },
       "id": "mark-executed",
       "name": "Mark Campaign Executed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2200, 240]
+      "position": [
+        2200,
+        240
+      ]
     },
     {
       "parameters": {},
       "id": "no-campaigns",
-      "name": "No Campaigns — Done",
+      "name": "No Campaigns \u2014 Done",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [880, 400]
+      "position": [
+        880,
+        400
+      ]
     }
   ],
   "connections": {
@@ -274,7 +313,7 @@
         ],
         [
           {
-            "node": "No Campaigns — Done",
+            "node": "No Campaigns \u2014 Done",
             "type": "main",
             "index": 0
           }
@@ -387,7 +426,7 @@
       "id": "dabbahwala"
     },
     {
-      "name": "Step 3 — Lifecycle",
+      "name": "Step 3 \u2014 Lifecycle",
       "id": "step3-lifecycle"
     }
   ],
