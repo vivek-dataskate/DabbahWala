@@ -13,6 +13,7 @@ API_PORT = int(os.environ.get("API_PORT", "8000"))
 AIRTABLE_API_KEY = os.environ.get("AIRTABLE_API_KEY", "")
 AIRTABLE_BASE_ID = os.environ.get("AIRTABLE_BASE_ID", "")
 AIRTABLE_FIELD_SALES_TABLE = os.environ.get("AIRTABLE_FIELD_SALES_TABLE", "Field Sales Tasks")
+AIRTABLE_QUERY_LOG_TABLE = os.environ.get("AIRTABLE_QUERY_LOG_TABLE", "Query Log")
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 # SMTP for report emails (Gmail, Outlook, or any SMTP relay)

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DabbahWala Intelligence</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f4f7; color: #1a1a2e; }
+
+header {
+  background: #1a1a2e; color: white;
+  padding: 14px 28px; display: flex; align-items: center; gap: 14px;
+  position: sticky; top: 0; z-index: 100;
+}
+header h1 { font-size: 1.1rem; font-weight: 600; }
+header .sub { font-size: 0.78rem; opacity: 0.6; margin-top: 2px; }
+
+.tabs {
+  background: white; border-bottom: 2px solid #e8e8f0;
+  display: flex; padding: 0 28px; gap: 4px;
+}
+.tab {
+  padding: 13px 18px; cursor: pointer; font-size: 0.87rem;
+  color: #888; border-bottom: 3px solid transparent; margin-bottom: -2px;
+  user-select: none; white-space: nowrap;
+  transition: color 0.15s;
+}
+.tab.active { color: #1a1a2e; border-bottom-color: #e63946; font-weight: 600; }
+.tab:hover:not(.active) { color: #444; }
+
+.panel { display: none; padding: 28px; max-width: 860px; }
+.panel.active { display: block; }
+
+.panel-title { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+.panel-desc { font-size: 0.87rem; color: #666; margin-bottom: 24px; line-height: 1.5; }
+
+.form-group { margin-bottom: 18px; }
+label { display: block; font-size: 0.83rem; font-weight: 600; color: #555; margin-bottom: 6px; }
+label .hint { font-weight: 400; color: #999; }
+
+select, input[type="text"], input[type="email"], input[type="date"], textarea {
+  width: 100%; padding: 10px 13px;
+  border: 1.5px solid #ddd; border-radius: 7px;
+  font-size: 0.9rem; background: white; color: #1a1a2e;
+  transition: border-color 0.15s;
+}
+select:focus, input:focus, textarea:focus {
+  outline: none; border-color: #1a1a2e;
+}
+textarea { resize: vertical; min-height: 80px; font-family: inherit; }
+
+.btn {
+  padding: 10px 26px; background: #1a1a2e; color: white;
+  border: none; border-radius: 7px; cursor: pointer;
+  font-size: 0.9rem; font-weight: 600; transition: background 0.15s;
+}
+.btn:hover { background: #2d2d50; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-gray { background: #6c757d; }
+.btn-gray:hover { background: #5a6168; }
+
+/* Result area */
+.result-box {
+  margin-top: 22px; background: white;
+  border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 20px;
+}
+.result-box.error { border-color: #f5c2c7; background: #fff5f5; }
+.result-box pre {
+  white-space: pre-wrap; font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
+  font-size: 0.84rem; line-height: 1.65; color: #1a1a2e;
+}
+.result-box.error pre { color: #842029; }
+
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ccc; border-top-color: #1a1a2e; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-msg { margin-top: 16px; color: #888; font-size: 0.88rem; }
+
+/* Agent result */
+.agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+.info-card { background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 16px; }
+.info-card .card-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #999; margin-bottom: 10px; }
+.kv { display: flex; gap: 10px; margin-bottom: 5px; font-size: 0.875rem; }
+.kv .k { color: #888; min-width: 140px; flex-shrink: 0; }
+.kv .v { font-weight: 500; }
+.action-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
+.badge-sms { background: #d4f4e2; color: #155724; }
+.badge-email { background: #d1ecf1; color: #0c5460; }
+.badge-escalate { background: #fff3cd; color: #856404; }
+.badge-none { background: #e9ecef; color: #6c757d; }
+
+/* Tone cards */
+.tone-cards { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+.tone-card { background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 16px; }
+.tone-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.tone-card-header .tone-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #888; }
+.copy-btn { padding: 5px 14px; font-size: 0.78rem; background: #f0f0f6; color: #444; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; }
+.copy-btn:hover { background: #e0e0ea; }
+.tone-text { font-size: 0.93rem; line-height: 1.6; color: #1a1a2e; }
+.char-count { font-size: 0.75rem; color: #aaa; margin-top: 6px; }
+
+/* Upload */
+.upload-summary { display: flex; gap: 14px; margin-top: 20px; }
+.stat-box { flex: 1; background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 18px; text-align: center; }
+.stat-box .s-label { font-size: 0.75rem; color: #999; text-transform: uppercase; font-weight: 700; }
+.stat-box .s-val { font-size: 2.2rem; font-weight: 700; margin-top: 4px; }
+.s-val.green { color: #28a745; }
+.s-val.red { color: #dc3545; }
+.s-val.blue { color: #1a1a2e; }
+details { margin-top: 14px; }
+details summary { cursor: pointer; font-size: 0.85rem; color: #888; padding: 6px 0; }
+details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1px solid #e0e0ea; border-radius: 6px; padding: 12px; max-height: 240px; overflow: auto; }
+
+/* Reports */
+.report-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 20px; }
+.r-stat { background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 16px; }
+.r-stat .r-label { font-size: 0.72rem; color: #999; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+.r-stat .r-val { font-size: 1.7rem; font-weight: 700; color: #1a1a2e; }
+.report-table-wrap { margin-top: 20px; background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; overflow: hidden; }
+.report-table-wrap summary { padding: 14px 18px; cursor: pointer; font-size: 0.87rem; font-weight: 600; background: #fafafe; }
+.report-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.report-table th { background: #f4f4f7; padding: 10px 14px; text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #888; border-bottom: 1px solid #e0e0ea; }
+.report-table td { padding: 10px 14px; border-bottom: 1px solid #f0f0f5; vertical-align: top; }
+.report-table tr:last-child td { border-bottom: none; }
+
+.row2 { display: flex; gap: 12px; }
+.row2 > * { flex: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <div style="font-size:1.8rem;line-height:1">🍱</div>
+  <div>
+    <h1>DabbahWala Marketing Intelligence</h1>
+    <div class="sub">Interactive dashboard</div>
+  </div>
+</header>
+
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('query')">📊 Query</div>
+  <div class="tab" onclick="switchTab('agent')">🤖 Run Agent</div>
+  <div class="tab" onclick="switchTab('tone')">✍️ Tone Drafts</div>
+  <div class="tab" onclick="switchTab('upload')">📤 Upload CSV</div>
+  <div class="tab" onclick="switchTab('reports')">📋 Reports</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ QUERY -->
+<div id="panel-query" class="panel active">
+  <div class="panel-title">Marketing Query</div>
+  <div class="panel-desc">Ask a question about your contacts, orders, campaigns, or pipeline. Results appear instantly below.</div>
+
+  <div class="form-group">
+    <label>Category</label>
+    <select id="q-category" onchange="onCategoryChange()">
+      <option value="pipeline_snapshot">📈  Pipeline Snapshot — Lifecycle stage distribution</option>
+      <option value="who_to_contact">📞  Who to Contact Today — Prioritized outreach list</option>
+      <option value="daily_summary">📅  Daily Summary — Today's orders and activity</option>
+      <option value="order_analytics">🍽️  Order Analytics — Top dishes, revenue, trends</option>
+      <option value="campaign_performance">📧  Campaign Performance — Email campaign stats</option>
+      <option value="customer_lookup">🔍  Customer Lookup — Full contact profile</option>
+      <option value="communication_history">💬  Communication History — SMS / call log</option>
+      <option value="free_form">🧠  Ask Anything (AI) — Free-form question</option>
+    </select>
+  </div>
+
+  <div class="form-group" id="q-question-group">
+    <label>Question or details <span class="hint">(optional for most categories)</span></label>
+    <textarea id="q-question" placeholder="e.g. How many lapsed customers came back this week?"></textarea>
+  </div>
+
+  <div class="form-group" id="q-email-group">
+    <label>Customer email <span class="hint" id="q-email-hint">(required for Customer Lookup and Communication History)</span></label>
+    <input id="q-email" type="email" placeholder="customer@example.com">
+  </div>
+
+  <button class="btn" onclick="runQuery()">Run Query</button>
+  <div id="q-result"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ AGENT -->
+<div id="panel-agent" class="panel">
+  <div class="panel-title">Run Agent Cycle</div>
+  <div class="panel-desc">Run the full inference → decision → orchestrator pipeline for a single contact. Returns their sentiment, intent, engagement score, and the recommended next action. Takes 20–40 seconds.</div>
+
+  <div class="form-group">
+    <label>Customer email</label>
+    <input id="a-email" type="email" placeholder="customer@example.com">
+  </div>
+
+  <button class="btn" id="a-btn" onclick="runAgent()">Run Inference &amp; Get Recommendation</button>
+  <div id="a-result"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ TONE -->
+<div id="panel-tone" class="panel">
+  <div class="panel-title">Tone Drafts</div>
+  <div class="panel-desc">Generate three message variations — warm, urgent, and casual — for a specific customer. Copy the one that fits best and send it directly.</div>
+
+  <div class="row2">
+    <div class="form-group">
+      <label>Customer email</label>
+      <input id="t-email" type="email" placeholder="customer@example.com">
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Goal or context</label>
+    <textarea id="t-goal" placeholder="e.g. Win back a lapsed customer with a discount offer for their favourite dish"></textarea>
+  </div>
+
+  <button class="btn" id="t-btn" onclick="runTone()">Generate Drafts</button>
+  <div id="t-result"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ UPLOAD -->
+<div id="panel-upload" class="panel">
+  <div class="panel-title">Upload Daily Orders CSV</div>
+  <div class="panel-desc">Upload a CSV of today's orders. Each row is matched to a contact and an <code>order_placed</code> event is recorded. Column names are matched flexibly.</div>
+
+  <div class="form-group" style="margin-bottom:20px">
+    <label>Expected columns <span class="hint">(any order, extra columns ignored)</span></label>
+    <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:7px;padding:13px;font-family:monospace;font-size:0.82rem;color:#555;line-height:1.8">
+      email &nbsp;·&nbsp; phone &nbsp;·&nbsp; order_id &nbsp;·&nbsp; order_date &nbsp;·&nbsp; source &nbsp;·&nbsp; total_amount &nbsp;·&nbsp; order_type &nbsp;·&nbsp; delivery_slot &nbsp;·&nbsp; notes
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>CSV file</label>
+    <input type="file" id="u-file" accept=".csv" style="padding:8px;background:#fafafe">
+  </div>
+
+  <button class="btn" id="u-btn" onclick="uploadCSV()">Upload &amp; Process</button>
+  <div id="u-result"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════ REPORTS -->
+<div id="panel-reports" class="panel">
+  <div class="panel-title">Reports</div>
+  <div class="panel-desc">View daily activity and outcome reports without sending an email.</div>
+
+  <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+    <div class="form-group" style="flex:1;min-width:180px;margin-bottom:0">
+      <label>Report date</label>
+      <input type="date" id="r-date">
+    </div>
+    <button class="btn" onclick="loadReport('activity')">Activity Report</button>
+    <button class="btn btn-gray" onclick="loadReport('outcome')">Outcome Report</button>
+  </div>
+
+  <div id="r-result"></div>
+</div>
+
+<script>
+// ─── state ───────────────────────────────────────────────────────────────────
+let _toneDrafts = {};
+
+// ─── tabs ────────────────────────────────────────────────────────────────────
+const TAB_NAMES = ['query','agent','tone','upload','reports'];
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function setLoading(id, msg) {
+  document.getElementById(id).innerHTML = `<div class="loading-msg"><span class="spinner"></span>${esc(msg)}</div>`;
+}
+function setError(id, msg) {
+  document.getElementById(id).innerHTML = `<div class="result-box error"><pre>${esc(msg)}</pre></div>`;
+}
+function setPreResult(id, text) {
+  document.getElementById(id).innerHTML = `<div class="result-box"><pre>${esc(text)}</pre></div>`;
+}
+function setBtn(id, disabled, label) {
+  const b = document.getElementById(id);
+  if (b) { b.disabled = disabled; if (label) b.textContent = label; }
+}
+
+// ─── query ───────────────────────────────────────────────────────────────────
+function onCategoryChange() {
+  const cat = document.getElementById('q-category').value;
+  const needsEmail = ['customer_lookup','communication_history'].includes(cat);
+  const hint = document.getElementById('q-email-hint');
+  hint.textContent = needsEmail ? '(required)' : '(required for Customer Lookup and Communication History)';
+}
+
+async function runQuery() {
+  const cat   = document.getElementById('q-category').value;
+  const q     = document.getElementById('q-question').value.trim();
+  const email = document.getElementById('q-email').value.trim();
+  setLoading('q-result', 'Running query…');
+  try {
+    const res  = await fetch('/api/query', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ category: cat, question: q, contact_email: email || null }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setError('q-result', data.detail || JSON.stringify(data)); return; }
+    setPreResult('q-result', data.formatted_answer);
+  } catch(e) { setError('q-result', 'Network error: ' + e.message); }
+}
+
+// ─── agent ───────────────────────────────────────────────────────────────────
+async function runAgent() {
+  const email = document.getElementById('a-email').value.trim();
+  if (!email) { setError('a-result', 'Please enter a customer email.'); return; }
+  setLoading('a-result', 'Running inference → decision → orchestration… (20–40 s)');
+  setBtn('a-btn', true, 'Running…');
+  try {
+    const res  = await fetch('/api/agents/cycle/run-for-contact', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ email }),
+    });
+    const data = await res.json();
+    setBtn('a-btn', false, 'Run Inference & Get Recommendation');
+
+    if (!res.ok || data.status === 'error') {
+      setError('a-result', data.detail || data.error || JSON.stringify(data)); return;
+    }
+    if (data.status === 'skipped') {
+      setError('a-result', `Contact not found for email: ${email}`); return;
+    }
+
+    const action  = data.chosen_action || 'none';
+    const badgeClass = {send_sms:'badge-sms', move_campaign:'badge-email', escalate_airtable:'badge-escalate'}[action] || 'badge-none';
+
+    document.getElementById('a-result').innerHTML = `
+    <div class="agent-grid">
+      <div class="info-card">
+        <div class="card-label">Contact</div>
+        <div class="kv"><span class="k">Name</span><span class="v">${esc(data.contact_name || email)}</span></div>
+        <div class="kv"><span class="k">Inference ID</span><span class="v">${data.inference_id ?? '—'}</span></div>
+        <div class="kv"><span class="k">Decision ID</span><span class="v">${data.decision_id ?? '—'}</span></div>
+        <div class="kv"><span class="k">Orch log ID</span><span class="v">${data.orchestrator_log_id ?? '—'}</span></div>
+      </div>
+      <div class="info-card">
+        <div class="card-label">Recommended action</div>
+        <div style="margin-bottom:10px"><span class="action-badge ${badgeClass}">${esc(action)}</span></div>
+        <div class="kv"><span class="k">Channel</span><span class="v">${esc(data.chosen_channel || 'none')}</span></div>
+      </div>
+    </div>
+    <div class="info-card" style="margin-top:12px">
+      <div class="card-label">Reasoning (excerpt)</div>
+      <p style="font-size:0.9rem;line-height:1.6;margin-top:4px">${esc(data.reasoning_snippet || '—')}</p>
+    </div>`;
+  } catch(e) {
+    setBtn('a-btn', false, 'Run Inference & Get Recommendation');
+    setError('a-result', 'Network error: ' + e.message);
+  }
+}
+
+// ─── tone ─────────────────────────────────────────────────────────────────────
+async function runTone() {
+  const email = document.getElementById('t-email').value.trim();
+  const goal  = document.getElementById('t-goal').value.trim();
+  if (!email) { setError('t-result', 'Please enter a customer email.'); return; }
+  if (!goal)  { setError('t-result', 'Please describe the goal or context.'); return; }
+  setLoading('t-result', 'Generating message drafts…');
+  setBtn('t-btn', true, 'Generating…');
+  try {
+    const res  = await fetch('/api/query/tone', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ contact_email: email, goal }),
+    });
+    const data = await res.json();
+    setBtn('t-btn', false, 'Generate Drafts');
+
+    if (!res.ok || data.error) { setError('t-result', data.detail || data.error || JSON.stringify(data)); return; }
+    _toneDrafts = data;
+
+    const defs = [
+      { key:'warm',   icon:'🤝', label:'Warm',   border:'#28a745' },
+      { key:'urgent', icon:'⚡', label:'Urgent',  border:'#ffc107' },
+      { key:'casual', icon:'😊', label:'Casual',  border:'#17a2b8' },
+    ];
+    let html = `<div class="tone-cards">`;
+    if (data.contact_name) html += `<p style="font-size:0.87rem;color:#666">Drafts for <strong>${esc(data.contact_name)}</strong></p>`;
+    for (const d of defs) {
+      const msg = data[d.key] || '';
+      html += `
+      <div class="tone-card" style="border-left:4px solid ${d.border}">
+        <div class="tone-card-header">
+          <span class="tone-label">${d.icon} ${d.label}</span>
+          <button class="copy-btn" onclick="copyTone('${d.key}', this)">Copy</button>
+        </div>
+        <div class="tone-text">${esc(msg)}</div>
+        <div class="char-count">${msg.length} chars</div>
+      </div>`;
+    }
+    html += '</div>';
+    document.getElementById('t-result').innerHTML = html;
+  } catch(e) {
+    setBtn('t-btn', false, 'Generate Drafts');
+    setError('t-result', 'Network error: ' + e.message);
+  }
+}
+
+function copyTone(key, btn) {
+  const text = _toneDrafts[key] || '';
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'Copied ✓';
+    setTimeout(() => btn.textContent = 'Copy', 2200);
+  });
+}
+
+// ─── upload ───────────────────────────────────────────────────────────────────
+async function uploadCSV() {
+  const fileInput = document.getElementById('u-file');
+  if (!fileInput.files.length) { setError('u-result', 'Please select a CSV file.'); return; }
+  setLoading('u-result', 'Uploading and processing…');
+  setBtn('u-btn', true, 'Uploading…');
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+  try {
+    const res  = await fetch('/api/daily-orders/upload-csv', { method: 'POST', body: formData });
+    const data = await res.json();
+    setBtn('u-btn', false, 'Upload & Process');
+    if (!res.ok) { setError('u-result', data.detail || JSON.stringify(data)); return; }
+
+    let html = `<div class="upload-summary">
+      <div class="stat-box"><div class="s-label">Ingested</div><div class="s-val green">${data.ingested}</div></div>
+      <div class="stat-box"><div class="s-label">Skipped</div><div class="s-val red">${data.skipped}</div></div>
+      <div class="stat-box"><div class="s-label">Date</div><div class="s-val blue" style="font-size:1.3rem">${esc(data.date)}</div></div>
+    </div>`;
+    if (data.message) html += `<p style="margin-top:12px;color:#888;font-size:0.87rem">${esc(data.message)}</p>`;
+    if (data.skipped_detail && data.skipped_detail.length) {
+      html += `<details><summary>${data.skipped_detail.length} skipped rows (click to expand)</summary><pre>${esc(JSON.stringify(data.skipped_detail, null, 2))}</pre></details>`;
+    }
+    if (data.parse_errors && data.parse_errors.length) {
+      html += `<details><summary>${data.parse_errors.length} parse warnings</summary><pre>${esc(JSON.stringify(data.parse_errors, null, 2))}</pre></details>`;
+    }
+    document.getElementById('u-result').innerHTML = html;
+  } catch(e) {
+    setBtn('u-btn', false, 'Upload & Process');
+    setError('u-result', 'Network error: ' + e.message);
+  }
+}
+
+// ─── reports ──────────────────────────────────────────────────────────────────
+async function loadReport(type) {
+  const date = document.getElementById('r-date').value || new Date().toISOString().slice(0,10);
+  setLoading('r-result', `Loading ${type} report for ${date}…`);
+  try {
+    const res  = await fetch(`/api/agents/report/${type}-data?report_date=${date}`);
+    const data = await res.json();
+    if (!res.ok) { setError('r-result', data.detail || JSON.stringify(data)); return; }
+
+    const summary = data.summary || {};
+    const rows    = data.detail_rows || [];
+    const title   = type === 'activity' ? '📊 Activity Report' : '✅ Outcome Report';
+
+    let html = `<div style="margin-top:20px">
+      <h2 style="font-size:0.95rem;font-weight:700;margin-bottom:12px">${title} — ${esc(date)}</h2>
+      <div class="report-stats">`;
+
+    for (const [k, v] of Object.entries(summary)) {
+      if (typeof v === 'number') {
+        html += `<div class="r-stat"><div class="r-label">${esc(k.replace(/_/g,' '))}</div>
+          <div class="r-val">${Number.isInteger(v) ? v : v.toFixed(2)}</div></div>`;
+      }
+    }
+    html += '</div>';
+
+    if (rows.length > 0) {
+      const cols = Object.keys(rows[0]);
+      html += `<div class="report-table-wrap" style="margin-top:16px">
+        <details open><summary>Detail — ${rows.length} rows</summary>
+        <div style="overflow-x:auto">
+        <table class="report-table">
+          <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
+          <tbody>${rows.slice(0, 100).map(r =>
+            `<tr>${cols.map(c => `<td>${esc(r[c] ?? '')}</td>`).join('')}</tr>`
+          ).join('')}</tbody>
+        </table></div>
+        ${rows.length > 100 ? `<p style="padding:10px 14px;color:#999;font-size:0.8rem">Showing first 100 of ${rows.length} rows.</p>` : ''}
+        </details></div>`;
+    } else {
+      html += `<p style="margin-top:12px;color:#888;font-size:0.87rem">No detail rows for this date.</p>`;
+    }
+
+    html += '</div>';
+    document.getElementById('r-result').innerHTML = html;
+  } catch(e) { setError('r-result', 'Network error: ' + e.message); }
+}
+
+// ─── init ─────────────────────────────────────────────────────────────────────
+document.getElementById('r-date').value = new Date().toISOString().slice(0,10);
+</script>
+</body>
+</html>
