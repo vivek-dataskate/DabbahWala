@@ -179,6 +179,53 @@ class RewriteRequest(BaseModel):
     instruction: Optional[str] = ""
 
 
+@router.get("/analytics")
+def get_campaign_analytics():
+    """
+    Fetch live analytics for all 5 campaigns from Instantly API v2.
+    Returns per-campaign: total leads, emails sent, open rate, reply rate, bounces.
+    """
+    if not INSTANTLY_API_KEY:
+        raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
+
+    headers = {"Authorization": f"Bearer {INSTANTLY_API_KEY}"}
+    results = []
+
+    for name, meta in _CAMPAIGN_META.items():
+        campaign_id = meta["instantly_id"]
+        try:
+            resp = httpx.get(
+                "https://api.instantly.ai/api/v2/analytics/campaigns/summary",
+                headers=headers,
+                params={"id": campaign_id},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            raw = resp.json()
+            # API returns a list; grab the first (matching) item
+            item = raw[0] if isinstance(raw, list) and raw else (raw if isinstance(raw, dict) else {})
+            results.append({
+                "campaign_name": name,
+                "label": meta["label"],
+                "instantly_id": campaign_id,
+                "total_leads": int(item.get("leads_count") or item.get("total_leads_count") or 0),
+                "emails_sent": int(item.get("emails_sent_count") or item.get("total_sent_count") or 0),
+                "open_rate": round(float(item.get("open_rate") or 0), 1),
+                "reply_rate": round(float(item.get("reply_rate") or 0), 1),
+                "bounces": int(item.get("bounced_count") or item.get("bounce_count") or 0),
+                "unsubscribed": int(item.get("unsubscribed_count") or 0),
+            })
+        except Exception as e:
+            results.append({
+                "campaign_name": name,
+                "label": meta["label"],
+                "instantly_id": campaign_id,
+                "error": str(e)[:200],
+            })
+
+    return results
+
+
 @router.get("/templates")
 def list_campaign_templates():
     """List all campaign scenarios with their step counts."""

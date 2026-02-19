@@ -171,6 +171,23 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 .chat-bubble.assistant ul, .chat-bubble.assistant ol { padding-left: 20px; margin: 6px 0; }
 .chat-bubble.assistant li { margin-bottom: 3px; }
 .chat-bubble.assistant h1,.chat-bubble.assistant h2,.chat-bubble.assistant h3 { margin: 10px 0 4px; font-size: 1em; }
+
+/* Campaign analytics */
+.camp-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 20px; }
+.camp-card { background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 18px 22px; }
+.camp-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.camp-name { font-size: 0.9rem; font-weight: 700; color: #1a1a2e; }
+.camp-id { font-size: 0.72rem; color: #bbb; font-family: monospace; }
+.camp-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+.camp-stat { background: #f7f7fc; border-radius: 7px; padding: 10px 12px; text-align: center; }
+.camp-stat .cs-val { font-size: 1.35rem; font-weight: 700; color: #1a1a2e; line-height: 1.2; }
+.camp-stat .cs-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: #999; margin-top: 3px; font-weight: 600; }
+.camp-stat.highlight-green .cs-val { color: #28a745; }
+.camp-stat.highlight-blue .cs-val { color: #1a6abf; }
+.camp-stat.highlight-red .cs-val { color: #dc3545; }
+.camp-error { color: #842029; font-size: 0.83rem; background: #fff5f5; border: 1px solid #f5c2c7; border-radius: 7px; padding: 10px 14px; }
+.camp-refresh-row { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.camp-refresh-row .next-refresh { font-size: 0.78rem; color: #aaa; }
 </style>
 </head>
 <body>
@@ -188,6 +205,7 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="tab" onclick="switchTab('agent')">🤖 Run Agent</div>
   <div class="tab" onclick="switchTab('upload')">⚡ Actions</div>
   <div class="tab" onclick="switchTab('reports')">📋 Reports</div>
+  <div class="tab" onclick="switchTab('campaigns')">📈 Campaigns</div>
   <div class="tab" onclick="switchTab('chatbot')">💬 About Me</div>
 </div>
 
@@ -526,6 +544,19 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div id="r-result"></div>
 </div>
 
+<!-- ══════════════════════════════════════════════════════ CAMPAIGNS -->
+<div id="panel-campaigns" class="panel">
+  <div class="panel-title">Campaign Analytics</div>
+  <div class="panel-desc">Live stats from Instantly for all 5 active campaigns. Auto-refreshes every 5 minutes.</div>
+
+  <div class="camp-refresh-row">
+    <button class="btn" id="camp-refresh-btn" onclick="loadCampaignAnalytics()">Refresh</button>
+    <span class="next-refresh" id="camp-next-refresh"></span>
+  </div>
+
+  <div id="camp-result"></div>
+</div>
+
 <!-- ══════════════════════════════════════════════════════ ABOUT ME -->
 <div id="panel-chatbot" class="panel">
   <div class="panel-title">About Me — How This System Works</div>
@@ -563,10 +594,11 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 let _toneDrafts = {};
 
 // ─── tabs ────────────────────────────────────────────────────────────────────
-const TAB_NAMES = ['query','agent','upload','reports','chatbot'];
+const TAB_NAMES = ['query','agent','upload','reports','campaigns','chatbot'];
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+  if (name === 'campaigns' && !document.getElementById('camp-result').dataset.loaded) loadCampaignAnalytics();
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -1392,6 +1424,98 @@ async function sendChat() {
     setBtn('cb-btn', false, 'Ask');
     document.getElementById('cb-error').innerHTML = `<div class="result-box error"><pre>${esc('Network error: ' + e.message)}</pre></div>`;
   }
+}
+
+// ─── campaign analytics ───────────────────────────────────────────────────────
+let _campRefreshTimer = null;
+let _campRefreshCountdown = null;
+const CAMP_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
+
+function loadCampaignAnalytics() {
+  const resultEl = document.getElementById('camp-result');
+  setLoading('camp-result', 'Fetching campaign analytics from Instantly…');
+  setBtn('camp-refresh-btn', true, 'Refreshing…');
+  clearInterval(_campRefreshTimer);
+  clearInterval(_campRefreshCountdown);
+
+  fetch('/api/campaigns/analytics')
+    .then(r => r.json())
+    .then(data => {
+      resultEl.dataset.loaded = '1';
+      setBtn('camp-refresh-btn', false, 'Refresh');
+      if (!Array.isArray(data)) {
+        setError('camp-result', JSON.stringify(data));
+        return;
+      }
+      let html = '<div class="camp-grid">';
+      data.forEach(c => {
+        if (c.error) {
+          html += `<div class="camp-card">
+            <div class="camp-card-header">
+              <span class="camp-name">${esc(c.label)}</span>
+              <span class="camp-id">${esc(c.instantly_id)}</span>
+            </div>
+            <div class="camp-error">Error fetching stats: ${esc(c.error)}</div>
+          </div>`;
+          return;
+        }
+        const openPct  = (c.open_rate  ?? 0).toFixed(1);
+        const replyPct = (c.reply_rate ?? 0).toFixed(1);
+        html += `<div class="camp-card">
+          <div class="camp-card-header">
+            <span class="camp-name">${esc(c.label)}</span>
+            <span class="camp-id">${esc(c.instantly_id)}</span>
+          </div>
+          <div class="camp-stats">
+            <div class="camp-stat">
+              <div class="cs-val">${c.total_leads ?? 0}</div>
+              <div class="cs-label">Contacts</div>
+            </div>
+            <div class="camp-stat highlight-blue">
+              <div class="cs-val">${c.emails_sent ?? 0}</div>
+              <div class="cs-label">Sent</div>
+            </div>
+            <div class="camp-stat highlight-green">
+              <div class="cs-val">${openPct}%</div>
+              <div class="cs-label">Open Rate</div>
+            </div>
+            <div class="camp-stat highlight-green">
+              <div class="cs-val">${replyPct}%</div>
+              <div class="cs-label">Reply Rate</div>
+            </div>
+            <div class="camp-stat highlight-red">
+              <div class="cs-val">${c.bounces ?? 0}</div>
+              <div class="cs-label">Bounces</div>
+            </div>
+            <div class="camp-stat">
+              <div class="cs-val">${c.unsubscribed ?? 0}</div>
+              <div class="cs-label">Unsubs</div>
+            </div>
+          </div>
+        </div>`;
+      });
+      html += '</div>';
+      resultEl.innerHTML = html;
+
+      // Schedule next auto-refresh
+      let secsLeft = CAMP_REFRESH_MS / 1000;
+      _campRefreshCountdown = setInterval(() => {
+        secsLeft--;
+        const m = Math.floor(secsLeft / 60), s = secsLeft % 60;
+        const el = document.getElementById('camp-next-refresh');
+        if (el) el.textContent = `Next refresh in ${m}:${String(s).padStart(2,'0')}`;
+        if (secsLeft <= 0) clearInterval(_campRefreshCountdown);
+      }, 1000);
+      _campRefreshTimer = setTimeout(() => {
+        if (document.getElementById('panel-campaigns').classList.contains('active')) {
+          loadCampaignAnalytics();
+        }
+      }, CAMP_REFRESH_MS);
+    })
+    .catch(e => {
+      setBtn('camp-refresh-btn', false, 'Refresh');
+      setError('camp-result', 'Network error: ' + e.message);
+    });
 }
 
 // ─── init ─────────────────────────────────────────────────────────────────────
