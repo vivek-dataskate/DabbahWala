@@ -194,8 +194,9 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
         <option value="customer_lookup">Customer Lookup — Full contact profile</option>
         <option value="communication_history">Communication History — SMS / call log</option>
       </optgroup>
-      <optgroup label="📧 Campaigns">
+      <optgroup label="📧 Campaigns &amp; Broadcasts">
         <option value="campaign_performance">Campaign Performance — Email campaign stats</option>
+        <option value="broadcast_history">Broadcast History — Past blasts, alerts &amp; delivery stats</option>
       </optgroup>
       <optgroup label="📋 Team Content">
         <option value="ground_team_notes">Ground Team Notes — Field notes from the team</option>
@@ -286,7 +287,6 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
       <optgroup label="📣 Communications">
         <option value="delay_alert">⚡  Delay Alert — Notify today's customers of a delivery delay</option>
         <option value="promo_blast">🎉  Promotional Blast — Send SMS/email to opted-in customers</option>
-        <option value="broadcast_history">📋  Broadcast History — View past blasts and alerts</option>
       </optgroup>
     </select>
   </div>
@@ -487,11 +487,6 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
     <div id="bc-promo-result" style="margin-top:14px"></div>
   </div>
 
-  <!-- ─────────────── Broadcast History ─────────────── -->
-  <div id="ac-section-broadcast_history" style="display:none">
-    <button class="btn btn-gray" onclick="loadBroadcastHistory()" style="margin-bottom:16px">Load / Refresh</button>
-    <div id="bc-history-result"></div>
-  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ REPORTS -->
@@ -573,7 +568,7 @@ function setBtn(id, disabled, label) {
 }
 
 // ─── actions ─────────────────────────────────────────────────────────────────
-const AC_SECTIONS = ['upload_orders','email_templates','sms_templates','run_agents','delay_alert','promo_blast','broadcast_history'];
+const AC_SECTIONS = ['upload_orders','email_templates','sms_templates','run_agents','delay_alert','promo_blast'];
 function onActionChange() {
   const val = document.getElementById('ac-action').value;
   AC_SECTIONS.forEach(s => {
@@ -649,11 +644,11 @@ function resetSmsEditor() {
 }
 
 // ─── query ───────────────────────────────────────────────────────────────────
-const Q_DATE_CATS    = ['order_summary_by_order_date','order_summary_by_delivery_date','revenue_trends'];
+const Q_DATE_CATS    = ['order_summary_by_order_date','order_summary_by_delivery_date','revenue_trends','broadcast_history'];
 const Q_CONTACT_CATS = ['customer_lookup','communication_history'];
 const Q_HIDE_CONTACT = ['pipeline_snapshot','daily_summary','order_summary_by_order_date',
                         'order_summary_by_delivery_date','order_analytics','revenue_trends',
-                        'campaign_performance','ground_team_notes','ad_copies'];
+                        'campaign_performance','broadcast_history','ground_team_notes','ad_copies'];
 const Q_DATE_LABELS  = {
   order_summary_by_order_date:    'Order date range',
   order_summary_by_delivery_date: 'Delivery date range',

@@ -38,6 +38,7 @@ CATEGORIES = {
     "ground_team_notes": "Browse recent field notes from the ground team",
     "ad_copies": "Browse recent social media ad copies",
     "submit_input": "Submit a new observation, note, or question",
+    "broadcast_history": "View past broadcasts — blasts, alerts, and delivery stats",
     "free_form": "Ask any question about the marketing system",
 }
 
@@ -1130,6 +1131,55 @@ def tone_drafts(req: ToneRequest):
     return result
 
 
+def _handle_broadcast_history(question: str, date_from: str | None, date_to: str | None) -> tuple[str, dict]:
+    """Return recent broadcast jobs with key stats."""
+    with get_cursor(commit=False) as cur:
+        params: list = []
+        where_clauses: list[str] = []
+
+        if date_from:
+            where_clauses.append("created_at >= %s")
+            params.append(date_from)
+        if date_to:
+            where_clauses.append("created_at <= %s::date + interval '1 day'")
+            params.append(date_to)
+
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+        params.append(50)
+
+        cur.execute(
+            f"""
+            SELECT id, title, broadcast_type, channels, target_type, target_date,
+                   status, total_recipients, sent_sms, sent_email, failed_count,
+                   created_by, created_at, completed_at
+            FROM broadcast_jobs
+            {where_sql}
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            params,
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+
+    if not rows:
+        return "No broadcast history found for the selected period.", {"broadcasts": []}
+
+    completed = [r for r in rows if r.get("status") == "completed"]
+    total_sent = sum((r.get("sent_sms") or 0) + (r.get("sent_email") or 0) for r in completed)
+    total_failed = sum(r.get("failed_count") or 0 for r in completed)
+
+    lines = [f"Found **{len(rows)} broadcast(s)**"]
+    if completed:
+        lines.append(f"Completed: {len(completed)} | Total sent: {total_sent} | Failed: {total_failed}")
+    lines.append("")
+    for r in rows:
+        sent = (r.get("sent_sms") or 0) + (r.get("sent_email") or 0)
+        ts = str(r.get("created_at", ""))[:10]
+        lines.append(f"- **{r.get('title', 'Untitled')}** [{r.get('status')}] — {ts} — {r.get('total_recipients', 0)} recipients, {sent} sent")
+
+    return "\n".join(lines), {"broadcasts": rows}
+
+
 # ---------------------------------------------------------------------------
 # Main route
 # Main endpoint
@@ -1176,6 +1226,8 @@ async def handle_query(req: QueryRequest):
             answer, data = _handle_ad_copies(question)
         elif category == "submit_input":
             answer, data = _handle_submit_input(question, req.author, req.input_type)
+        elif category == "broadcast_history":
+            answer, data = _handle_broadcast_history(question, date_from, date_to)
         elif category == "free_form":
             answer, data = await _handle_free_form(question)
         else:
