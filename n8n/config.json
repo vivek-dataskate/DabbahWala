@@ -70,6 +70,13 @@
       "name": "DabbahWala — Hourly Intelligence Cycle",
       "schedule": "Every hour",
       "active": true
+    },
+    "marketing_query_form": {
+      "id": "PENDING_IMPORT",
+      "name": "DabbahWala — Marketing Query Form",
+      "schedule": "On-demand (form submission)",
+      "active": true,
+      "note": "Import marketing_query_form.json into n8n, then update this ID. Form URL will be: https://digitalworker.dataskate.io/form/<webhook-id>"
     }
   }
 }

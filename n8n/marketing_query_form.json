@@ -1,0 +1,165 @@
+{
+  "name": "DabbahWala — Marketing Query Form",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "DabbahWala Marketing Intelligence",
+        "formDescription": "Ask questions about customers, campaigns, orders, and more. Select a category for fast answers, or choose 'Ask Anything (AI)' for free-form questions.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Query Category",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "fieldOptions": {
+                "values": [
+                  {"option": "Pipeline Snapshot — Lifecycle stage distribution"},
+                  {"option": "Who to Contact Today — Prioritized outreach list"},
+                  {"option": "Daily Summary — Today's orders and activity"},
+                  {"option": "Order Analytics — Top dishes, revenue, trends"},
+                  {"option": "Campaign Performance — Email campaign stats"},
+                  {"option": "Customer Lookup — Look up a specific customer"},
+                  {"option": "Communication History — SMS/call history for a customer"},
+                  {"option": "Ask Anything (AI) — Free-form question answered by AI"}
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Your Question or Details",
+              "fieldType": "textarea",
+              "requiredField": true,
+              "placeholder": "e.g., 'How many lapsed customers came back this week?' or 'What are our top 5 dishes?'"
+            },
+            {
+              "fieldLabel": "Customer Email (if looking up a specific customer)",
+              "fieldType": "text",
+              "requiredField": false,
+              "placeholder": "customer@example.com"
+            }
+          ]
+        },
+        "options": {
+          "respondWithData": true,
+          "formSubmittedText": "={{$json.formatted_answer}}"
+        }
+      },
+      "id": "form-trigger",
+      "name": "Marketing Query Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [200, 300],
+      "webhookId": "marketing-query-form"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Map the form dropdown selection to our API category\nconst categoryMap = {\n  'Pipeline Snapshot — Lifecycle stage distribution': 'pipeline_snapshot',\n  'Who to Contact Today — Prioritized outreach list': 'who_to_contact',\n  'Daily Summary — Today\\'s orders and activity': 'daily_summary',\n  'Order Analytics — Top dishes, revenue, trends': 'order_analytics',\n  'Campaign Performance — Email campaign stats': 'campaign_performance',\n  'Customer Lookup — Look up a specific customer': 'customer_lookup',\n  'Communication History — SMS/call history for a customer': 'communication_history',\n  'Ask Anything (AI) — Free-form question answered by AI': 'free_form',\n};\n\nconst formCategory = $input.first().json['Query Category'];\nconst category = categoryMap[formCategory] || 'free_form';\n\nreturn [{\n  json: {\n    category: category,\n    question: $input.first().json['Your Question or Details'] || '',\n    contact_email: $input.first().json['Customer Email (if looking up a specific customer)'] || null,\n    original_category: formCategory,\n  }\n}];"
+      },
+      "id": "map-category",
+      "name": "Map Category",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/query",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ category: $json.category, question: $json.question, contact_email: $json.contact_email }) }}",
+        "options": {
+          "timeout": 90000
+        }
+      },
+      "id": "call-query-api",
+      "name": "Call Query API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Format the API response for display on the form completion page\nconst response = $input.first().json;\nconst answer = response.answer || 'No answer received.';\nconst category = response.category || 'unknown';\nconst question = response.question || '';\n\n// Build a formatted response\nlet formatted = '';\nformatted += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';\nformatted += 'DabbahWala Marketing Intelligence\\n';\nformatted += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n';\nformatted += 'Category: ' + category.replace(/_/g, ' ').toUpperCase() + '\\n';\nif (question) {\n  formatted += 'Question: ' + question + '\\n';\n}\nformatted += '\\n' + answer + '\\n';\nformatted += '\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';\nformatted += 'Powered by DabbahWala Intelligence Engine\\n';\n\nreturn [{\n  json: {\n    formatted_answer: formatted,\n    raw_answer: answer,\n    category: category,\n    question: question,\n    timestamp: new Date().toISOString(),\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [950, 300]
+    },
+    {
+      "parameters": {
+        "resource": "record",
+        "operation": "create",
+        "application": {
+          "__rl": true,
+          "value": "appuy2VTIao6XVpIW",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Marketing Queries",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Category": "={{ $json.category }}",
+            "Question": "={{ $json.question }}",
+            "Answer": "={{ $json.raw_answer.substring(0, 10000) }}",
+            "Timestamp": "={{ $json.timestamp }}"
+          }
+        }
+      },
+      "id": "log-to-airtable",
+      "name": "Log to Airtable",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [950, 500],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "hJpO8jdlT4Rmkjtx",
+          "name": "Airtable API Key"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Marketing Query Form": {
+      "main": [
+        [{"node": "Map Category", "type": "main", "index": 0}]
+      ]
+    },
+    "Map Category": {
+      "main": [
+        [{"node": "Call Query API", "type": "main", "index": 0}]
+      ]
+    },
+    "Call Query API": {
+      "main": [
+        [
+          {"node": "Format Response", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {"node": "Log to Airtable", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "instanceId": "digitalworker-dataskate"
+  },
+  "tags": [
+    {"name": "DabbahWala"},
+    {"name": "Marketing"},
+    {"name": "Query Form"}
+  ]
+}
