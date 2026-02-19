@@ -141,9 +141,8 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="tab active" onclick="switchTab('query')">📊 Query</div>
   <div class="tab" onclick="switchTab('agent')">🤖 Run Agent</div>
   <div class="tab" onclick="switchTab('tone')">✉️ Email Templates</div>
-  <div class="tab" onclick="switchTab('upload')">📤 Upload CSV</div>
+  <div class="tab" onclick="switchTab('upload')">⚡ Actions</div>
   <div class="tab" onclick="switchTab('reports')">📋 Reports</div>
-  <div class="tab" onclick="switchTab('broadcasts')">📣 Broadcasts</div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ QUERY -->
@@ -272,10 +271,13 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════ UPLOAD -->
+<!-- ══════════════════════════════════════════════════════ ACTIONS -->
 <div id="panel-upload" class="panel">
-  <div class="panel-title">Upload Daily Orders CSV</div>
-  <div class="panel-desc">Upload a CSV of today's orders. Each row is matched to a contact and an <code>order_placed</code> event is recorded. After ingestion the system automatically runs the full inference → decision → orchestration cycle for up to 5 contacts and returns actionable recommendations for your field agents.</div>
+  <div class="panel-title">Actions</div>
+  <div class="panel-desc">All operations that write or send data — upload orders, run agent intelligence, send delay alerts, and launch promotional blasts.</div>
+
+  <!-- ─────────────── 1. Upload Daily Orders ─────────────── -->
+  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">📤 Upload Daily Orders</div>
 
   <div class="form-group" style="margin-bottom:20px">
     <label>Expected columns <span class="hint">(any order, extra columns ignored)</span></label>
@@ -292,12 +294,104 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <button class="btn" id="u-btn" onclick="uploadCSV()">Upload &amp; Process</button>
   <div id="u-result"></div>
 
-  <hr style="margin:28px 0;border:none;border-top:1.5px solid #e0e0ea">
+  <hr style="margin:32px 0;border:none;border-top:1.5px solid #e0e0ea">
 
-  <div class="panel-title" style="font-size:1rem;margin-bottom:6px">Run Agents on All Contacts</div>
+  <!-- ─────────────── 2. Run Agents on All Contacts ─────────────── -->
+  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">🤖 Run Agents on All Contacts</div>
   <div class="panel-desc" style="margin-bottom:14px">Run the full inference → decision → orchestration cycle on every non-opted-out contact and immediately dispatch each decision: leads assigned to an Instantly campaign are pushed now, escalations are created as Airtable tasks now — no waiting for the hourly n8n cycle.</div>
   <button class="btn" id="ra-btn" onclick="runAllAgents()" style="background:#6f42c1">Run Agents on All Contacts</button>
   <div id="ra-result" style="margin-top:14px"></div>
+
+  <hr style="margin:32px 0;border:none;border-top:1.5px solid #e0e0ea">
+
+  <!-- ─────────────── 3. Delay Alert ─────────────── -->
+  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">⚡ Delay Alert</div>
+  <div style="background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:14px;margin-bottom:20px;font-size:0.87rem;color:#842029">
+    Sends SMS <strong>and</strong> email to every customer with an order on the selected date. Reaches all active-order contacts regardless of promo flags — this is an operational notification.
+  </div>
+
+  <div class="row2">
+    <div class="form-group">
+      <label>Delivery date affected <span class="hint">(defaults to today)</span></label>
+      <input type="date" id="bc-delay-date">
+    </div>
+    <div class="form-group">
+      <label>Your name <span class="hint">(optional)</span></label>
+      <input type="text" id="bc-delay-author" placeholder="e.g. Vivek">
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
+    <textarea id="bc-delay-sms" rows="3" placeholder="Hi! Your DabbahWala delivery for today is running 45–60 min late due to heavy rain. We appreciate your patience!"></textarea>
+    <div id="bc-delay-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
+  </div>
+
+  <div class="form-group">
+    <label>Email subject</label>
+    <input type="text" id="bc-delay-subject" placeholder="Delivery update — your order is on its way">
+  </div>
+
+  <div class="form-group">
+    <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
+    <textarea id="bc-delay-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;We wanted to let you know that your order is running a little late today due to heavy rain. Our drivers are on the way and your food will arrive as soon as possible. Thank you for your patience!&lt;/p&gt;&lt;p&gt;— Team DabbahWala&lt;/p&gt;"></textarea>
+  </div>
+
+  <button class="btn" id="bc-delay-btn" onclick="sendDelayAlert()" style="background:#dc3545">Send Delay Alert Now</button>
+  <div id="bc-delay-result" style="margin-top:14px"></div>
+
+  <hr style="margin:32px 0;border:none;border-top:1.5px solid #e0e0ea">
+
+  <!-- ─────────────── 4. Promotional Blast ─────────────── -->
+  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">🎉 Promotional Blast</div>
+  <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:10px;padding:14px;margin-bottom:20px;font-size:0.87rem;color:#0c5460">
+    Sends to all customers opted in to promotional messaging. Only contacts with <code>sms_promo_enabled</code> or <code>email_promo_enabled</code> receive messages on their respective channels.
+  </div>
+
+  <div class="row2">
+    <div class="form-group">
+      <label>Title <span class="hint">(internal label)</span></label>
+      <input type="text" id="bc-promo-title" placeholder="e.g. Eid Special — 20% Off">
+    </div>
+    <div class="form-group">
+      <label>Your name <span class="hint">(optional)</span></label>
+      <input type="text" id="bc-promo-author" placeholder="e.g. Vivek">
+    </div>
+  </div>
+
+  <div class="form-group">
+    <label>Channels</label>
+    <div style="display:flex;gap:20px;margin-top:4px">
+      <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-sms" checked> SMS</label>
+      <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-email" checked> Email</label>
+    </div>
+  </div>
+
+  <div class="form-group" id="bc-promo-sms-group">
+    <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
+    <textarea id="bc-promo-sms" rows="3" placeholder="DabbahWala Eid special: 20% off all orders today! Use code EID20 at checkout. Reply STOP to opt out."></textarea>
+    <div id="bc-promo-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
+  </div>
+
+  <div class="form-group" id="bc-promo-email-group">
+    <label>Email subject</label>
+    <input type="text" id="bc-promo-subject" placeholder="Eid Mubarak! 20% off just for you 🎉">
+  </div>
+
+  <div class="form-group" id="bc-promo-body-group">
+    <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
+    <textarea id="bc-promo-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;Eid Mubarak from all of us at DabbahWala! To celebrate, enjoy 20% off your next order. Use code &lt;strong&gt;EID20&lt;/strong&gt; at checkout.&lt;/p&gt;"></textarea>
+  </div>
+
+  <button class="btn" id="bc-promo-btn" onclick="sendPromo()">Queue Promotional Blast</button>
+  <div id="bc-promo-result" style="margin-top:14px"></div>
+
+  <hr style="margin:32px 0;border:none;border-top:1.5px solid #e0e0ea">
+
+  <!-- ─────────────── 5. Broadcast History ─────────────── -->
+  <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#888;margin-bottom:14px">📋 Broadcast History</div>
+  <button class="btn btn-gray" onclick="loadBroadcastHistory()" style="margin-bottom:16px">Load / Refresh</button>
+  <div id="bc-history-result"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ REPORTS -->
@@ -317,111 +411,12 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div id="r-result"></div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════ BROADCASTS -->
-<div id="panel-broadcasts" class="panel">
-  <div class="panel-title">Broadcast Messaging</div>
-  <div class="panel-desc">Send SMS and email to a large group in one action. Use <strong>Delay Alert</strong> when today's deliveries are running late. Use <strong>Promotional Blast</strong> for festivals, events, or promotions.</div>
-
-  <!-- ── Mode tabs ── -->
-  <div style="display:flex;gap:8px;margin-bottom:24px">
-    <button id="bc-tab-delay" class="btn" onclick="bcSwitchMode('delay')" style="background:#dc3545">⚡ Delay Alert</button>
-    <button id="bc-tab-promo" class="btn btn-gray" onclick="bcSwitchMode('promo')">🎉 Promotional Blast</button>
-    <button id="bc-tab-history" class="btn btn-gray" onclick="bcSwitchMode('history')">📋 History</button>
-  </div>
-
-  <!-- ── Delay Alert ── -->
-  <div id="bc-delay">
-    <div style="background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:16px;margin-bottom:20px;font-size:0.87rem;color:#842029">
-      Sends SMS <strong>and</strong> email to every customer who has an order on the selected date. Respects opt-outs only (does not require promo flags — this is an operational notification).
-    </div>
-
-    <div class="form-group">
-      <label>Delivery date affected <span class="hint">(defaults to today)</span></label>
-      <input type="date" id="bc-delay-date">
-    </div>
-
-    <div class="form-group">
-      <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
-      <textarea id="bc-delay-sms" rows="3" placeholder="Hi! Your DabbahWala delivery for today is running 45–60 min late due to heavy rain. We appreciate your patience!"></textarea>
-      <div id="bc-delay-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
-    </div>
-
-    <div class="form-group">
-      <label>Email subject</label>
-      <input type="text" id="bc-delay-subject" placeholder="Delivery update — your order is on its way">
-    </div>
-
-    <div class="form-group">
-      <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
-      <textarea id="bc-delay-body" rows="6" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;We wanted to let you know that your order is running a little late today due to heavy rain. Our drivers are on the way and your food will arrive as soon as possible. Thank you for your patience!&lt;/p&gt;&lt;p&gt;— Team DabbahWala&lt;/p&gt;"></textarea>
-    </div>
-
-    <div class="form-group">
-      <label>Your name <span class="hint">(logged as created_by — optional)</span></label>
-      <input type="text" id="bc-delay-author" placeholder="e.g. Vivek">
-    </div>
-
-    <button class="btn" id="bc-delay-btn" onclick="sendDelayAlert()" style="background:#dc3545">Send Delay Alert Now</button>
-    <div id="bc-delay-result" style="margin-top:14px"></div>
-  </div>
-
-  <!-- ── Promotional Blast ── -->
-  <div id="bc-promo" style="display:none">
-    <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:10px;padding:16px;margin-bottom:20px;font-size:0.87rem;color:#0c5460">
-      Sends to all customers who have opted in to promotional SMS / email. Only contacts with <code>sms_promo_enabled</code> or <code>email_promo_enabled</code> will receive messages on their respective channels.
-    </div>
-
-    <div class="form-group">
-      <label>Title <span class="hint">(internal label for this broadcast)</span></label>
-      <input type="text" id="bc-promo-title" placeholder="e.g. Eid Special — 20% Off">
-    </div>
-
-    <div class="form-group">
-      <label>Channels</label>
-      <div style="display:flex;gap:20px;margin-top:4px">
-        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-sms" checked> SMS</label>
-        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-email" checked> Email</label>
-      </div>
-    </div>
-
-    <div class="form-group" id="bc-promo-sms-group">
-      <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
-      <textarea id="bc-promo-sms" rows="3" placeholder="DabbahWala Eid special: 20% off all orders today! Use code EID20 at checkout. Reply STOP to opt out."></textarea>
-      <div id="bc-promo-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
-    </div>
-
-    <div class="form-group" id="bc-promo-email-group">
-      <label>Email subject</label>
-      <input type="text" id="bc-promo-subject" placeholder="Eid Mubarak! 20% off just for you 🎉">
-    </div>
-
-    <div class="form-group" id="bc-promo-body-group">
-      <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
-      <textarea id="bc-promo-body" rows="6" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;Eid Mubarak from all of us at DabbahWala! To celebrate, enjoy 20% off your next order. Use code &lt;strong&gt;EID20&lt;/strong&gt; at checkout.&lt;/p&gt;"></textarea>
-    </div>
-
-    <div class="form-group">
-      <label>Your name <span class="hint">(optional)</span></label>
-      <input type="text" id="bc-promo-author" placeholder="e.g. Vivek">
-    </div>
-
-    <button class="btn" id="bc-promo-btn" onclick="sendPromo()">Queue Promotional Blast</button>
-    <div id="bc-promo-result" style="margin-top:14px"></div>
-  </div>
-
-  <!-- ── History ── -->
-  <div id="bc-history" style="display:none">
-    <button class="btn btn-gray" onclick="loadBroadcastHistory()" style="margin-bottom:16px">Refresh</button>
-    <div id="bc-history-result"></div>
-  </div>
-</div>
-
 <script>
 // ─── state ───────────────────────────────────────────────────────────────────
 let _toneDrafts = {};
 
 // ─── tabs ────────────────────────────────────────────────────────────────────
-const TAB_NAMES = ['query','agent','tone','upload','reports','broadcasts'];
+const TAB_NAMES = ['query','agent','tone','upload','reports'];
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
@@ -919,15 +914,6 @@ async function loadReport(type) {
 }
 
 // ─── broadcasts ───────────────────────────────────────────────────────────────
-function bcSwitchMode(mode) {
-  ['delay','promo','history'].forEach(m => {
-    document.getElementById('bc-' + m).style.display = m === mode ? 'block' : 'none';
-    const btn = document.getElementById('bc-tab-' + m);
-    if (btn) btn.style.background = m === mode ? (m === 'delay' ? '#dc3545' : '#1a1a2e') : '#6c757d';
-  });
-  if (mode === 'history') loadBroadcastHistory();
-}
-
 // SMS character counter
 function bcAttachCounter(textareaId, counterId) {
   const ta = document.getElementById(textareaId);
