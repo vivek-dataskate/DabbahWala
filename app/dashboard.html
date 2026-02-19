@@ -205,7 +205,6 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="tab" onclick="switchTab('agent')">🤖 Run Agent</div>
   <div class="tab" onclick="switchTab('upload')">⚡ Actions</div>
   <div class="tab" onclick="switchTab('reports')">📋 Reports</div>
-  <div class="tab" onclick="switchTab('campaigns')">📈 Campaigns</div>
   <div class="tab" onclick="switchTab('chatbot')">💬 About Me</div>
 </div>
 
@@ -530,31 +529,40 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 <!-- ══════════════════════════════════════════════════════ REPORTS -->
 <div id="panel-reports" class="panel">
   <div class="panel-title">Reports</div>
-  <div class="panel-desc">View daily activity and outcome reports without sending an email.</div>
+  <div class="panel-desc">Select a report type to view.</div>
 
-  <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-    <div class="form-group" style="flex:1;min-width:180px;margin-bottom:0">
-      <label>Report date</label>
-      <input type="date" id="r-date">
+  <div class="form-group">
+    <label>Report type</label>
+    <select id="r-type" onchange="onReportTypeChange()">
+      <optgroup label="📅 Daily">
+        <option value="activity">Activity Report — Daily operations summary</option>
+        <option value="outcome">Outcome Report — Daily results summary</option>
+      </optgroup>
+      <optgroup label="📧 Campaigns">
+        <option value="campaign_analytics">Campaign Analytics — Live Instantly stats for all 5 campaigns</option>
+      </optgroup>
+    </select>
+  </div>
+
+  <div id="r-section-date">
+    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+      <div class="form-group" style="flex:1;min-width:180px;margin-bottom:0">
+        <label>Report date</label>
+        <input type="date" id="r-date">
+      </div>
+      <button class="btn" id="r-run-btn" onclick="loadReport(document.getElementById('r-type').value)">Load Report</button>
     </div>
-    <button class="btn" onclick="loadReport('activity')">Activity Report</button>
-    <button class="btn btn-gray" onclick="loadReport('outcome')">Outcome Report</button>
+  </div>
+
+  <div id="r-section-campaign_analytics" style="display:none">
+    <div class="camp-refresh-row">
+      <button class="btn" id="camp-refresh-btn" onclick="loadCampaignAnalytics()">Refresh</button>
+      <span class="next-refresh" id="camp-next-refresh"></span>
+    </div>
+    <div id="camp-result"></div>
   </div>
 
   <div id="r-result"></div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════ CAMPAIGNS -->
-<div id="panel-campaigns" class="panel">
-  <div class="panel-title">Campaign Analytics</div>
-  <div class="panel-desc">Live stats from Instantly for all 5 active campaigns. Auto-refreshes every 5 minutes.</div>
-
-  <div class="camp-refresh-row">
-    <button class="btn" id="camp-refresh-btn" onclick="loadCampaignAnalytics()">Refresh</button>
-    <span class="next-refresh" id="camp-next-refresh"></span>
-  </div>
-
-  <div id="camp-result"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════ ABOUT ME -->
@@ -641,11 +649,10 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 let _toneDrafts = {};
 
 // ─── tabs ────────────────────────────────────────────────────────────────────
-const TAB_NAMES = ['query','agent','upload','reports','campaigns','chatbot'];
+const TAB_NAMES = ['query','agent','upload','reports','chatbot'];
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
-  if (name === 'campaigns' && !document.getElementById('camp-result').dataset.loaded) loadCampaignAnalytics();
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -1473,6 +1480,19 @@ async function sendChat() {
   }
 }
 
+// ─── reports type switcher ────────────────────────────────────────────────────
+function onReportTypeChange() {
+  const val = document.getElementById('r-type').value;
+  document.getElementById('r-section-date').style.display =
+    (val === 'activity' || val === 'outcome') ? 'block' : 'none';
+  document.getElementById('r-section-campaign_analytics').style.display =
+    val === 'campaign_analytics' ? 'block' : 'none';
+  document.getElementById('r-result').innerHTML = '';
+  if (val === 'campaign_analytics' && !document.getElementById('camp-result').dataset.loaded) {
+    loadCampaignAnalytics();
+  }
+}
+
 // ─── campaign analytics ───────────────────────────────────────────────────────
 let _campRefreshTimer = null;
 let _campRefreshCountdown = null;
@@ -1554,7 +1574,8 @@ function loadCampaignAnalytics() {
         if (secsLeft <= 0) clearInterval(_campRefreshCountdown);
       }, 1000);
       _campRefreshTimer = setTimeout(() => {
-        if (document.getElementById('panel-campaigns').classList.contains('active')) {
+        if (document.getElementById('panel-reports').classList.contains('active') &&
+            document.getElementById('r-type').value === 'campaign_analytics') {
           loadCampaignAnalytics();
         }
       }, CAMP_REFRESH_MS);
