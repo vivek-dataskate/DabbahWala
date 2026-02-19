@@ -497,14 +497,25 @@ def _handle_communication_history(question: str, contact_email: str | None) -> t
         return "Please provide a customer email address to look up their communication history.", {}
 
     with get_cursor(commit=False) as cur:
-        # Find contact
-        cur.execute("SELECT id, first_name, last_name FROM contacts WHERE email = %s", (contact_email,))
+        # Find contact — include phone so we can report it
+        cur.execute(
+            "SELECT id, first_name, last_name, phone FROM contacts WHERE email = %s",
+            (contact_email,),
+        )
         contact = cur.fetchone()
         if not contact:
             return f"No customer found with email: {contact_email}", {}
 
         cid = contact["id"]
         name = f"{contact['first_name'] or ''} {contact['last_name'] or ''}".strip()
+        phone = (contact.get("phone") or "").strip() or None
+
+        if not phone:
+            return (
+                f"No phone number on file for **{name}** ({contact_email}). "
+                "Communication history via SMS/calls cannot be retrieved without a phone number.",
+                {"phone_resolved": False},
+            )
 
         # SMS
         cur.execute("""
@@ -530,7 +541,7 @@ def _handle_communication_history(question: str, contact_email: str | None) -> t
         """, (cid,))
         deliveries = [dict(r) for r in cur.fetchall()]
 
-    lines = [f"## Communication History: {name} ({contact_email})", ""]
+    lines = [f"## Communication History: {name}", f"**Email**: {contact_email} | **Phone**: {phone}", ""]
 
     if sms:
         lines.append(f"### SMS Messages ({len(sms)})")
@@ -561,7 +572,7 @@ def _handle_communication_history(question: str, contact_email: str | None) -> t
     if not sms and not calls and not deliveries:
         lines.append("No communication history found for this customer.")
 
-    data = {"sms_count": len(sms), "calls_count": len(calls), "deliveries_count": len(deliveries)}
+    data = {"phone": phone, "sms_count": len(sms), "calls_count": len(calls), "deliveries_count": len(deliveries)}
     return "\n".join(lines), data
 
 
