@@ -61,8 +61,37 @@ class QueryResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _handle_customer_lookup(question: str, contact_email: str | None) -> tuple[str, dict]:
+    # If no email, try name search using the question text
     if not contact_email:
-        return "Please provide a customer email address to look up.", {}
+        name = question.strip()
+        if not name:
+            return "Please provide a customer email address or name to look up.", {}
+
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT id, first_name, last_name, email, lifecycle_segment, total_orders
+                FROM contacts
+                WHERE first_name ILIKE %s OR last_name ILIKE %s
+                ORDER BY last_name, first_name
+                LIMIT 10
+            """, (f"%{name}%", f"%{name}%"))
+            matches = [dict(r) for r in cur.fetchall()]
+
+        if not matches:
+            return f"No customer found with name matching '{name}'.", {}
+
+        if len(matches) > 1:
+            lines = [f"## {len(matches)} customers found for '{name}'", ""]
+            for m in matches:
+                lines.append(
+                    f"- **{m['first_name']} {m['last_name']}** — {m['email']} "
+                    f"({m.get('lifecycle_segment', 'N/A')}, {m.get('total_orders', 0)} orders)"
+                )
+            lines.append("\nEnter the email address to get full details.")
+            return "\n".join(lines), {"matches": matches}
+
+        # Exactly one match — use their email for full detail lookup
+        contact_email = matches[0]["email"]
 
     with get_cursor(commit=False) as cur:
         cur.execute("SELECT get_contact_detail(%s)", (contact_email,))
