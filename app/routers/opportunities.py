@@ -16,6 +16,7 @@ router = APIRouter()
 @router.get("/detect")
 def detect_engaged_no_order():
     """Detect contacts with engagement (opens/clicks) but no recent order."""
+    logger.info("detect_engaged_no_order: running signal detection")
     with get_cursor(commit=False) as cur:
         cur.execute("SELECT * FROM detect_engaged_no_order()")
         candidates = [dict(r) for r in cur.fetchall()]
@@ -23,6 +24,7 @@ def detect_engaged_no_order():
             c['signal'] = 'engaged_no_order'
             c['suggested_action'] = 'send_email'
             c['suggested_priority'] = 'warm'
+        logger.info("detect_engaged_no_order: found %d candidates", len(candidates))
         return {"count": len(candidates), "candidates": candidates}
 
 

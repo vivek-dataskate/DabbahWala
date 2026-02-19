@@ -6,6 +6,7 @@ records orders, fires events, and detects opportunities.
 import csv
 import io
 import json
+import logging
 import re
 from collections import defaultdict
 from datetime import datetime
@@ -15,6 +16,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from pydantic import BaseModel
 
 from app.db import get_cursor
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -61,8 +64,9 @@ def _load_menu_lookup(cur) -> tuple:
         for r in cur.fetchall():
             alias_map[r['alias']] = r['canonical_name']
             alias_map[r['alias'].strip()] = r['canonical_name']
-    except Exception:
-        pass  # table may not exist yet
+        logger.debug("Loaded %d menu aliases", len(alias_map))
+    except Exception as e:
+        logger.warning("menu_item_aliases table not accessible: %s — proceeding without aliases", e)
 
     # master menu items: normalized -> actual name
     cur.execute("SELECT id, item_name, category, is_veg, avg_price FROM menu_items WHERE is_active = true")
@@ -73,6 +77,7 @@ def _load_menu_lookup(cur) -> tuple:
         norm = r['item_name'].strip().lower()
         master_norm[norm] = r['item_name']
 
+    logger.debug("Loaded %d active menu items and %d aliases for dish resolution", len(master_set), len(alias_map))
     return alias_map, master_norm, master_set
 
 
@@ -139,24 +144,48 @@ async def process_daily_orders(file: UploadFile = File(...)):
     """
     from collections import Counter
 
+    logger.info(
+        "POST /process — received CSV file '%s' size=%d bytes",
+        file.filename,
+        file.size or 0,
+    )
     content = await file.read()
     # utf-8-sig strips BOM from Excel-generated CSVs
     try:
         text = content.decode('utf-8-sig')
     except UnicodeDecodeError:
+        logger.warning("UTF-8 decode failed — falling back to latin-1 for file '%s'", file.filename)
         text = content.decode('latin-1')
     reader = csv.DictReader(io.StringIO(text))
     rows = list(reader)
 
+    logger.info("CSV parsed: %d rows, columns=%s", len(rows), list(rows[0].keys()) if rows else [])
     if not rows:
+        logger.error("Empty CSV file submitted: '%s'", file.filename)
         raise HTTPException(status_code=400, detail="Empty CSV file")
 
     # Group by Order Number (accept common column name variants)
     orders_grouped = defaultdict(list)
+    skipped_rows = 0
     for row in rows:
         order_num = _col(row, 'Order Number', 'order_number', 'Order #', 'OrderNumber', 'order_id').strip()
         if order_num:
             orders_grouped[order_num].append(row)
+        else:
+            skipped_rows += 1
+
+    logger.info(
+        "Grouped %d orders from %d rows (%d rows skipped — no order number)",
+        len(orders_grouped),
+        len(rows),
+        skipped_rows,
+    )
+    if skipped_rows > 0:
+        logger.warning(
+            "%d CSV rows had no order number — they will be skipped. "
+            "Check CSV column names for 'Order Number', 'order_id', etc.",
+            skipped_rows,
+        )
 
     # Build contact + menu lookups
     with get_cursor(commit=False) as cur:
@@ -178,6 +207,12 @@ async def process_daily_orders(file: UploadFile = File(...)):
                 name_lookup[full] = dict(r)
 
         alias_map, master_norm, master_set = _load_menu_lookup(cur)
+
+    logger.info(
+        "Lookup tables loaded: %d phone records, %d name records",
+        len(phone_lookup),
+        len(name_lookup),
+    )
 
     new_contact_count = 0
     existing_contact_count = 0
@@ -269,6 +304,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
                 name_parts = name.split(None, 1)
                 first_n = name_parts[0] if name_parts else ''
                 last_n = name_parts[1] if len(name_parts) > 1 else ''
+                logger.info("Creating new contact: name='%s' phone='%s'", name, phone)
                 cur.execute(
                     "INSERT INTO contacts (phone, first_name, last_name, address, "
                     "lifecycle_segment, primary_source) "
@@ -278,6 +314,7 @@ async def process_daily_orders(file: UploadFile = File(...)):
                 result = cur.fetchone()
                 contact_id = result['id']
                 new_contact_count += 1
+                logger.info("New contact created id=%s name='%s'", contact_id, name)
                 # Add to lookup for subsequent orders
                 if phone:
                     phone_lookup[phone] = {'id': contact_id, 'total_orders': 0,
@@ -344,17 +381,39 @@ async def process_daily_orders(file: UploadFile = File(...)):
                     (order_date, contact_id)
                 )
 
+    logger.info(
+        "CSV processing complete: orders=%d items=%d new_contacts=%d existing=%d opportunities=%d "
+        "menu_matched=%d menu_created=%d",
+        order_count,
+        item_count,
+        new_contact_count,
+        existing_contact_count,
+        opportunity_count,
+        menu_matched,
+        menu_created,
+    )
+
     # Run lifecycle cycle
     lifecycle_updated = 0
     campaigns_queued = 0
+    logger.info("Running lifecycle cycle after order ingestion")
     try:
         with get_cursor(commit=True) as cur:
             cur.execute("SELECT * FROM run_lifecycle_cycle()")
             row = cur.fetchone()
             lifecycle_updated = row.get('contacts_updated', 0)
             campaigns_queued = row.get('campaigns_queued', 0)
-    except Exception:
-        pass
+        logger.info(
+            "Lifecycle cycle complete: contacts_updated=%d campaigns_queued=%d",
+            lifecycle_updated,
+            campaigns_queued,
+        )
+    except Exception as e:
+        logger.error(
+            "Lifecycle cycle failed after order ingestion: %s — orders still saved",
+            e,
+            exc_info=True,
+        )
 
     return DailyOrderResult(
         date=order_date_str,
