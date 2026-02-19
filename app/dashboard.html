@@ -136,6 +136,15 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 .about-chip .chip-label { font-size: 0.72rem; text-transform: uppercase; font-weight: 700; color: #999; margin-bottom: 3px; }
 .about-chip .chip-val { font-weight: 600; color: #1a1a2e; }
 
+/* Chatbot suggestion chips */
+.suggestion-chip {
+  padding: 6px 13px; font-size: 0.8rem; font-weight: 500;
+  background: white; color: #444; border: 1.5px solid #d0d0e0;
+  border-radius: 20px; cursor: pointer; line-height: 1.4;
+  transition: background 0.12s, border-color 0.12s;
+}
+.suggestion-chip:hover { background: #f0f0f8; border-color: #1a1a2e; color: #1a1a2e; }
+
 /* Chatbot */
 .chat-history { max-height: 500px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; margin-top: 18px; }
 .chat-bubble { border-radius: 10px; padding: 14px 18px; font-size: 0.88rem; line-height: 1.65; }
@@ -350,8 +359,26 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="panel-title">AI System Assistant</div>
   <div class="panel-desc">Ask questions about <strong>how this system works</strong> — the agent pipeline, lifecycle rules, API endpoints, database schema, n8n workflows, integrations, and configuration. Answers are sourced from system documentation only.<br><span style="color:#e63946;font-size:0.82rem;font-weight:600">Not for customer, order, or campaign data — use the Query tab for live data questions.</span></div>
 
+  <div style="margin-bottom:14px">
+    <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:8px">Example questions — click to ask</div>
+    <div style="display:flex;flex-wrap:wrap;gap:7px">
+      <button class="suggestion-chip" onclick="askSuggestion(this)">Where is RAG used vs vector search?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">Where are MCPs used in the system?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the inference layer work?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the orchestrator choose a final action?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How do feedback loops update the decision agent logic?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How does the 4-layer agent pipeline work end-to-end?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What are the lifecycle segments and how do contacts move between them?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What n8n workflows run and on what schedule?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How is the Intelligence Cycle different from the Agent Pipeline?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What external services are integrated and how?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">How are delivery events handled by the system?</button>
+      <button class="suggestion-chip" onclick="askSuggestion(this)">What guardrails does the orchestrator apply?</button>
+    </div>
+  </div>
+
   <div class="chat-input-row">
-    <textarea id="cb-question" placeholder="e.g. How does the 4-layer agent pipeline work? What lifecycle segments exist? How are delivery events processed?" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
+    <textarea id="cb-question" placeholder="Type your question about the system and press Enter or click Ask…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"></textarea>
     <button class="btn" id="cb-btn" onclick="sendChat()">Ask</button>
   </div>
 
@@ -941,6 +968,11 @@ async function loadReport(type) {
 
 // ─── chatbot ──────────────────────────────────────────────────────────────────
 const _cbMessages = [];  // [{role:'user'|'assistant', text, sources}]
+
+function askSuggestion(btn) {
+  document.getElementById('cb-question').value = btn.textContent.trim();
+  sendChat();
+}
 
 function _renderMd(text) {
   // Minimal markdown rendering: bold, inline code, code blocks, lists, headers
