@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 
+from app.routers import agents, campaigns, delivery, events, lifecycle, opportunities, reports, sms, telnyx
 from app.routers import agent, campaigns, daily_orders, delivery, events, intelligence, lifecycle, opportunities, playbook, query, reports, sms, telnyx
 
 app = FastAPI(
@@ -16,6 +17,7 @@ app.include_router(telnyx.router, prefix="/api/telnyx", tags=["telnyx"])
 app.include_router(delivery.router, prefix="/api/delivery", tags=["delivery"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opportunities"])
+app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(daily_orders.router, prefix="/api/daily-orders", tags=["daily-orders"])
 app.include_router(intelligence.router, prefix="/api/intelligence", tags=["intelligence"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])

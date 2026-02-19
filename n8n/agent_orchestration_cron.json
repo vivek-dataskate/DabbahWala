@@ -1,0 +1,95 @@
+{
+  "name": "DabbahWala — Agent Orchestration Cron",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 3
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 3 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$vars.DABBAHWALA_API_URL}}/api/agents/cycle/run-all",
+        "options": { "timeout": 300000 }
+      },
+      "id": "run-agent-cycle",
+      "name": "Run Full Agent Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [
+            {
+              "id": "has-results",
+              "leftValue": "={{ $json.processed }}",
+              "rightValue": 0,
+              "operator": { "type": "number", "operation": "gt" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "processed-any",
+      "name": "Contacts Processed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.item.json;\nreturn [{ json: {\n  processed: data.processed,\n  errors: (data.errors || []).length,\n  actions_queued: (data.results || []).filter(r => r.chosen_action !== 'none').length,\n  summary: `Agent cycle complete: ${data.processed} contacts processed, ${(data.errors||[]).length} errors, ${(data.results||[]).filter(r=>r.chosen_action!=='none').length} actions queued`\n}}];"
+      },
+      "id": "summarise-cycle",
+      "name": "Summarise Cycle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 240]
+    },
+    {
+      "parameters": {},
+      "id": "no-contacts",
+      "name": "No Eligible Contacts",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [880, 400]
+    }
+  ],
+  "connections": {
+    "Every 3 Hours": {
+      "main": [[{ "node": "Run Full Agent Cycle", "type": "main", "index": 0 }]]
+    },
+    "Run Full Agent Cycle": {
+      "main": [[{ "node": "Contacts Processed?", "type": "main", "index": 0 }]]
+    },
+    "Contacts Processed?": {
+      "main": [
+        [{ "node": "Summarise Cycle", "type": "main", "index": 0 }],
+        [{ "node": "No Eligible Contacts", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": { "executionOrder": "v1" },
+  "staticData": null,
+  "tags": [
+    { "name": "DabbahWala", "id": "dabbahwala" },
+    { "name": "Agent Intelligence", "id": "agents" }
+  ],
+  "pinData": {}
+}
