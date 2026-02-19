@@ -25,6 +25,13 @@ app = FastAPI(
 )
 
 
+@app.on_event("startup")
+async def startup_sync_chatbot_docs():
+    """Auto-reindex chatbot docs if markdown files changed since last deploy."""
+    from app.routers.chatbot import sync_docs_on_startup
+    sync_docs_on_startup()
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(

@@ -6,6 +6,7 @@ into PostgreSQL full-text search chunks. Each user question retrieves relevant c
 similar previous interactions, builds a context-rich prompt for Claude, and saves the
 Q&A pair to chatbot_interactions for future retrieval.
 """
+import hashlib
 import logging
 import os
 import re
@@ -99,19 +100,46 @@ def _split_chunks(text: str) -> list[str]:
     return chunks
 
 
-def _ensure_indexed() -> None:
-    """Index markdown docs into chatbot_doc_chunks if the table is empty."""
-    with get_cursor(commit=False) as cur:
-        cur.execute("SELECT COUNT(*) FROM chatbot_doc_chunks")
-        if cur.fetchone()[0] > 0:
-            return  # Already indexed
+def _compute_docs_hash(docs: list[dict]) -> str:
+    """Return a SHA-256 hex digest of all doc contents combined."""
+    h = hashlib.sha256()
+    for doc in sorted(docs, key=lambda d: d["source"]):
+        h.update(doc["source"].encode())
+        h.update(doc["content"].encode())
+    return h.hexdigest()
 
-    docs = _load_md_files()
-    if not docs:
-        logger.warning("No markdown docs to index")
-        return
 
+def _stored_docs_hash() -> str | None:
+    """Read the previously stored docs hash from chatbot_doc_meta, or None."""
+    try:
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT value FROM chatbot_doc_meta WHERE key = 'docs_hash'",
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _save_docs_hash(hash_value: str) -> None:
     with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO chatbot_doc_meta (key, value, updated_at)
+            VALUES ('docs_hash', %s, NOW())
+            ON CONFLICT (key) DO UPDATE
+              SET value = EXCLUDED.value, updated_at = NOW()
+            """,
+            (hash_value,),
+        )
+
+
+def _do_index(docs: list[dict]) -> int:
+    """Replace all chunks and return total chunks written."""
+    total = 0
+    with get_cursor(commit=True) as cur:
+        cur.execute("DELETE FROM chatbot_doc_chunks")
         for doc in docs:
             chunks = _split_chunks(doc["content"])
             for idx, chunk in enumerate(chunks):
@@ -119,12 +147,44 @@ def _ensure_indexed() -> None:
                     """
                     INSERT INTO chatbot_doc_chunks (source_file, chunk_index, content)
                     VALUES (%s, %s, %s)
-                    ON CONFLICT (source_file, chunk_index)
-                    DO UPDATE SET content = EXCLUDED.content
                     """,
                     (doc["source"], idx, chunk),
                 )
+            total += len(chunks)
             logger.info("Indexed %d chunks from %s", len(chunks), doc["source"])
+    return total
+
+
+def _ensure_indexed() -> None:
+    """Index markdown docs; reindex automatically if file contents have changed."""
+    docs = _load_md_files()
+    if not docs:
+        logger.warning("No markdown docs to index")
+        return
+
+    current_hash = _compute_docs_hash(docs)
+    stored_hash = _stored_docs_hash()
+
+    if stored_hash == current_hash:
+        logger.debug("Chatbot docs unchanged (hash match) — skipping reindex")
+        return
+
+    logger.info(
+        "Chatbot docs changed (stored=%s current=%s) — reindexing",
+        stored_hash,
+        current_hash[:12],
+    )
+    total = _do_index(docs)
+    _save_docs_hash(current_hash)
+    logger.info("Reindex complete: %d total chunks", total)
+
+
+def sync_docs_on_startup() -> None:
+    """Called from FastAPI startup event to auto-reindex if docs have changed."""
+    try:
+        _ensure_indexed()
+    except Exception as exc:
+        logger.error("Startup doc sync failed: %s", exc)
 
 
 # ---------------------------------------------------------------------------
@@ -343,17 +403,15 @@ async def history(limit: int = 20):
 
 @router.post("/reindex")
 async def reindex():
-    """Clear and re-index all markdown documentation chunks."""
-    with get_cursor(commit=True) as cur:
-        cur.execute("DELETE FROM chatbot_doc_chunks")
+    """Force a full re-index of all markdown documentation chunks and update stored hash."""
+    docs = _load_md_files()
+    if not docs:
+        raise HTTPException(status_code=500, detail="No markdown files found to index")
 
     try:
-        _ensure_indexed()
+        total = _do_index(docs)
+        _save_docs_hash(_compute_docs_hash(docs))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Indexing failed: {exc}")
 
-    with get_cursor(commit=False) as cur:
-        cur.execute("SELECT COUNT(*) FROM chatbot_doc_chunks")
-        total = cur.fetchone()[0]
-
-    return {"status": "ok", "total_chunks": total}
+    return {"status": "ok", "total_chunks": total, "files_indexed": [d["source"] for d in docs]}
