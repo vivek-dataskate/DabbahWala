@@ -14,12 +14,15 @@ This is the system that constantly finds opportunities to get new orders/subscri
 change campaigns, or ask sales agents to call.
 """
 import json
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.db import get_cursor
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -148,28 +151,28 @@ def _phase_inference(cur) -> dict:
         cur.execute("SELECT * FROM detect_engaged_no_order()")
         signals['engaged_no_order'] = [dict(r) for r in cur.fetchall()]
     except Exception:
-        pass
+        logger.exception("Signal detection failed: engaged_no_order")
 
     # Signal 2: New customer, 1 order, no repeat
     try:
         cur.execute("SELECT * FROM detect_new_customer_no_repeat()")
         signals['new_customer_no_repeat'] = [dict(r) for r in cur.fetchall()]
     except Exception:
-        pass
+        logger.exception("Signal detection failed: new_customer_no_repeat")
 
     # Signal 3: Lapsed customer re-engaged
     try:
         cur.execute("SELECT * FROM detect_lapsed_reengaged()")
         signals['lapsed_reengaged'] = [dict(r) for r in cur.fetchall()]
     except Exception:
-        pass
+        logger.exception("Signal detection failed: lapsed_reengaged")
 
     # Signal 4: Reorder intent in transcripts
     try:
         cur.execute("SELECT * FROM detect_reorder_intent()")
         signals['reorder_intent'] = [dict(r) for r in cur.fetchall()]
     except Exception:
-        pass
+        logger.exception("Signal detection failed: reorder_intent")
 
     # Signal 5: App customers who could convert to direct
     try:
@@ -192,7 +195,7 @@ def _phase_inference(cur) -> dict:
         """)
         signals['app_customers_for_conversion'] = [dict(r) for r in cur.fetchall()]
     except Exception:
-        pass
+        logger.exception("Signal detection failed: app_customers_for_conversion")
 
     # Signal 6: Subscription candidates (3+ one-time orders, no subscription)
     try:
@@ -211,7 +214,7 @@ def _phase_inference(cur) -> dict:
         """)
         signals['subscription_candidates'] = [dict(r) for r in cur.fetchall()]
     except Exception:
-        pass
+        logger.exception("Signal detection failed: subscription_candidates")
 
     # Signal 7: High-value customers at risk (5+ orders, no order in 14+ days)
     try:
@@ -229,7 +232,7 @@ def _phase_inference(cur) -> dict:
         """)
         signals['high_value_at_risk'] = [dict(r) for r in cur.fetchall()]
     except Exception:
-        pass
+        logger.exception("Signal detection failed: high_value_at_risk")
 
     return {k: len(v) for k, v in signals.items()}, signals
 

@@ -43,7 +43,8 @@ UPDATE campaign_routing
 SET instantly_campaign_name = 'Dabbah-Reactivation'
 WHERE lifecycle_segment = 'reactivation_candidate';
 
--- Add APP_TO_DIRECT routing (if doesn't exist)
-INSERT INTO campaign_routing (lifecycle_segment, default_campaign, instantly_campaign_name)
-VALUES ('cold', 'APP_TO_DIRECT', 'Dabbah-AppToDirect')
-ON CONFLICT DO NOTHING;
+-- NOTE: APP_TO_DIRECT campaign routing is handled through the campaign_queue
+-- (intelligence.py inserts directly with to_campaign = 'APP_TO_DIRECT').
+-- It cannot be in campaign_routing because the PK is lifecycle_segment and
+-- 'cold' already exists. The Instantly campaign name for APP_TO_DIRECT is
+-- resolved by the intelligence engine, not through this routing table.
