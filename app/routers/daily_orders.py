@@ -415,6 +415,7 @@ class DailyOrderResult(BaseModel):
     date: str
     total_orders: int
     rows_skipped: int
+    duplicate_orders_skipped: int = 0
     total_items: int
     total_revenue: float
     new_contacts: int
@@ -528,13 +529,30 @@ async def process_daily_orders(
     opportunity_count = 0
     menu_matched = 0
     menu_created = 0
+    duplicate_orders_skipped = 0
     order_date_str = ''
     agent_analysis: list = []
     field_opportunities: list = []
     airtable_tasks: list = []
 
+    # Pre-fetch existing order_id_externals so we can skip duplicates efficiently
+    _batch_nums = [n for n in orders_grouped if n]
+    existing_order_nums: set = set()
+    if _batch_nums:
+        with get_cursor(commit=False) as _ck:
+            _ck.execute(
+                "SELECT order_id_external FROM orders WHERE order_id_external = ANY(%s)",
+                (_batch_nums,)
+            )
+            existing_order_nums = {r['order_id_external'] for r in _ck.fetchall()}
+    if existing_order_nums:
+        logger.info("Skipping %d duplicate orders already in DB", len(existing_order_nums))
+
     with get_cursor(commit=True) as cur:
         for order_num, item_rows in orders_grouped.items():
+            if order_num in existing_order_nums:
+                duplicate_orders_skipped += 1
+                continue
             first = item_rows[0]
             phone = normalize_phone(_col(first, 'Customer Phone Number', 'Phone', 'Customer Phone', 'phone'))
             name = _col(first, 'Customer Name', 'Name', 'Customer', 'customer_name').strip()
@@ -925,21 +943,32 @@ async def process_daily_orders(
     airtable_synced = 0
     if airtable_tasks:
         logger.info("Pushing %d tasks to Airtable", len(airtable_tasks))
+        _airtable_dead = False
         for task in airtable_tasks:
+            if _airtable_dead:
+                break
             try:
                 create_field_sales_task(task)
                 airtable_synced += 1
             except Exception as e:
-                logger.warning("Airtable task push failed for %s %s: %s",
-                               task.get('first_name'), task.get('last_name'), e)
+                err = str(e)
+                if '401' in err or 'Unauthorized' in err:
+                    logger.warning("Airtable API key invalid (401) — skipping remaining tasks")
+                    _airtable_dead = True
+                else:
+                    logger.warning("Airtable task push failed for %s %s: %s",
+                                   task.get('first_name'), task.get('last_name'), e)
         logger.info("Airtable sync complete: %d/%d pushed", airtable_synced, len(airtable_tasks))
+
+    # Exclude duplicate orders from Shipday push and CSV generation
+    orders_to_dispatch = {k: v for k, v in orders_grouped.items() if k not in existing_order_nums}
 
     # Push orders to Shipday only when the caller explicitly opts in
     _do_shipday = push_to_shipday.strip().lower() in ("true", "1", "yes")
     if _do_shipday:
-        logger.info("Pushing %d orders to Shipday (opted-in)", len(orders_grouped))
+        logger.info("Pushing %d orders to Shipday (opted-in)", len(orders_to_dispatch))
         shipday_result = await _push_orders_to_shipday(
-            orders_grouped,
+            orders_to_dispatch,
             restaurant_name=os.environ.get("SHIPDAY_RESTAURANT_NAME", "DabbahWala"),
             restaurant_address=os.environ.get("SHIPDAY_RESTAURANT_ADDRESS", ""),
         )
@@ -950,9 +979,9 @@ async def process_daily_orders(
     # Always generate a Shipday CSV so the user can do a manual import if needed
     shipday_csv_url = ""
     shipday_drive_url = ""
-    if orders_grouped:
+    if orders_to_dispatch:
         try:
-            csv_content = _generate_shipday_csv(orders_grouped)
+            csv_content = _generate_shipday_csv(orders_to_dispatch)
             # Save locally as a download fallback
             _SHIPDAY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
             file_id = str(uuid.uuid4())
@@ -968,6 +997,7 @@ async def process_daily_orders(
         date=order_date_str,
         total_orders=order_count,
         rows_skipped=skipped_rows,
+        duplicate_orders_skipped=duplicate_orders_skipped,
         total_items=item_count,
         total_revenue=round(sum(
             sum(float(r.get('Unit Price', 0) or 0) * int(r.get('Quantity', 1) or 1)
