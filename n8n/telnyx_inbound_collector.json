@@ -150,7 +150,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.DABBAHWALA_API_URL}}/api/telnyx/message",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/telnyx/message",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"contact_email\": \"\",\n  \"direction\": \"{{ $json.direction }}\",\n  \"from_number\": \"{{ $json.from_number }}\",\n  \"to_number\": \"{{ $json.to_number }}\",\n  \"body\": \"{{ $json.body.replace(/\"/g, '\\\\\"') }}\",\n  \"telnyx_msg_id\": \"{{ $json.telnyx_msg_id }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"is_delivery_staff\": false,\n  \"metadata\": {{ JSON.stringify($json.metadata) }}\n}",
@@ -166,7 +166,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.DABBAHWALA_API_URL}}/api/events/ingest",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/events/ingest",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"contact_email\": \"\",\n  \"event_type\": \"{{ $('Classify SMS + Signals').item.json.event_type }}\",\n  \"metadata\": {\n    \"source\": \"inbound_sms\",\n    \"body\": \"{{ $('Classify SMS + Signals').item.json.body.replace(/\"/g, '\\\\\"') }}\",\n    \"from_number\": \"{{ $('Classify SMS + Signals').item.json.from_number }}\",\n    \"signals\": {{ JSON.stringify($('Classify SMS + Signals').item.json.metadata.signals) }}\n  }\n}",
@@ -182,7 +182,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.DABBAHWALA_API_URL}}/api/agents/cycle/run-for-contact",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/agents/cycle/run-for-contact",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"phone\": \"{{ $('Classify SMS + Signals').item.json.from_number }}\"\n}",
@@ -198,7 +198,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.DABBAHWALA_API_URL}}/api/telnyx/call",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/telnyx/call",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"contact_email\": \"\",\n  \"direction\": \"{{ $json.direction }}\",\n  \"from_number\": \"{{ $json.from_number }}\",\n  \"to_number\": \"{{ $json.to_number }}\",\n  \"duration_sec\": {{ $json.duration_sec || 0 }},\n  \"recording_url\": \"{{ $json.recording_url || '' }}\",\n  \"transcript\": \"{{ ($json.transcript || '').replace(/\"/g, '\\\\\"') }}\",\n  \"summary\": null,\n  \"is_delivery_staff\": false,\n  \"started_at\": \"{{ $json.started_at }}\",\n  \"ended_at\": \"{{ $json.ended_at }}\",\n  \"metadata\": {{ JSON.stringify($json.metadata) }}\n}",
@@ -214,7 +214,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.DABBAHWALA_API_URL}}/api/events/ingest",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/events/ingest",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"contact_email\": \"\",\n  \"event_type\": \"{{ $('Classify Calls + Signals').item.json.event_type }}\",\n  \"metadata\": {\n    \"source\": \"telnyx_recording\",\n    \"from_number\": \"{{ $('Classify Calls + Signals').item.json.from_number }}\",\n    \"duration_sec\": {{ $('Classify Calls + Signals').item.json.duration_sec || 0 }},\n    \"signals\": {{ JSON.stringify($('Classify Calls + Signals').item.json.metadata.signals) }}\n  }\n}",
@@ -230,7 +230,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{$vars.DABBAHWALA_API_URL}}/api/agents/cycle/run-for-contact",
+        "url": "={{$env.DABBAHWALA_API_URL}}/api/agents/cycle/run-for-contact",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"phone\": \"{{ $('Classify Calls + Signals').item.json.from_number }}\"\n}",
