@@ -39,8 +39,8 @@ def health():
 def run_migration(migration_number: int, secret: str = ""):
     """Run a specific migration file by number. Requires admin secret."""
     import os
-    admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
-    if secret != admin_secret:
+    admin_secret = os.environ.get("ADMIN_SECRET", "")
+    if not admin_secret or secret != admin_secret:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -64,7 +64,7 @@ def run_migration(migration_number: int, secret: str = ""):
 async def run_query(request: Request, secret: str = "", sql: str = ""):
     """Run a read-only SQL query. Accepts SQL via query param or JSON body."""
     import os
-    admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+    admin_secret = os.environ.get("ADMIN_SECRET", "")
 
     # Try JSON body if query params empty
     if not sql:
@@ -75,7 +75,7 @@ async def run_query(request: Request, secret: str = "", sql: str = ""):
         except Exception:
             pass
 
-    if secret != admin_secret:
+    if not admin_secret or secret != admin_secret:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -96,7 +96,7 @@ async def run_query(request: Request, secret: str = "", sql: str = ""):
 async def run_exec(request: Request, secret: str = "", sql: str = ""):
     """Run a DDL/DML SQL statement. Accepts SQL via query param or JSON body."""
     import os
-    admin_secret = os.environ.get("ADMIN_SECRET", "dabbahwala-admin-2026")
+    admin_secret = os.environ.get("ADMIN_SECRET", "")
 
     # Try JSON body if query params empty
     if not sql:
@@ -107,7 +107,7 @@ async def run_exec(request: Request, secret: str = "", sql: str = ""):
         except Exception:
             pass
 
-    if secret != admin_secret:
+    if not admin_secret or secret != admin_secret:
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Forbidden")
 

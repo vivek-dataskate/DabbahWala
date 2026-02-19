@@ -14,9 +14,9 @@ This is the system that constantly finds opportunities to get new orders/subscri
 change campaigns, or ask sales agents to call.
 """
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.db import get_cursor
@@ -515,14 +515,13 @@ def get_pending_actions():
 
 
 @router.post("/ingest-instantly-events")
-async def ingest_instantly_events(request):
+async def ingest_instantly_events(request: Request):
     """
     Ingest Instantly campaign events (opens, clicks, replies).
     Called by n8n which polls Instantly API hourly.
 
     Expected body: {"events": [{"email": "...", "event_type": "open|click|reply", "campaign_id": "..."}]}
     """
-    from fastapi import Request
     body = await request.json()
     events = body.get('events', [])
 

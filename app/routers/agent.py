@@ -15,7 +15,6 @@ finding nuanced opportunities that rules miss.
 """
 import json
 import os
-from datetime import datetime
 
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -334,7 +333,7 @@ async def analyze_contacts(limit: int = 30):
             analysis = json.loads(clean.strip())
         except (json.JSONDecodeError, Exception) as e:
             reasoning_samples.append({
-                'contact_id': cid, 'error': str(e), 'raw_response': response[:500] if 'response' in dir() else ''
+                'contact_id': cid, 'error': str(e), 'raw_response': response[:500] if 'response' in locals() else ''
             })
             continue
 
