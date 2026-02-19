@@ -1,15 +1,19 @@
 """
 AI Chatbot — RAG-powered Q&A over system documentation.
 
-Indexes markdown files (README.md, ARCHITECTURE.md, IMPLEMENTATION_PLAN.md, data/sql/README.md)
-into PostgreSQL full-text search chunks. Each user question retrieves relevant chunks plus
-similar previous interactions, builds a context-rich prompt for Claude, and saves the
-Q&A pair to chatbot_interactions for future retrieval.
+Indexes every text file in the project into PostgreSQL full-text search chunks.
+Each user question retrieves relevant chunks plus similar previous interactions,
+builds a context-rich prompt for Claude, and saves the Q&A pair to
+chatbot_interactions for future retrieval.
+
+Suggestion-chip questions are pre-computed once after indexing and stored in
+chatbot_canned_qa so repeated clicks never call the AI again.
 """
 import datetime
 import logging
 import os
 import re
+import threading
 from pathlib import Path
 
 import anthropic
@@ -41,6 +45,44 @@ class ChatResponse(BaseModel):
     question: str
     answer: str
     sources: list[str]
+
+
+# ---------------------------------------------------------------------------
+# Suggestion-chip questions (pre-cached after every index run)
+# ---------------------------------------------------------------------------
+
+CHIP_QUESTIONS: list[str] = [
+    # Functionality
+    "Why is a 4-layer AI pipeline better than a single AI call?",
+    "How does the FastAPI router layer decide which agent or handler to invoke?",
+    "How does the MCP layer work and what tools does it expose?",
+    "How are natural-language queries translated into safe SQL and executed?",
+    "How does the RAG / vector-store layer retrieve context for the chatbot?",
+    # Business Process
+    "What happens end-to-end when a new order is placed?",
+    "What happens when a delivery fails or is delayed?",
+    "How do contacts progress through lifecycle stages?",
+    "How does the system re-engage lapsed customers?",
+    "What triggers an escalation to Airtable?",
+    # Goal Oriented
+    "What is the purpose of this system and how does it achieve it?",
+    "What is the offer strategy and how are offers personalised?",
+    "How does the system decide whether to send SMS vs email?",
+    "How does the system prevent over-messaging contacts?",
+    "How are daily reports generated and what do they cover?",
+    # Technical
+    "What is the overall system architecture — monolith, microservices, or event-driven?",
+    "What database tables power the lifecycle engine and how are they structured?",
+    "Which PostgreSQL indexes are used and why were they chosen?",
+    "How are API endpoints authenticated and what security controls are in place?",
+    "How are agent tool calls logged, traced, and debugged in production?",
+    # Agents & MCP
+    "What agents exist in this system and what is each one responsible for?",
+    "How do agents communicate — shared state, queues, or direct calls?",
+    "How does the orchestrator agent decide which specialist agent to delegate to?",
+    "How is agent memory or context maintained across multiple turns or sessions?",
+    "How would you add a new agent or MCP tool to this system?",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -154,7 +196,7 @@ def _do_index(docs: list[dict]) -> int:
 
 
 def _ensure_indexed() -> None:
-    """Index all docs; reindex at most once per month."""
+    """Index all docs; reindex at most once per month, then pre-cache chips."""
     last_at = _last_indexed_at()
     if last_at is not None:
         age_days = (datetime.datetime.now(datetime.timezone.utc) - last_at).days
@@ -171,6 +213,10 @@ def _ensure_indexed() -> None:
     total = _do_index(docs)
     _save_last_indexed_at()
     logger.info("Reindex complete: %d total chunks from %d files", total, len(docs))
+
+    # Pre-cache chip answers in background so startup isn't blocked
+    _clear_canned()
+    _start_precache_thread()
 
 
 def _ensure_tables() -> None:
@@ -217,6 +263,19 @@ def _ensure_tables() -> None:
         )
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_chatbot_interactions_created ON chatbot_interactions (created_at DESC)"
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS chatbot_canned_qa (
+                question    TEXT PRIMARY KEY,
+                answer      TEXT        NOT NULL,
+                sources     TEXT[]      DEFAULT '{}',
+                created_at  TIMESTAMPTZ DEFAULT NOW()
+            )
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_canned_qa_lower ON chatbot_canned_qa (lower(question))"
         )
 
 
@@ -310,9 +369,140 @@ def _save_interaction(question: str, answer: str, sources: list[str]) -> None:
         )
 
 
+# ---------------------------------------------------------------------------
+# Canned-answer cache for suggestion chips
+# ---------------------------------------------------------------------------
+
+def _lookup_canned(question: str) -> dict | None:
+    """Return the cached answer for an exact chip question, or None."""
+    try:
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT answer, sources FROM chatbot_canned_qa WHERE lower(question) = lower(%s)",
+                (question.strip(),),
+            )
+            row = cur.fetchone()
+            if row:
+                return {"answer": row["answer"], "sources": list(row["sources"] or [])}
+    except Exception as exc:
+        logger.warning("Canned lookup failed: %s", exc)
+    return None
+
+
+def _save_canned(question: str, answer: str, sources: list[str]) -> None:
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO chatbot_canned_qa (question, answer, sources)
+            VALUES (%s, %s, %s)
+            ON CONFLICT (question) DO UPDATE
+              SET answer = EXCLUDED.answer, sources = EXCLUDED.sources, created_at = NOW()
+            """,
+            (question.strip(), answer, sources),
+        )
+
+
+def _clear_canned() -> None:
+    """Delete all pre-cached chip answers (called before a fresh reindex)."""
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute("DELETE FROM chatbot_canned_qa")
+    except Exception as exc:
+        logger.warning("Could not clear canned QA: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Core RAG + Claude answer builder (shared by /ask and pre-cacher)
+# ---------------------------------------------------------------------------
+
+_SYSTEM_PROMPT = (
+    "You are the AI assistant embedded in the DabbahWala marketing automation dashboard. "
+    "DabbahWala is a fresh Indian food delivery service in Atlanta. This system is its "
+    "fully automated, AI-driven marketing brain.\n\n"
+    "You can answer questions at ANY level:\n"
+    "- **Business purpose & strategy** — why this system exists, what problem it solves, "
+    "what the marketing goals are, how the business approaches customer acquisition and retention.\n"
+    "- **Functional & process level** — how lifecycle stages work, what triggers a re-engagement "
+    "campaign, how a failed delivery is handled, when a contact gets escalated, how the "
+    "email and SMS channels are coordinated, what the offer strategy looks like.\n"
+    "- **Operational & technical level** — how the agent pipeline works, what n8n workflows "
+    "run and when, how data flows between services, what the API endpoints do.\n\n"
+    "WHAT TO AVOID:\n"
+    "- Do NOT answer questions that require looking up *specific live records* — e.g. "
+    "fetching a named customer's profile, today's order count, or real-time revenue figures. "
+    "For those, tell the user to use the **Query** tab.\n"
+    "- Do NOT make up facts not supported by the documentation. If the docs are silent on "
+    "something, say so honestly and reason from what is documented.\n\n"
+    "TONE: Speak as an expert who deeply understands both the business and the system. "
+    "When asked 'why' questions (why this approach, why are you confident it works), "
+    "draw on the documented design choices and reason through the logic — e.g. why a "
+    "4-layer agent pipeline gives better decisions than a single call, why lifecycle "
+    "segmentation improves conversion, why multi-channel coordination matters.\n\n"
+    "Use markdown formatting. Be concise but thorough."
+)
+
+
+def _build_answer(question: str, client: anthropic.Anthropic) -> tuple[str, list[str]]:
+    """Run RAG retrieval + Claude to produce an answer. Returns (answer, sources)."""
+    chunks = _relevant_chunks(question)
+    history = _similar_history(question)
+    sources = sorted({c["source"] for c in chunks})
+
+    context_lines: list[str] = []
+    if chunks:
+        context_lines.append("## Relevant Documentation\n")
+        for c in chunks:
+            context_lines.append(f"[{c['source']}]\n{c['content']}\n")
+    if history:
+        context_lines.append("\n## Related Previous Q&A\n")
+        for h in history:
+            context_lines.append(f"Q: {h['question']}\nA: {h['answer']}\n")
+
+    context = "\n".join(context_lines)
+    user_message = (
+        f"Context from system documentation:\n\n{context}\n\n"
+        f"Question: {question}\n\n"
+        "Answer based on the documentation and your understanding of the system's purpose and design."
+    )
+
+    response = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1500,
+        system=_SYSTEM_PROMPT,
+        messages=[{"role": "user", "content": user_message}],
+    )
+    return response.content[0].text, sources
+
+
+def _precache_chips() -> None:
+    """Pre-compute and cache answers for all suggestion chip questions."""
+    if not ANTHROPIC_API_KEY:
+        logger.warning("Cannot pre-cache chips: ANTHROPIC_API_KEY not set")
+        return
+
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    for question in CHIP_QUESTIONS:
+        if _lookup_canned(question):
+            logger.debug("Chip already cached: %s", question[:60])
+            continue
+        try:
+            answer, sources = _build_answer(question, client)
+            _save_canned(question, answer, sources)
+            logger.info("Cached chip answer: %s", question[:60])
+        except Exception as exc:
+            logger.error("Failed to pre-cache chip '%s': %s", question[:60], exc)
+
+
+def _start_precache_thread() -> None:
+    t = threading.Thread(target=_precache_chips, daemon=True, name="chip-precacher")
+    t.start()
+
+
+# ---------------------------------------------------------------------------
+# Scope filter
+# ---------------------------------------------------------------------------
+
 # Patterns that signal a request for *specific live data* — not system/process questions.
-# Business process questions ("how do we handle lapsed customers?") are IN scope.
-# Specific data lookups ("show me orders for John", "how many sales today") are OUT of scope.
 _OUT_OF_SCOPE_PATTERNS = re.compile(
     r"("
     r"show me .{0,40}(order|customer|contact|invoice|sale|revenue|stat)|"
@@ -331,7 +521,6 @@ _OUT_OF_SCOPE_PATTERNS = re.compile(
 
 
 def _is_out_of_scope(question: str) -> bool:
-    """Return True only for specific live-data lookups, not business/process questions."""
     return bool(_OUT_OF_SCOPE_PATTERNS.search(question))
 
 
@@ -344,11 +533,12 @@ async def ask(req: ChatRequest):
     """
     Answer a question about the DabbahWala system.
 
-    1. Ensures markdown docs are indexed into chatbot_doc_chunks.
-    2. Retrieves relevant chunks via PostgreSQL full-text search.
-    3. Retrieves similar past Q&A pairs from chatbot_interactions.
-    4. Builds a context-rich prompt and calls Claude.
-    5. Saves the new Q&A pair for future retrieval.
+    For known chip questions, returns the pre-cached answer instantly.
+    For free-form questions:
+      1. Retrieves relevant chunks via PostgreSQL full-text search.
+      2. Retrieves similar past Q&A pairs from chatbot_interactions.
+      3. Builds a context-rich prompt and calls Claude.
+      4. Saves the new Q&A pair for future retrieval.
     """
     question = req.question.strip()
     if not question:
@@ -356,9 +546,8 @@ async def ask(req: ChatRequest):
     if not ANTHROPIC_API_KEY:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
-    # Guard: reject customer/order data questions before touching Claude
-    _out_of_scope = _is_out_of_scope(question)
-    if _out_of_scope:
+    # Guard: reject live-data lookups before touching Claude
+    if _is_out_of_scope(question):
         return ChatResponse(
             question=question,
             answer=(
@@ -371,70 +560,21 @@ async def ask(req: ChatRequest):
             sources=[],
         )
 
+    # Fast path: return pre-cached answer for chip questions
+    cached = _lookup_canned(question)
+    if cached:
+        logger.debug("Returning canned answer for: %s", question[:60])
+        return ChatResponse(question=question, answer=cached["answer"], sources=cached["sources"])
+
     # Ensure knowledge base is populated
     try:
         _ensure_indexed()
     except Exception as exc:
         logger.warning("Doc indexing failed: %s", exc)
 
-    chunks = _relevant_chunks(question)
-    history = _similar_history(question)
-    sources = sorted({c["source"] for c in chunks})
-
-    # Build context block
-    context_lines: list[str] = []
-    if chunks:
-        context_lines.append("## Relevant Documentation\n")
-        for c in chunks:
-            context_lines.append(f"[{c['source']}]\n{c['content']}\n")
-    if history:
-        context_lines.append("\n## Related Previous Q&A\n")
-        for h in history:
-            context_lines.append(f"Q: {h['question']}\nA: {h['answer']}\n")
-
-    context = "\n".join(context_lines)
-
-    system_prompt = (
-        "You are the AI assistant embedded in the DabbahWala marketing automation dashboard. "
-        "DabbahWala is a fresh Indian food delivery service in Atlanta. This system is its "
-        "fully automated, AI-driven marketing brain.\n\n"
-        "You can answer questions at ANY level:\n"
-        "- **Business purpose & strategy** — why this system exists, what problem it solves, "
-        "what the marketing goals are, how the business approaches customer acquisition and retention.\n"
-        "- **Functional & process level** — how lifecycle stages work, what triggers a re-engagement "
-        "campaign, how a failed delivery is handled, when a contact gets escalated, how the "
-        "email and SMS channels are coordinated, what the offer strategy looks like.\n"
-        "- **Operational & technical level** — how the agent pipeline works, what n8n workflows "
-        "run and when, how data flows between services, what the API endpoints do.\n\n"
-        "WHAT TO AVOID:\n"
-        "- Do NOT answer questions that require looking up *specific live records* — e.g. "
-        "fetching a named customer's profile, today's order count, or real-time revenue figures. "
-        "For those, tell the user to use the **Query** tab.\n"
-        "- Do NOT make up facts not supported by the documentation. If the docs are silent on "
-        "something, say so honestly and reason from what is documented.\n\n"
-        "TONE: Speak as an expert who deeply understands both the business and the system. "
-        "When asked 'why' questions (why this approach, why are you confident it works), "
-        "draw on the documented design choices and reason through the logic — e.g. why a "
-        "4-layer agent pipeline gives better decisions than a single call, why lifecycle "
-        "segmentation improves conversion, why multi-channel coordination matters.\n\n"
-        "Use markdown formatting. Be concise but thorough."
-    )
-
-    user_message = (
-        f"Context from system documentation:\n\n{context}\n\n"
-        f"Question: {question}\n\n"
-        "Answer based on the documentation and your understanding of the system's purpose and design."
-    )
-
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-        response = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=1500,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-        )
-        answer = response.content[0].text
+        answer, sources = _build_answer(question, client)
     except Exception as exc:
         logger.error("Claude API error: %s", exc)
         raise HTTPException(status_code=500, detail=f"AI error: {exc}")
@@ -464,17 +604,74 @@ async def history(limit: int = 20):
     return {"interactions": rows, "count": len(rows)}
 
 
+@router.get("/suggest")
+async def suggest(q: str = "", limit: int = 6):
+    """
+    Return past questions matching the typed text for autocomplete.
+    Searches chatbot_interactions (user history) then chatbot_canned_qa (chip questions).
+    """
+    q = q.strip()
+    if len(q) < 2:
+        return {"suggestions": []}
+
+    pattern = f"%{q}%"
+    results: list[str] = []
+
+    # 1. Past questions the user has actually asked
+    try:
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT question FROM chatbot_interactions
+                WHERE question ILIKE %s
+                ORDER BY question
+                LIMIT %s
+                """,
+                (pattern, limit),
+            )
+            results = [r["question"] for r in cur.fetchall()]
+    except Exception as exc:
+        logger.warning("Suggest history query failed: %s", exc)
+
+    # 2. Fill remaining slots from pre-cached chip questions
+    if len(results) < limit:
+        seen = {r.lower() for r in results}
+        try:
+            with get_cursor(commit=False) as cur:
+                cur.execute(
+                    """
+                    SELECT question FROM chatbot_canned_qa
+                    WHERE question ILIKE %s
+                    ORDER BY question
+                    LIMIT %s
+                    """,
+                    (pattern, (limit - len(results)) * 2),
+                )
+                for r in cur.fetchall():
+                    if r["question"].lower() not in seen and len(results) < limit:
+                        results.append(r["question"])
+                        seen.add(r["question"].lower())
+        except Exception as exc:
+            logger.warning("Suggest canned query failed: %s", exc)
+
+    return {"suggestions": results}
+
+
 @router.post("/reindex")
 async def reindex():
-    """Force a full re-index of all markdown documentation chunks and update stored hash."""
+    """Force a full re-index of all documentation chunks and rebuild the chip answer cache."""
     docs = _load_md_files()
     if not docs:
-        raise HTTPException(status_code=500, detail="No markdown files found to index")
+        raise HTTPException(status_code=500, detail="No files found to index")
 
     try:
         total = _do_index(docs)
         _save_last_indexed_at()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Indexing failed: {exc}")
+
+    # Clear stale canned answers and rebuild in background
+    _clear_canned()
+    _start_precache_thread()
 
     return {"status": "ok", "total_chunks": total, "files_indexed": [d["source"] for d in docs]}
