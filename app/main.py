@@ -5,7 +5,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, campaigns, chatbot, daily_orders, delivery, events, field_agent, intelligence, lifecycle, opportunities, playbook, query, reports, shipday_historical, sms, team_content, telnyx
+from app.routers import agents, agent, campaigns, braodcasts, chatbot, daily_orders, delivery, events, field_agent, intelligence, lifecycle, opportunities, playbook, query, reports, shipday_historical, sms, team_content, telnyx
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
