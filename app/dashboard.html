@@ -174,6 +174,16 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
     <input id="q-email" type="email" placeholder="customer@example.com">
   </div>
 
+  <div class="form-group" id="q-phone-group" style="display:none">
+    <label>Phone number <span class="hint">(optional)</span></label>
+    <input id="q-phone" type="tel" placeholder="+1234567890">
+  </div>
+
+  <div class="form-group" id="q-name-group" style="display:none">
+    <label>Customer name <span class="hint">(optional)</span></label>
+    <input id="q-name" type="text" placeholder="e.g. John Smith">
+  </div>
+
   <button class="btn" onclick="runQuery()">Run Query</button>
   <div id="q-result"></div>
 </div>
@@ -331,20 +341,31 @@ function setBtn(id, disabled, label) {
 // ─── query ───────────────────────────────────────────────────────────────────
 function onCategoryChange() {
   const cat = document.getElementById('q-category').value;
+  const isCommsHistory = cat === 'communication_history';
   const needsEmail = ['customer_lookup','communication_history'].includes(cat);
   const hint = document.getElementById('q-email-hint');
-  hint.textContent = needsEmail ? '(required)' : '(required for Customer Lookup and Communication History)';
+
+  document.getElementById('q-phone-group').style.display = isCommsHistory ? '' : 'none';
+  document.getElementById('q-name-group').style.display  = isCommsHistory ? '' : 'none';
+
+  if (isCommsHistory) {
+    hint.textContent = '(optional — provide at least one of email, phone, or name)';
+  } else {
+    hint.textContent = needsEmail ? '(required)' : '(required for Customer Lookup and Communication History)';
+  }
 }
 
 async function runQuery() {
   const cat   = document.getElementById('q-category').value;
   const q     = document.getElementById('q-question').value.trim();
   const email = document.getElementById('q-email').value.trim();
+  const phone = document.getElementById('q-phone').value.trim();
+  const name  = document.getElementById('q-name').value.trim();
   setLoading('q-result', 'Running query…');
   try {
     const res  = await fetch('/api/query', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ category: cat, question: q, contact_email: email || null }),
+      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null }),
     });
     const data = await res.json();
     if (!res.ok) { setError('q-result', data.detail || JSON.stringify(data)); return; }
