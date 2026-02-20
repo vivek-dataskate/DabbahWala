@@ -1,5 +1,6 @@
 import copy
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Optional
@@ -12,6 +13,7 @@ from app.config import ANTHROPIC_API_KEY, INSTANTLY_API_KEY
 from app.db import get_cursor
 from app.models import CampaignMove
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -98,27 +100,32 @@ def _wrap_body(inner_html: str) -> str:
 
 _CAMPAIGN_META: dict[str, dict] = {
     "NURTURE_SLOW": {
-        "label": "Nurture Slow — Cold contacts",
+        "label": "DW-NurtureSlow-ColdContacts",
         "json_file": "nurture_slow.json",
         "instantly_id": "90ecd160-22cc-46b1-9fa5-9342fe970837",
     },
     "PROMO_STANDARD": {
-        "label": "Promo Standard — Engaged & active",
+        "label": "DW-PromoStandard-ActiveEngaged",
         "json_file": "promo_standard.json",
         "instantly_id": "30292b3d-9f39-4ef3-b0ba-ea15c634acef",
     },
+    "ACTIVE_CUSTOMER": {
+        "label": "DW-ActiveCustomer",
+        "json_file": "promo_standard.json",  # reuse promo_standard sequences until dedicated copy is made
+        "instantly_id": "",  # populated after setup-instantly creates this campaign
+    },
     "PROMO_AGGRESSIVE": {
-        "label": "Promo Aggressive — Lapsed customers",
+        "label": "DW-PromoAggressive-LapsedCustomers",
         "json_file": "promo_aggressive.json",
         "instantly_id": "c9af877a-77ac-491c-a5ee-a8ea7646416b",
     },
     "NEW_CUSTOMER_ONBOARDING": {
-        "label": "New Customer Onboarding",
+        "label": "DW-NewCustomerOnboarding",
         "json_file": "new_customer_onboarding.json",
         "instantly_id": "c4c42e73-83fd-4d43-b629-db5b11be66ae",
     },
     "REACTIVATION": {
-        "label": "Reactivation — Long-dormant",
+        "label": "DW-Reactivation-LongDormant",
         "json_file": "reactivation.json",
         "instantly_id": "0c760ec8-3415-48cd-87ff-b58babc17dde",
     },
@@ -410,4 +417,196 @@ Return ONLY a valid JSON object with two keys — "subject" and "body" — no ot
     return {
         "subject": result.get("subject", ""),
         "body": result.get("body", ""),
+    }
+
+
+# ── One-time setup: tag existing campaigns + create ACTIVE_CUSTOMER ──────────
+
+_DABBAHWALA_TAG = "Dabbahwala"
+
+# The 5 campaigns that already exist in Instantly (confirmed IDs)
+_EXISTING_CAMPAIGN_IDS: list[str] = [
+    "90ecd160-22cc-46b1-9fa5-9342fe970837",  # NURTURE_SLOW
+    "30292b3d-9f39-4ef3-b0ba-ea15c634acef",  # PROMO_STANDARD
+    "c9af877a-77ac-491c-a5ee-a8ea7646416b",  # PROMO_AGGRESSIVE
+    "c4c42e73-83fd-4d43-b629-db5b11be66ae",  # NEW_CUSTOMER_ONBOARDING
+    "0c760ec8-3415-48cd-87ff-b58babc17dde",  # REACTIVATION
+]
+
+
+def _tag_instantly_campaign(headers: dict, campaign_id: str, tag: str) -> bool:
+    """Add a tag to an Instantly campaign. Returns True on success."""
+    try:
+        resp = httpx.post(
+            f"https://api.instantly.ai/api/v2/campaigns/{campaign_id}/tags",
+            headers=headers,
+            json={"tags": [tag]},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        logger.info("setup-instantly: tagged campaign %s with '%s'", campaign_id, tag)
+        return True
+    except Exception as e:
+        logger.warning("setup-instantly: tagging campaign %s failed: %s", campaign_id, e)
+        return False
+
+
+def _create_instantly_campaign(headers: dict, name: str) -> Optional[str]:
+    """Create a new campaign in Instantly. Returns the new campaign ID or None."""
+    try:
+        resp = httpx.post(
+            "https://api.instantly.ai/api/v2/campaigns",
+            headers=headers,
+            json={"name": name},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        created = resp.json()
+        campaign_id = str(created.get("id") or created.get("campaign_id") or "").strip()
+        if campaign_id:
+            logger.info("setup-instantly: created campaign '%s' → %s", name, campaign_id)
+            return campaign_id
+    except Exception as e:
+        logger.error("setup-instantly: failed to create campaign '%s': %s", name, e)
+    return None
+
+
+def _get_all_email_account_ids(headers: dict) -> list[str]:
+    """Fetch all sending email account IDs from Instantly."""
+    try:
+        resp = httpx.get(
+            "https://api.instantly.ai/api/v2/accounts",
+            headers=headers,
+            params={"limit": 100},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        items = data if isinstance(data, list) else data.get("items", data.get("accounts", []))
+        ids = [str(acct.get("id") or acct.get("account_id") or "").strip() for acct in items]
+        ids = [i for i in ids if i]
+        logger.info("setup-instantly: found %d sending accounts", len(ids))
+        return ids
+    except Exception as e:
+        logger.warning("setup-instantly: could not fetch email accounts: %s", e)
+        return []
+
+
+def _add_accounts_to_campaign(headers: dict, campaign_id: str, account_ids: list[str]) -> bool:
+    """Attach sending email accounts to a campaign."""
+    if not account_ids:
+        return False
+    try:
+        resp = httpx.post(
+            f"https://api.instantly.ai/api/v2/campaigns/{campaign_id}/emailaccounts",
+            headers=headers,
+            json={"emailaccounts": account_ids},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        logger.info("setup-instantly: added %d accounts to campaign %s", len(account_ids), campaign_id)
+        return True
+    except Exception as e:
+        logger.warning("setup-instantly: failed to add accounts to campaign %s: %s", campaign_id, e)
+        return False
+
+
+@router.post("/setup-instantly")
+def setup_instantly_campaigns():
+    """
+    One-time setup endpoint:
+      1. Tags the 5 existing DabbahWala campaigns in Instantly with 'Dabbahwala'
+      2. Creates the new DW-ActiveCustomer campaign with:
+           - sequences copied from promo_standard.json (branded HTML wrapped)
+           - daily_limit=100, open_tracking=True, link_tracking=True, stop_on_reply=True
+           - all sending accounts attached
+      3. Tags the new campaign with 'Dabbahwala'
+      4. Saves the new campaign ID into campaign_routing DB row
+
+    After this runs, hardcode the returned active_customer_campaign_id into
+    _CAMPAIGN_META['ACTIVE_CUSTOMER']['instantly_id'] in campaigns.py and redeploy.
+    """
+    if not INSTANTLY_API_KEY:
+        raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
+
+    headers = {
+        "Authorization": f"Bearer {INSTANTLY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    # 1. Tag the 5 existing campaigns
+    tag_results = {}
+    for cid in _EXISTING_CAMPAIGN_IDS:
+        tag_results[cid] = _tag_instantly_campaign(headers, cid, _DABBAHWALA_TAG)
+
+    # 2. Fetch all sending account IDs (shared across all campaigns)
+    account_ids = _get_all_email_account_ids(headers)
+
+    # 3. Create DW-ActiveCustomer campaign with full settings
+    active_customer_id = _create_instantly_campaign(headers, "DW-ActiveCustomer")
+    configure_results: dict = {}
+
+    if active_customer_id:
+        # 3a. Push sequences + settings in one PATCH
+        _, promo_data = _load_campaign_json("ACTIVE_CUSTOMER")
+        seqs_to_push = copy.deepcopy(promo_data.get("sequences", []))
+        for seq in seqs_to_push:
+            for step in seq.get("steps", []):
+                if step.get("type") == "email":
+                    for variant in step.get("variants", []):
+                        if "body" in variant:
+                            variant["body"] = _wrap_body(variant["body"])
+        try:
+            patch_resp = httpx.patch(
+                f"https://api.instantly.ai/api/v2/campaigns/{active_customer_id}",
+                headers=headers,
+                json={
+                    "sequences": seqs_to_push,
+                    "daily_limit": 100,
+                    "open_tracking": True,
+                    "link_tracking": True,
+                    "stop_on_reply": True,
+                    "stop_on_auto_reply": True,
+                    "prioritize_new_leads": True,
+                    "insert_unsubscribe_header": True,
+                },
+                timeout=20,
+            )
+            configure_results["sequences_and_settings"] = (
+                "ok" if patch_resp.status_code < 300 else f"failed:{patch_resp.text[:200]}"
+            )
+        except Exception as e:
+            configure_results["sequences_and_settings"] = f"error:{e}"
+
+        # 3b. Attach all sending accounts
+        configure_results["accounts_added"] = _add_accounts_to_campaign(headers, active_customer_id, account_ids)
+
+        # 3c. Tag the new campaign
+        _tag_instantly_campaign(headers, active_customer_id, _DABBAHWALA_TAG)
+
+        # 3d. Persist the new ID into campaign_routing
+        try:
+            with get_cursor(commit=True) as cur:
+                cur.execute(
+                    """UPDATE campaign_routing
+                          SET instantly_campaign_id   = %s,
+                              instantly_campaign_name = 'DW-ActiveCustomer'
+                        WHERE lifecycle_segment = 'active_customer'""",
+                    (active_customer_id,),
+                )
+            configure_results["db_saved"] = True
+            logger.info("setup-instantly: saved ACTIVE_CUSTOMER id=%s to campaign_routing", active_customer_id)
+        except Exception as e:
+            configure_results["db_saved"] = False
+            logger.error("setup-instantly: failed to save ACTIVE_CUSTOMER id to DB: %s", e)
+
+    return {
+        "status": "ok",
+        "tagged_existing": tag_results,
+        "active_customer_campaign_id": active_customer_id or "FAILED",
+        "configure_results": configure_results,
+        "next_step": (
+            f"Hardcode _CAMPAIGN_META['ACTIVE_CUSTOMER']['instantly_id'] = '{active_customer_id or 'FAILED'}' "
+            "in campaigns.py, then redeploy."
+        ),
     }
