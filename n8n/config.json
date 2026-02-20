@@ -148,6 +148,14 @@
       "active": true,
       "file": "instantly_campaign_sync.json",
       "note": "Calls POST /api/webhooks/sync-campaigns to fetch Instantly campaigns tagged 'dabbahwala' and upsert into instantly_campaigns DB table."
+    },
+    "shipday_feedback_sync": {
+      "id": "",
+      "name": "DabbahWala \u2014 Shipday Feedback Sync",
+      "schedule": "Every hour",
+      "active": true,
+      "file": "shipday_feedback_sync.json",
+      "note": "Calls POST /api/shipday/sync-feedback (days_back=3, synchronous). Polls Shipday API for customer feedback, delivery instructions, and proof-of-delivery on all delivered orders not yet synced. Stores in shipday_communications, fires delivery_update events, creates Opportunities for actionable sentiment. If new comms found, triggers POST /api/lifecycle/run."
     }
   },
 
