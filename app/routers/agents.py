@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from app.db import get_cursor
 from app.routers.campaigns import push_lead_to_instantly
 from app.services.airtable_sync import create_field_sales_task
+from app.services.drive import upload_csv as _drive_upload_csv
 
 logger = logging.getLogger(__name__)
 
@@ -1470,11 +1471,11 @@ def _fetch_activity_data(report_date: str) -> tuple[dict, list]:
 def _fetch_outcome_data(report_date: str) -> tuple[dict, list]:
     """Returns (summary_dict, detail_rows) for outcome report."""
     with get_cursor(commit=False) as cur:
-        # Order signals detected today
+        # Orders placed today (one row per order, deduped via orders table)
         cur.execute(
             """
-            SELECT COUNT(*) AS c FROM events
-            WHERE DATE(occurred_at) = %s::date AND event_type = 'order_placed'
+            SELECT COUNT(*) AS c FROM orders
+            WHERE order_date = %s::date
             """,
             (report_date,),
         )
@@ -1520,14 +1521,17 @@ def _fetch_outcome_data(report_date: str) -> tuple[dict, list]:
         )
         goals_achieved = cur.fetchone()["c"]
 
-        # Detail: customers who ordered today
+        # Detail: unique customers who ordered today (from orders table — one row per order)
         cur.execute(
             """
-            SELECT DISTINCT c.first_name, c.last_name, c.email, c.phone,
-                   c.lifecycle_segment, c.total_orders
-            FROM events e
-            JOIN contacts c ON c.id = e.contact_id
-            WHERE DATE(e.occurred_at) = %s::date AND e.event_type = 'order_placed'
+            SELECT c.first_name, c.last_name, c.email, c.phone,
+                   c.lifecycle_segment, c.total_orders,
+                   COUNT(o.id) AS orders_today
+            FROM orders o
+            JOIN contacts c ON c.id = o.contact_id
+            WHERE o.order_date = %s::date
+            GROUP BY c.id, c.first_name, c.last_name, c.email, c.phone,
+                     c.lifecycle_segment, c.total_orders
             ORDER BY c.last_name
             LIMIT 200
             """,
@@ -1610,14 +1614,19 @@ class SingleContactRequest(BaseModel):
 class ContactEventRequest(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
+    name: Optional[str] = None
 
 
 class ReportRequest(BaseModel):
     report_date: Optional[str] = None  # defaults to today
 
 
-def _lookup_contact_id(phone: Optional[str] = None, email: Optional[str] = None) -> Optional[int]:
-    """Find a contact by phone or email. Returns None if not found."""
+def _lookup_contact_id(
+    phone: Optional[str] = None,
+    email: Optional[str] = None,
+    name: Optional[str] = None,
+) -> Optional[int]:
+    """Find a contact by phone, email, or name. Returns None if not found."""
     with get_cursor(commit=False) as cur:
         if phone:
             # Normalise: strip spaces/dashes, keep leading +
@@ -1628,6 +1637,17 @@ def _lookup_contact_id(phone: Optional[str] = None, email: Optional[str] = None)
             )
         elif email:
             cur.execute("SELECT id FROM contacts WHERE email = %s LIMIT 1", (email,))
+        elif name:
+            parts = name.strip().split(None, 1)
+            first = parts[0]
+            last  = parts[1] if len(parts) > 1 else ""
+            cur.execute(
+                """SELECT id FROM contacts
+                   WHERE (first_name ILIKE %s AND last_name ILIKE %s)
+                      OR CONCAT(first_name, ' ', last_name) ILIKE %s
+                   LIMIT 1""",
+                (first, last if last else "%", f"%{name.strip()}%"),
+            )
         else:
             return None
         row = cur.fetchone()
@@ -1664,13 +1684,13 @@ def run_cycle_for_contact(req: ContactEventRequest):
     Called by the Telnyx inbound collector immediately after every new event,
     so every piece of evidence is evaluated for opportunity in real time.
     """
-    logger.info("POST /cycle/run-for-contact phone=%s email=%s", req.phone, req.email)
-    contact_id = _lookup_contact_id(phone=req.phone, email=req.email)
+    logger.info("POST /cycle/run-for-contact phone=%s email=%s name=%s", req.phone, req.email, req.name)
+    contact_id = _lookup_contact_id(phone=req.phone, email=req.email, name=req.name)
     if not contact_id:
         logger.warning(
-            "Contact not found for phone=%s email=%s — skipping cycle", req.phone, req.email
+            "Contact not found for phone=%s email=%s name=%s — skipping cycle", req.phone, req.email, req.name
         )
-        return {"status": "skipped", "reason": "Contact not found", "phone": req.phone, "email": req.email}
+        return {"status": "skipped", "reason": "Contact not found", "phone": req.phone, "email": req.email, "name": req.name}
     try:
         result = _run_full_cycle(contact_id)
         return {"status": "ok", **result}
@@ -1882,16 +1902,18 @@ def send_activity_report(req: ReportRequest):
     summary, detail_rows = _fetch_activity_data(report_date)
     client = _claude()
     html_body = _run_activity_report_agent(client, report_date, summary)
+    csv_filename = f"dabbahwala_activity_{report_date}.csv"
     csv_content = _rows_to_csv(detail_rows)
 
     _send_email_via_smtp(
         to=to_email,
         subject=f"DabbahWala Activity Report — {report_date}",
         html_body=html_body,
-        csv_filename=f"dabbahwala_activity_{report_date}.csv",
+        csv_filename=csv_filename,
         csv_content=csv_content,
     )
-    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary}
+    drive_url = _drive_upload_csv(csv_content, csv_filename)
+    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary, "drive_url": drive_url or None}
 
 
 @router.post("/report/outcome")
@@ -1903,16 +1925,18 @@ def send_outcome_report(req: ReportRequest):
     summary, detail_rows = _fetch_outcome_data(report_date)
     client = _claude()
     html_body = _run_outcome_report_agent(client, report_date, summary)
+    csv_filename = f"dabbahwala_outcomes_{report_date}.csv"
     csv_content = _rows_to_csv(detail_rows)
 
     _send_email_via_smtp(
         to=to_email,
         subject=f"DabbahWala Results Report — {report_date}",
         html_body=html_body,
-        csv_filename=f"dabbahwala_outcomes_{report_date}.csv",
+        csv_filename=csv_filename,
         csv_content=csv_content,
     )
-    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary}
+    drive_url = _drive_upload_csv(csv_content, csv_filename)
+    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary, "drive_url": drive_url or None}
 
 
 # --- Action queue management ---

@@ -33,8 +33,8 @@ jobs:
             WAS_ACTIVE=$(echo "$EXISTING" | jq -r --arg name "$WORKFLOW_NAME" \
               '.data[] | select(.name == $name) | .active // false')
 
-            # Strip read-only fields rejected by n8n's API
-            BODY=$(jq 'del(.meta, .tags)' "$file")
+            # n8n API only accepts: name, nodes, connections, settings
+            BODY=$(jq '{name, nodes, connections, settings}' "$file")
 
             if [ -n "$WORKFLOW_ID" ]; then
               echo "Updating: $WORKFLOW_NAME (ID: $WORKFLOW_ID)"

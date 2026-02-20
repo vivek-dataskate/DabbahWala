@@ -1,0 +1,197 @@
+{
+  "name": "DabbahWala \u2014 Campaign Performance Tracker",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/webhooks/campaigns",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "fetch-campaign-list",
+      "name": "Get DabbahWala Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract the campaigns array and return one item per campaign\nconst data = $input.first().json;\nconst campaigns = data.campaigns || [];\nreturn campaigns\n  .filter(c => c.campaign_id)\n  .map(c => ({ json: { campaign_id: c.campaign_id, campaign_name: c.campaign_name || '' } }));"
+      },
+      "id": "split-campaigns",
+      "name": "Split Into One Per Campaign",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.instantly.ai/api/v2/analytics/campaign/summary",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "campaign_id",
+              "value": "={{ $json.campaign_id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "instantly-api-key",
+          "name": "Instantly API Key"
+        }
+      },
+      "id": "fetch-analytics",
+      "name": "Fetch Campaign Analytics from Instantly",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalise Instantly analytics response → shape Render expects\nconst a = $input.first().json;\n\n// Instantly v2 analytics uses various field names depending on version\nconst emailsSent    = a.emails_sent_count    ?? a.total_emails_sent ?? a.contacted ?? null;\nconst opens         = a.open_count           ?? a.open              ?? a.all_time_open_count  ?? null;\nconst uniqueOpens   = a.unique_open_count    ?? opens;\nconst replies       = a.reply_count          ?? a.reply             ?? a.all_time_reply_count ?? null;\nconst clicks        = a.link_click_count     ?? a.link_click        ?? null;\nconst bounces       = a.bounced_count        ?? a.bounced           ?? a.all_time_bounced_count ?? null;\nconst unsubscribes  = a.unsubscribed_count   ?? a.unsubscribed      ?? null;\nconst leadsCount    = a.leads_count          ?? a.leads             ?? null;\n\n// Compute rates (avoid division by zero)\nconst openRate  = (emailsSent && opens  != null) ? Math.round(opens  / emailsSent * 10000) / 100 : null;\nconst replyRate = (emailsSent && replies != null) ? Math.round(replies / emailsSent * 10000) / 100 : null;\n\nreturn [{\n  json: {\n    campaign_id:  a.campaign_id  || a.id || $('Split Into One Per Campaign').first().json.campaign_id,\n    leads_count:  leadsCount,\n    emails_sent:  emailsSent,\n    unique_opens: uniqueOpens,\n    opens,\n    replies,\n    clicks,\n    bounces,\n    unsubscribes,\n    open_rate:    openRate,\n    reply_rate:   replyRate\n  }\n}];"
+      },
+      "id": "normalise-stats",
+      "name": "Normalise Stats",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/webhooks/campaign-stats",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "save-stats",
+      "name": "Save Stats to Render DB",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 300],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {},
+      "id": "done",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1540, 300]
+    }
+  ],
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [
+          {
+            "node": "Get DabbahWala Campaigns",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get DabbahWala Campaigns": {
+      "main": [
+        [
+          {
+            "node": "Split Into One Per Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Into One Per Campaign": {
+      "main": [
+        [
+          {
+            "node": "Fetch Campaign Analytics from Instantly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Campaign Analytics from Instantly": {
+      "main": [
+        [
+          {
+            "node": "Normalise Stats",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise Stats": {
+      "main": [
+        [
+          {
+            "node": "Save Stats to Render DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Stats to Render DB": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Instantly",
+      "id": "instantly"
+    }
+  ],
+  "pinData": {}
+}

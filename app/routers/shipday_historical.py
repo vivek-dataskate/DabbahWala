@@ -10,6 +10,8 @@ Endpoints:
   GET  /api/shipday/top-calls                — 10 people to call with scripts
   POST /api/shipday/run-migration            — Run migration 034 (creates schema)
 
+Inbound webhook: POST /api/webhooks/shipday  (handled in app/routers/webhooks.py)
+
 Authentication: Shipday API key from env: SHIPDAY_API_KEY
 """
 import json
@@ -17,10 +19,9 @@ import logging
 import os
 import time
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel
 
 from app.db import get_cursor
@@ -413,3 +414,5 @@ def run_shipday_migration():
     except Exception as e:
         logger.error("Migration failed: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Migration failed: {e}")
+
+

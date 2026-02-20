@@ -10,10 +10,15 @@ Campaign registry (instantly_campaigns table) is kept in sync by n8n calling:
 
 The webhook handler itself does only a fast DB lookup — no external API calls.
 """
+import json
 import logging
+import os
+from datetime import datetime, timezone
+from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from app.config import INSTANTLY_API_KEY
 from app.db import get_cursor
@@ -73,16 +78,32 @@ def _dabbahwala_campaign_ids() -> set[str]:
 
 # ── n8n-callable sync endpoint ───────────────────────────────────────────────
 
-@router.post("/sync-campaigns")
-def sync_campaigns():
+class SyncCampaignsBody(BaseModel):
     """
-    Fetch all Instantly campaigns tagged 'dabbahwala' (case-insensitive) and
-    upsert them into instantly_campaigns with their name, tags and status.
-    Also seeds the 5 hardcoded campaigns.
+    Optional body sent by n8n after it fetches and filters campaigns from Instantly.
+    Each item: {campaign_id, name, tags: [...], status}
+    If omitted, the endpoint falls back to calling Instantly directly (manual/emergency use).
+    """
+    campaigns: list[dict] = []
 
-    Call this from n8n on a schedule (e.g. every 6 hours).
+
+@router.post("/sync-campaigns")
+def sync_campaigns(body: SyncCampaignsBody = None):
     """
-    # 1. Seed hardcoded campaigns
+    Upsert DabbahWala campaigns into instantly_campaigns.
+
+    Primary flow (n8n-driven):
+      n8n fetches campaigns from Instantly, filters by 'dabbahwala' tag, and
+      POSTs them here as {"campaigns": [{campaign_id, name, tags, status}, ...]}.
+      This endpoint just does the DB upsert — no outbound Instantly call needed.
+
+    Fallback (manual / emergency):
+      If called with no body, falls back to fetching from Instantly directly.
+      Always seeds the 5 hardcoded campaigns regardless.
+    """
+    body = body or SyncCampaignsBody()
+
+    # 1. Always seed hardcoded campaigns
     seeded = 0
     for name, meta in _CAMPAIGN_META.items():
         _upsert_campaign_db(
@@ -92,52 +113,66 @@ def sync_campaigns():
         )
         seeded += 1
 
-    # 2. Tag-based discovery from Instantly API
+    # 2a. n8n passed pre-filtered campaigns — just upsert them
     discovered = 0
     api_error = None
-    if not INSTANTLY_API_KEY:
-        api_error = "INSTANTLY_API_KEY not configured"
-    else:
-        try:
-            resp = httpx.get(
-                "https://api.instantly.ai/api/v2/campaigns",
-                headers={"Authorization": f"Bearer {INSTANTLY_API_KEY}"},
-                params={"limit": 100},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            campaigns = data if isinstance(data, list) else (
-                data.get("items") or data.get("campaigns") or []
-            )
-            for c in campaigns:
-                raw_tags = c.get("tags") or []
-                tag_names: list[str] = []
-                for t in raw_tags:
-                    if isinstance(t, str):
-                        tag_names.append(t)
-                    elif isinstance(t, dict):
-                        tag_names.append(t.get("name") or t.get("label") or "")
+    if body.campaigns:
+        for c in body.campaigns:
+            cid    = str(c.get("campaign_id") or c.get("id") or "").strip()
+            cname  = c.get("name") or c.get("campaign_name") or ""
+            tags   = c.get("tags") or []
+            status = str(c.get("status") or "")
+            if cid:
+                _upsert_campaign_db(
+                    campaign_id=cid,
+                    name=cname,
+                    tags=tags if isinstance(tags, list) else [tags],
+                    status=status,
+                    source="tag_discovered",
+                )
+                discovered += 1
+        logger.info("sync-campaigns (n8n payload): seeded=%d upserted=%d", seeded, discovered)
 
-                if any(tag.strip().lower() == "dabbahwala" for tag in tag_names):
-                    cid    = str(c.get("id") or c.get("campaign_id") or "").strip()
-                    cname  = c.get("name") or c.get("campaign_name") or ""
-                    status = str(c.get("status") or c.get("campaign_status") or "")
-                    if cid:
-                        _upsert_campaign_db(
-                            campaign_id=cid,
-                            name=cname,
-                            tags=tag_names,
-                            status=status,
-                            source="tag_discovered",
-                        )
-                        discovered += 1
-        except Exception as e:
-            api_error = str(e)[:300]
-            logger.warning("Instantly tag-based campaign sync failed: %s", e)
+    # 2b. Fallback — call Instantly ourselves
+    else:
+        logger.info("sync-campaigns: no n8n payload, falling back to Instantly API call")
+        if not INSTANTLY_API_KEY:
+            api_error = "INSTANTLY_API_KEY not configured"
+        else:
+            try:
+                resp = httpx.get(
+                    "https://api.instantly.ai/api/v2/campaigns",
+                    headers={"Authorization": f"Bearer {INSTANTLY_API_KEY}"},
+                    params={"limit": 100},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                campaigns = data if isinstance(data, list) else (
+                    data.get("items") or data.get("campaigns") or []
+                )
+                for c in campaigns:
+                    raw_tags = c.get("tags") or []
+                    tag_names: list[str] = []
+                    for t in raw_tags:
+                        if isinstance(t, str):
+                            tag_names.append(t)
+                        elif isinstance(t, dict):
+                            tag_names.append(t.get("name") or t.get("label") or "")
+                    if any(tag.strip().lower() == "dabbahwala" for tag in tag_names):
+                        cid    = str(c.get("id") or c.get("campaign_id") or "").strip()
+                        cname  = c.get("name") or c.get("campaign_name") or ""
+                        status = str(c.get("status") or c.get("campaign_status") or "")
+                        if cid:
+                            _upsert_campaign_db(campaign_id=cid, name=cname,
+                                                tags=tag_names, status=status,
+                                                source="tag_discovered")
+                            discovered += 1
+            except Exception as e:
+                api_error = str(e)[:300]
+                logger.warning("Instantly fallback sync failed: %s", e)
 
     total = len(_load_db_campaign_ids())
-    logger.info("sync-campaigns: seeded=%d tag_discovered=%d total_in_db=%d", seeded, discovered, total)
     return {
         "status": "ok",
         "hardcoded_seeded": seeded,
@@ -145,6 +180,96 @@ def sync_campaigns():
         "total_in_db": total,
         "api_error": api_error,
     }
+
+
+# ── Campaign list endpoint (used by n8n performance tracker) ─────────────────
+
+@router.get("/campaigns")
+def list_campaigns():
+    """
+    Return all DabbahWala campaigns tracked in instantly_campaigns,
+    including latest performance stats. Used by n8n to know which
+    campaign IDs to fetch analytics for from Instantly.
+    """
+    try:
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT campaign_id, campaign_name, status, source,
+                       leads_count, emails_sent, unique_opens, opens,
+                       replies, clicks, bounces, open_rate, reply_rate,
+                       stats_synced_at, last_seen_at
+                FROM instantly_campaigns
+                ORDER BY last_seen_at DESC
+            """)
+            rows = cur.fetchall()
+            # Also include hardcoded IDs not yet in DB
+            known = {r["campaign_id"] for r in rows}
+            extra = []
+            for name, meta in _CAMPAIGN_META.items():
+                if meta["instantly_id"] not in known:
+                    extra.append({"campaign_id": meta["instantly_id"],
+                                  "campaign_name": meta["label"],
+                                  "source": "hardcoded"})
+            campaigns = [dict(r) for r in rows] + extra
+            return {"campaigns": campaigns, "total": len(campaigns)}
+    except Exception as e:
+        logger.error("list_campaigns failed: %s", e)
+        return {"campaigns": [c for c in [
+            {"campaign_id": meta["instantly_id"], "campaign_name": meta["label"], "source": "hardcoded"}
+            for meta in _CAMPAIGN_META.values()
+        ]], "total": len(_CAMPAIGN_META), "fallback": True}
+
+
+# ── Campaign stats endpoint (n8n posts Instantly analytics here) ──────────────
+
+class CampaignStatsBody(BaseModel):
+    campaign_id: str
+    leads_count:  int | None = None
+    emails_sent:  int | None = None
+    unique_opens: int | None = None
+    opens:        int | None = None
+    replies:      int | None = None
+    clicks:       int | None = None
+    bounces:      int | None = None
+    unsubscribes: int | None = None
+    open_rate:    float | None = None
+    reply_rate:   float | None = None
+
+
+@router.post("/campaign-stats")
+def update_campaign_stats(body: CampaignStatsBody):
+    """
+    Receive campaign performance stats from n8n (sourced from Instantly analytics API)
+    and update the instantly_campaigns row. Called once per campaign per polling cycle.
+    """
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute("""
+                UPDATE instantly_campaigns SET
+                    leads_count    = COALESCE(%s, leads_count),
+                    emails_sent    = COALESCE(%s, emails_sent),
+                    unique_opens   = COALESCE(%s, unique_opens),
+                    opens          = COALESCE(%s, opens),
+                    replies        = COALESCE(%s, replies),
+                    clicks         = COALESCE(%s, clicks),
+                    bounces        = COALESCE(%s, bounces),
+                    unsubscribes   = COALESCE(%s, unsubscribes),
+                    open_rate      = COALESCE(%s, open_rate),
+                    reply_rate     = COALESCE(%s, reply_rate),
+                    stats_synced_at = now()
+                WHERE campaign_id = %s
+            """, (
+                body.leads_count, body.emails_sent, body.unique_opens,
+                body.opens, body.replies, body.clicks, body.bounces,
+                body.unsubscribes, body.open_rate, body.reply_rate,
+                body.campaign_id,
+            ))
+            updated = cur.rowcount
+        logger.info("campaign-stats: updated campaign_id=%s rows=%d", body.campaign_id, updated)
+        return {"status": "ok", "campaign_id": body.campaign_id, "updated": updated}
+    except Exception as e:
+        logger.error("campaign-stats update failed: %s", e)
+        return {"status": "error", "detail": str(e)[:300]}
 
 
 # ── Payload helpers ──────────────────────────────────────────────────────────
@@ -269,4 +394,148 @@ async def instantly_webhook(request: Request):
         "contact_id": contact_id,
         "is_new": is_new,
         "lifecycle": lifecycle_result,
+    }
+
+
+# ── Shipday webhook ───────────────────────────────────────────────────────────
+
+_SHIPDAY_TO_STATUS = {
+    "ACCEPTED":  "assigned",
+    "ASSIGNED":  "assigned",
+    "PICKED_UP": "picked_up",
+    "IN_TRANSIT":"in_transit",
+    "COMPLETED": "delivered",
+    "DELIVERED": "delivered",
+    "FAILED":    "failed",
+    "RETURNED":  "failed",
+}
+
+
+@router.get("/shipday")
+async def shipday_webhook_ping(request: Request):
+    """Shipday verification ping — just needs a 200 OK."""
+    logger.info("Shipday GET /api/webhooks/shipday ping — headers: %s", dict(request.headers))
+    return {"status": "ok"}
+
+
+@router.post("/shipday")
+async def shipday_webhook(request: Request):
+    """
+    Inbound Shipday webhook — receives order status change callbacks.
+
+    ONLY updates existing records (shipday_orders_raw + delivery_status).
+    Never creates new orders, contacts, or events.
+    """
+    try:
+        body = await request.body()
+    except Exception as e:
+        logger.error("Shipday webhook: failed to read body: %s", e)
+        raise HTTPException(status_code=400, detail="Could not read request body")
+
+    logger.info(
+        "Shipday POST /api/webhooks/shipday — content_type=%s content_length=%s auth=%s body_bytes=%d body=%s",
+        request.headers.get("content-type", "(none)"),
+        request.headers.get("content-length", "(none)"),
+        request.headers.get("authorization", "(none)"),
+        len(body),
+        body[:500].decode("utf-8", errors="replace"),
+    )
+
+    if not body or not body.strip():
+        logger.info("Shipday webhook: empty body — verification ping, returning 200")
+        return {"status": "ok"}
+
+    expected = os.environ.get("SHIPDAY_WEBHOOK_TOKEN", "").strip()
+    if expected:
+        auth = request.headers.get("Authorization", "")
+        token = auth.removeprefix("Bearer ").strip()
+        if token != expected:
+            logger.warning(
+                "Shipday webhook rejected — token mismatch (got=%r expected_len=%d)",
+                token[:8] + "..." if token else "(none)",
+                len(expected),
+            )
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
+    try:
+        payload = json.loads(body)
+    except Exception:
+        logger.warning("Shipday webhook: non-JSON body — returning 200 (body=%s)", body[:200].decode("utf-8", errors="replace"))
+        return {"status": "ok"}
+
+    order_id = str(payload.get("orderId") or payload.get("id") or "").strip()
+    if not order_id:
+        logger.info("Shipday webhook: no orderId in payload (likely verification) — returning 200. payload=%s", str(payload)[:300])
+        return {"status": "ok"}
+
+    raw_status   = (payload.get("orderStatus") or payload.get("status") or "UNKNOWN").upper()
+    our_status   = _SHIPDAY_TO_STATUS.get(raw_status)
+    order_number = payload.get("orderNumber") or ""
+    carrier      = payload.get("assignedCarrier") or {}
+    driver_name  = carrier.get("name")
+    driver_phone = carrier.get("phone")
+
+    actual_delivery: Optional[str] = None
+    try:
+        actual_delivery = payload.get("actualDeliveryTime") or None
+    except Exception:
+        pass
+
+    logger.info("Shipday webhook: order_id=%s status=%s → %s driver=%s", order_id, raw_status, our_status, driver_name)
+
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """SELECT contact_id, customer_phone, customer_email, order_number
+               FROM shipday_orders_raw WHERE shipday_order_id = %s""",
+            (order_id,)
+        )
+        existing = cur.fetchone()
+        if not existing:
+            logger.info("Shipday webhook: order_id=%s not found in shipday_orders_raw — ignoring", order_id)
+            return {"status": "ignored", "reason": "order_not_found", "order_id": order_id}
+
+        contact_id = existing["contact_id"]
+        order_ref  = order_number or existing.get("order_number") or order_id
+
+        cur.execute(
+            """UPDATE shipday_orders_raw
+               SET shipday_status  = %s,
+                   actual_delivery = COALESCE(%s::timestamptz, actual_delivery),
+                   driver_name     = COALESCE(%s, driver_name),
+                   driver_phone    = COALESCE(%s, driver_phone),
+                   synced_at       = NOW(),
+                   raw_payload     = raw_payload || %s::jsonb
+               WHERE shipday_order_id = %s""",
+            (raw_status, actual_delivery, driver_name, driver_phone,
+             json.dumps({"webhook_updated_at": datetime.now(timezone.utc).isoformat()}), order_id)
+        )
+
+        if contact_id and our_status == "delivered" and order_ref:
+            cur.execute(
+                """UPDATE orders
+                   SET delivery_date = CURRENT_DATE,
+                       metadata = metadata || %s::jsonb
+                   WHERE contact_id = %s
+                     AND (order_id_external = %s OR order_id_external = %s)
+                     AND delivery_date IS NULL""",
+                (json.dumps({"shipday_status": raw_status, "shipday_order_id": order_id}),
+                 contact_id, order_ref, order_id)
+            )
+
+        if contact_id and our_status:
+            cur.execute(
+                """INSERT INTO delivery_status
+                     (contact_id, order_ref, status, updated_by, occurred_at, metadata)
+                   VALUES (%s, %s, %s, 'shipday_webhook', NOW(), %s)""",
+                (contact_id, order_ref, our_status,
+                 json.dumps({"shipday_order_id": order_id, "raw_status": raw_status,
+                             "source": "webhook", "driver_name": driver_name}))
+            )
+
+    return {
+        "status":         "ok",
+        "order_id":       order_id,
+        "shipday_status": raw_status,
+        "mapped_status":  our_status,
+        "contact_found":  contact_id is not None,
     }

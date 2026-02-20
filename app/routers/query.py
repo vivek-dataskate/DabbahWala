@@ -9,6 +9,7 @@ Called by n8n form workflow. Returns formatted text answers.
 """
 import json
 import os
+import re
 import traceback
 from datetime import date, datetime, timedelta
 
@@ -25,7 +26,7 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
 
 CATEGORIES = {
-    "customer_lookup": "Look up a specific customer by email",
+    "customer_lookup": "Look up a specific customer by email, phone, or name",
     "pipeline_snapshot": "How many contacts are in each lifecycle stage",
     "campaign_performance": "How are email campaigns performing",
     "who_to_contact": "Which customers should we reach out to today",
@@ -35,6 +36,7 @@ CATEGORIES = {
     "order_summary_by_delivery_date": "Orders grouped and summarized by delivery date",
     "revenue_trends": "Weekly and monthly revenue totals with trend analysis",
     "communication_history": "SMS/call history for a specific customer",
+    "team_notes": "Browse or submit field notes, customer feedback, and delivery issues",
     "ground_team_notes": "Browse recent field notes from the ground team",
     "ad_copies": "Browse recent social media ad copies",
     "submit_input": "Submit a new observation, note, or question",
@@ -68,12 +70,33 @@ class QueryResponse(BaseModel):
 # Tier 1 handlers — direct stored proc / SQL queries
 # ---------------------------------------------------------------------------
 
-def _handle_customer_lookup(question: str, contact_email: str | None) -> tuple[str, dict]:
-    # If no email, try name search using the question text
+def _handle_customer_lookup(
+    question: str,
+    contact_email: str | None,
+    contact_phone: str | None = None,
+    contact_name: str | None = None,
+) -> tuple[str, dict]:
+    # 1. Phone lookup — resolve to email first
+    if not contact_email and contact_phone:
+        raw = contact_phone.strip()
+        digits = re.sub(r"\D", "", raw)
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT email FROM contacts
+                WHERE phone = %s OR phone = %s OR regexp_replace(phone, '\\D', '', 'g') = %s
+                LIMIT 1
+            """, (raw, digits, digits))
+            row = cur.fetchone()
+        if row:
+            contact_email = row["email"]
+        else:
+            return f"No customer found with phone: {raw}", {}
+
+    # 2. Name lookup (from contact_name field or question text)
     if not contact_email:
-        name = question.strip()
+        name = contact_name or question.strip()
         if not name:
-            return "Please provide a customer email address or name to look up.", {}
+            return "Please provide a customer email, phone, or name to look up.", {}
 
         with get_cursor(commit=False) as cur:
             cur.execute("""
@@ -98,7 +121,6 @@ def _handle_customer_lookup(question: str, contact_email: str | None) -> tuple[s
             lines.append("\nEnter the email address to get full details.")
             return "\n".join(lines), {"matches": matches}
 
-        # Exactly one match — use their email for full detail lookup
         contact_email = matches[0]["email"]
 
     with get_cursor(commit=False) as cur:
@@ -459,20 +481,20 @@ def _handle_order_analytics(
 
         # Orders per day within date range
         cur.execute("""
-            SELECT order_date::date as day, count(*) as orders,
+            SELECT order_date::date as day, count(DISTINCT id) as orders,
                    coalesce(sum(total_amount), 0) as revenue
             FROM orders
             WHERE order_date::date BETWEEN %s AND %s
-            GROUP BY day ORDER BY day DESC
+            GROUP BY order_date::date ORDER BY order_date::date DESC
         """, (d_from, d_to))
         daily = [dict(r) for r in cur.fetchall()]
 
-        # Avg order value within date range
+        # Total orders + avg order value (avg only on non-zero amounts)
         cur.execute("""
-            SELECT avg(total_amount) as avg_order, count(*) as total_orders
+            SELECT count(*) as total_orders,
+                   avg(NULLIF(total_amount, 0)) as avg_order
             FROM orders
-            WHERE total_amount > 0
-              AND order_date::date BETWEEN %s AND %s
+            WHERE order_date::date BETWEEN %s AND %s
         """, (d_from, d_to))
         avg_row = cur.fetchone()
 
@@ -567,7 +589,7 @@ def _handle_order_summary_by_delivery_date(
                    coalesce(avg(total_amount), 0) AS avg_order_value
             FROM orders
             WHERE order_date::date BETWEEN %s AND %s
-            GROUP BY delivery_date ORDER BY delivery_date DESC
+            GROUP BY order_date::date ORDER BY order_date::date DESC
         """, (d_from, d_to))
         day_rows = [dict(r) for r in cur.fetchall()]
 
@@ -577,7 +599,7 @@ def _handle_order_summary_by_delivery_date(
                 SELECT oi.item_name, sum(oi.quantity) AS qty, sum(oi.line_total) AS revenue
                 FROM order_items oi JOIN orders o ON o.id = oi.order_id
                 WHERE o.order_date::date = %s
-                GROUP BY oi.item_name ORDER BY qty DESC LIMIT 10
+                GROUP BY oi.item_name ORDER BY qty DESC LIMIT 20
             """, (d_from,))
             items = [dict(r) for r in cur.fetchall()]
 
@@ -619,6 +641,7 @@ def _handle_order_summary_by_order_date(
         d_from = date.today() - timedelta(days=30)
     if not d_to:
         d_to = date.today()
+    single_day = d_from == d_to
 
     with get_cursor(commit=False) as cur:
         cur.execute("""
@@ -626,18 +649,30 @@ def _handle_order_summary_by_order_date(
                    count(DISTINCT id) AS order_count,
                    count(DISTINCT contact_id) AS unique_customers,
                    coalesce(sum(total_amount), 0) AS revenue,
-                   coalesce(avg(total_amount), 0) AS avg_order_value
+                   coalesce(avg(NULLIF(total_amount, 0)), 0) AS avg_order_value
             FROM orders WHERE order_date::date BETWEEN %s AND %s
-            GROUP BY order_day ORDER BY order_day DESC
+            GROUP BY order_date::date ORDER BY order_date::date DESC
         """, (d_from, d_to))
         day_rows = [dict(r) for r in cur.fetchall()]
 
         cur.execute("""
-            SELECT source, count(*) AS cnt, coalesce(sum(total_amount), 0) AS revenue
+            SELECT source, count(DISTINCT id) AS cnt, coalesce(sum(total_amount), 0) AS revenue
             FROM orders WHERE order_date::date BETWEEN %s AND %s
             GROUP BY source ORDER BY cnt DESC
         """, (d_from, d_to))
         sources = [dict(r) for r in cur.fetchall()]
+
+        items = []
+        if single_day:
+            cur.execute("""
+                SELECT oi.item_name, sum(oi.quantity) AS qty,
+                       count(DISTINCT oi.order_id) AS order_count,
+                       sum(oi.line_total) AS revenue
+                FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                WHERE o.order_date::date = %s
+                GROUP BY oi.item_name ORDER BY qty DESC LIMIT 20
+            """, (d_from,))
+            items = [dict(r) for r in cur.fetchall()]
 
     if not day_rows:
         return f"No orders found between {d_from} and {d_to}.", {}
@@ -658,7 +693,12 @@ def _handle_order_summary_by_order_date(
         for s in sources:
             lines.append(f"- **{s['source'] or 'Unknown'}**: {s['cnt']} orders  (${float(s['revenue']):.2f})")
 
-    return "\n".join(lines), {"days": day_rows, "sources": sources, "total_orders": total_orders, "total_revenue": total_revenue}
+    if items:
+        lines.extend(["", "### Dishes Ordered"])
+        for it in items:
+            lines.append(f"- **{it['item_name']}**: {it['qty']} qty, {it['order_count']} orders  (${float(it.get('revenue') or 0):.2f})")
+
+    return "\n".join(lines), {"days": day_rows, "sources": sources, "items": items, "total_orders": total_orders, "total_revenue": total_revenue}
 
 
 def _handle_revenue_trends(
@@ -960,6 +1000,81 @@ def _handle_submit_input(
     ), {"id": row["id"], "type": actual_type, "author": actual_author}
 
 
+def _handle_team_notes(
+    question: str,
+    input_type: str | None,
+    author: str | None,
+) -> tuple[str, dict]:
+    """Combined handler: browse notes or submit a new one.
+
+    - input_type == 'browse' (or None/empty)  → list recent notes across all types
+    - any other input_type                     → submit a new note of that type
+    """
+    NOTE_TYPES = ("ground_note", "customer_feedback", "delivery_issue", "observation")
+
+    # ── Submit mode ──────────────────────────────────────────────────────────
+    if input_type and input_type in NOTE_TYPES:
+        return _handle_submit_input(question, author, input_type)
+
+    # ── Browse mode ──────────────────────────────────────────────────────────
+    with get_cursor(commit=False) as cur:
+        # Search if keyword given; otherwise show latest across field note types
+        if question and len(question) > 3:
+            # search across all field note content types
+            cur.execute(
+                """
+                SELECT id, content_type, title, body, author, created_at
+                FROM team_content
+                WHERE content_type IN ('ground_note','customer_feedback','delivery_issue','observation')
+                  AND (body ILIKE %s OR title ILIKE %s)
+                ORDER BY created_at DESC
+                LIMIT 20
+                """,
+                (f"%{question}%", f"%{question}%"),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, content_type, title, body, author, created_at
+                FROM team_content
+                WHERE content_type IN ('ground_note','customer_feedback','delivery_issue','observation')
+                ORDER BY created_at DESC
+                LIMIT 20
+                """
+            )
+        results = [dict(r) for r in cur.fetchall()]
+
+    if not results:
+        return (
+            "No team notes found yet.\n\n"
+            "To submit a note, select a note type (Field Observation, Customer Feedback, etc.) "
+            "and type your content above.", {}
+        )
+
+    TYPE_LABEL = {
+        "ground_note": "Field Note",
+        "customer_feedback": "Customer Feedback",
+        "delivery_issue": "Delivery Issue",
+        "observation": "Observation",
+    }
+    lines = [f"## Team Notes ({len(results)} recent)", ""]
+    for r in results:
+        date_str = r.get("created_at", "")
+        if hasattr(date_str, "strftime"):
+            date_str = date_str.strftime("%b %d, %Y")
+        label = TYPE_LABEL.get(r.get("content_type", ""), r.get("content_type", ""))
+        author_str = r.get("author") or "Anonymous"
+        body = (r.get("body") or "")[:300]
+        lines.extend([
+            f"### [{label}] {r.get('title', 'Untitled')}",
+            f"**By**: {author_str} | **Date**: {date_str}",
+            body,
+            "",
+        ])
+
+    return "\n".join(lines), {"count": len(results)}
+
+
 # ---------------------------------------------------------------------------
 # Tier 2: Free-form — Claude with real data context
 # ---------------------------------------------------------------------------
@@ -1238,7 +1353,7 @@ async def handle_query(req: QueryRequest):
 
     try:
         if category == "customer_lookup":
-            answer, data = _handle_customer_lookup(question, email)
+            answer, data = _handle_customer_lookup(question, email, phone, name)
         elif category == "pipeline_snapshot":
             answer, data = _handle_pipeline_snapshot(question)
         elif category == "campaign_performance":
@@ -1257,6 +1372,8 @@ async def handle_query(req: QueryRequest):
             answer, data = _handle_revenue_trends(question, date_from, date_to)
         elif category == "communication_history":
             answer, data = _handle_communication_history(question, email, phone, name)
+        elif category == "team_notes":
+            answer, data = _handle_team_notes(question, req.input_type, req.author)
         elif category == "ground_team_notes":
             answer, data = _handle_ground_team_notes(question)
         elif category == "ad_copies":
@@ -1264,7 +1381,14 @@ async def handle_query(req: QueryRequest):
         elif category == "submit_input":
             answer, data = _handle_submit_input(question, req.author, req.input_type)
         elif category == "broadcast_history":
-            answer, data = _handle_broadcast_history(question, date_from, date_to)
+            try:
+                answer, data = _handle_broadcast_history(question, date_from, date_to)
+            except Exception as exc:
+                if "broadcast_jobs" in str(exc).lower() or "does not exist" in str(exc).lower():
+                    answer = "Broadcast history is not yet available — the broadcast_jobs table has not been created on this environment."
+                    data = {}
+                else:
+                    raise
         elif category == "free_form":
             answer, data = await _handle_free_form(question)
         else:

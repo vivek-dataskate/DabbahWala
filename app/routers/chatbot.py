@@ -31,6 +31,7 @@ CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
 CHUNK_SIZE = 900       # characters per chunk
 CHUNK_OVERLAP = 120    # overlap between consecutive chunks
 REINDEX_INTERVAL_DAYS = 30  # reindex at most once per month
+MAX_FILE_BYTES = 200_000   # skip files larger than this (e.g. bulk SQL dumps)
 
 
 # ---------------------------------------------------------------------------
@@ -118,6 +119,10 @@ def _load_md_files() -> list[dict]:
             continue
         rel = str(path.relative_to(base))
         try:
+            file_size = path.stat().st_size
+            if file_size > MAX_FILE_BYTES:
+                logger.debug("Skipping large file %s (%d bytes)", rel, file_size)
+                continue
             content = path.read_text(encoding="utf-8")
             docs.append({"source": rel, "content": content})
             logger.info("Loaded doc %s (%d chars)", rel, len(content))
@@ -143,6 +148,8 @@ def _split_chunks(text: str) -> list[str]:
         chunk = text[start:end].strip()
         if chunk:
             chunks.append(chunk)
+        if end >= length:
+            break
         next_start = end - CHUNK_OVERLAP
         if next_start <= start:
             next_start = start + 1
@@ -210,8 +217,8 @@ def _ensure_indexed() -> None:
         return
 
     logger.info("Reindexing chatbot docs (%d files)", len(docs))
+    _save_last_indexed_at()  # save before indexing so interruptions don't re-trigger next deploy
     total = _do_index(docs)
-    _save_last_indexed_at()
     logger.info("Reindex complete: %d total chunks from %d files", total, len(docs))
 
     # Pre-cache chip answers in background so startup isn't blocked
