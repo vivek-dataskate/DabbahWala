@@ -109,7 +109,7 @@ async def _push_orders_to_shipday(orders_grouped: dict,
         date_raw = _col(first, 'Date', 'Order Date', 'date', 'order_date').strip()
         delivery_slot = _col(first, 'Delivery Slot Name', 'Delivery Slot', 'delivery_slot').strip()
         delivery_instr = _col(first, 'Delivery Instructions', 'Delivery Instruction',
-                              'delivery_instructions').strip()
+                              'delivery_instructions', 'Notes', 'notes').strip()
 
         try:
             delivery_date = datetime.strptime(date_raw, '%d/%m/%Y').strftime('%Y-%m-%d')
@@ -241,7 +241,7 @@ def _generate_shipday_csv(orders_grouped: dict) -> str:
         date_raw = _col(first, 'Date', 'Order Date', 'date', 'order_date').strip()
         delivery_slot = _col(first, 'Delivery Slot Name', 'Delivery Slot', 'delivery_slot').strip()
         delivery_instr = _col(first, 'Delivery Instructions', 'Delivery Instruction',
-                              'delivery_instructions').strip()
+                              'delivery_instructions', 'Notes', 'notes').strip()
         restaurant_name = os.environ.get("SHIPDAY_RESTAURANT_NAME", "DabbahWala")
 
         try:
@@ -563,6 +563,7 @@ async def process_daily_orders(
             plan_name = _col(first, 'Plan Name', 'plan_name', 'Plan').strip()
             delivery_slot = _col(first, 'Delivery Slot Name', 'Delivery Slot', 'delivery_slot').strip()
             order_type = _col(first, 'Order Type', 'order_type', 'Type').strip()
+            notes = _col(first, 'Notes', 'notes', 'Note', 'Delivery Notes', 'Order Notes').strip()
 
             try:
                 order_date = datetime.strptime(date_raw, '%d/%m/%Y').strftime('%Y-%m-%d')
@@ -832,10 +833,11 @@ async def process_daily_orders(
 
             cur.execute(
                 "INSERT INTO orders (contact_id, order_id_external, order_date, delivery_date, source, "
-                "total_amount, order_type, delivery_slot, customer_name_raw) "
-                "VALUES (%s, %s, %s, %s, 'Website', %s, %s, %s, %s) RETURNING id",
+                "total_amount, order_type, delivery_slot, customer_name_raw, notes) "
+                "VALUES (%s, %s, %s, %s, 'Website', %s, %s, %s, %s, %s) RETURNING id",
                 (contact_id, order_num, order_date, delivery_date, total_amount,
-                 'SUBSCRIPTION' if is_sub else 'ONE_TIME', delivery_slot, name)
+                 'SUBSCRIPTION' if is_sub else 'ONE_TIME', delivery_slot, name,
+                 notes or None)
             )
             order_row = cur.fetchone()
             order_db_id = order_row['id']
@@ -866,7 +868,8 @@ async def process_daily_orders(
                 meta = json.dumps({
                     'source': 'Website', 'total_amount': total_amount,
                     'order_type': 'SUBSCRIPTION' if is_sub else 'ONE_TIME',
-                    'order_id_external': order_num
+                    'order_id_external': order_num,
+                    **(({'notes': notes}) if notes else {})
                 })
                 cur.execute(
                     "INSERT INTO events (contact_id, event_type, metadata, occurred_at) "
