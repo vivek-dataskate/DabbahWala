@@ -318,6 +318,7 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
     <select id="ac-action" onchange="onActionChange()">
       <optgroup label="📁 Data">
         <option value="upload_orders">📤  Upload Daily Orders — Ingest CSV and run lifecycle analysis</option>
+        <option value="add_prospects">👤  Add Prospects — Upload CSV or enter manually</option>
       </optgroup>
       <optgroup label="✉️ Templates">
         <option value="email_templates">✉️  Email Templates — Edit &amp; push campaign email drafts to Instantly</option>
@@ -358,6 +359,59 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
     </div>
     <button class="btn" id="u-btn" onclick="uploadCSV()">Upload &amp; Process</button>
     <div id="u-result"></div>
+  </div>
+
+  <!-- ─────────────── Add Prospects ─────────────── -->
+  <div id="ac-section-add_prospects" style="display:none">
+    <div style="display:flex;gap:10px;margin-bottom:20px">
+      <button id="pros-tab-csv" class="btn" onclick="prospectMode('csv')" style="background:#1a1a1a;font-size:0.85rem;padding:8px 18px">📂 CSV Upload</button>
+      <button id="pros-tab-manual" class="btn" onclick="prospectMode('manual')" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem;padding:8px 18px">✏️ Enter Manually</button>
+    </div>
+
+    <!-- CSV sub-section -->
+    <div id="pros-csv-section">
+      <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:8px;padding:13px;margin-bottom:16px;font-size:0.84rem;color:#555;line-height:1.8">
+        Required columns: <strong>FirstName</strong>, LastName, Phone, EmailId, Address<br>
+        <em>Name + at least one of Phone or EmailId are mandatory. Address is optional.</em><br>
+        <a href="/api/prospects/template" download="prospect_template.csv" style="color:#c8581a;font-weight:600">⬇ Download blank template CSV</a>
+      </div>
+      <div class="form-group">
+        <label>CSV file</label>
+        <input type="file" id="pros-file" accept=".csv" style="padding:8px;background:#fafafe">
+      </div>
+      <button class="btn" id="pros-csv-btn" onclick="uploadProspectCSV()">Upload &amp; Ingest</button>
+      <div id="pros-csv-result" style="margin-top:14px"></div>
+    </div>
+
+    <!-- Manual sub-section -->
+    <div id="pros-manual-section" style="display:none">
+      <div class="row2">
+        <div class="form-group">
+          <label>First Name <span style="color:#dc3545">*</span></label>
+          <input type="text" id="pros-first" placeholder="e.g. Jane">
+        </div>
+        <div class="form-group">
+          <label>Last Name</label>
+          <input type="text" id="pros-last" placeholder="e.g. Doe">
+        </div>
+      </div>
+      <div class="row2">
+        <div class="form-group">
+          <label>Phone <span class="hint">(at least one required)</span></label>
+          <input type="tel" id="pros-phone" placeholder="e.g. 2485550100">
+        </div>
+        <div class="form-group">
+          <label>Email ID <span class="hint">(at least one required)</span></label>
+          <input type="email" id="pros-email" placeholder="e.g. jane@example.com">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Address <span class="hint">(optional)</span></label>
+        <input type="text" id="pros-addr" placeholder="e.g. 123 Main St, Troy MI 48084">
+      </div>
+      <button class="btn" id="pros-add-btn" onclick="addProspectManually()">Add Prospect</button>
+      <div id="pros-add-result" style="margin-top:14px"></div>
+    </div>
   </div>
 
   <!-- ─────────────── Email Templates ─────────────── -->
@@ -685,7 +739,7 @@ function setBtn(id, disabled, label) {
 }
 
 // ─── actions ─────────────────────────────────────────────────────────────────
-const AC_SECTIONS = ['upload_orders','email_templates','sms_templates','run_agents','delay_alert','promo_blast'];
+const AC_SECTIONS = ['upload_orders','add_prospects','email_templates','sms_templates','run_agents','delay_alert','promo_blast'];
 function onActionChange() {
   const val = document.getElementById('ac-action').value;
   AC_SECTIONS.forEach(s => {
@@ -1084,6 +1138,82 @@ function resetToneEditor() {
   document.getElementById('t-load-result').innerHTML  = '';
   document.getElementById('t-save-result').innerHTML  = '';
   document.getElementById('t-instruction').value      = '';
+}
+
+// ─── prospects ────────────────────────────────────────────────────────────────
+function prospectMode(mode) {
+  document.getElementById('pros-csv-section').style.display    = mode === 'csv'    ? 'block' : 'none';
+  document.getElementById('pros-manual-section').style.display = mode === 'manual' ? 'block' : 'none';
+  const active   = mode === 'csv' ? '#1a1a1a' : '#f4f4f7';
+  const inactive = mode === 'csv' ? '#f4f4f7' : '#1a1a1a';
+  const ac = mode === 'csv' ? '#fff' : '#555';
+  const ic = mode === 'csv' ? '#555' : '#fff';
+  document.getElementById('pros-tab-csv').style.background    = active;
+  document.getElementById('pros-tab-csv').style.color         = ac;
+  document.getElementById('pros-tab-manual').style.background = inactive;
+  document.getElementById('pros-tab-manual').style.color      = ic;
+}
+async function uploadProspectCSV() {
+  const file = document.getElementById('pros-file').files[0];
+  if (!file) { setError('pros-csv-result', 'Please select a CSV file.'); return; }
+  setBtn('pros-csv-btn', true, 'Uploading…');
+  document.getElementById('pros-csv-result').innerHTML = '';
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res  = await fetch('/api/prospects/upload-csv', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) { setError('pros-csv-result', data.detail || 'Upload failed'); return; }
+    const lc = data.lifecycle || {};
+    let html = `<div class="upload-summary" style="margin-top:12px">
+      <div class="stat-box"><div class="s-label">Processed</div><div class="s-val">${data.rows_processed}</div></div>
+      <div class="stat-box"><div class="s-label">Added</div><div class="s-val" style="color:#28a745">${data.added}</div></div>
+      <div class="stat-box"><div class="s-label">Updated</div><div class="s-val" style="color:#17a2b8">${data.updated}</div></div>
+      <div class="stat-box"><div class="s-label">Skipped</div><div class="s-val" style="color:#f59e0b">${data.skipped}</div></div>
+    </div>`;
+    if (lc.campaigns_queued > 0) html += `<p style="color:#28a745;font-size:0.85rem;margin-top:8px">✓ Lifecycle ran — ${lc.campaigns_queued} campaign(s) queued for new contacts.</p>`;
+    if (data.errors && data.errors.length) {
+      html += `<div style="margin-top:10px;font-size:0.8rem;color:#dc3545">${data.errors.map(e=>`<div>⚠ ${e}</div>`).join('')}</div>`;
+    }
+    document.getElementById('pros-csv-result').innerHTML = html;
+  } catch(e) {
+    setError('pros-csv-result', 'Network error: ' + e.message);
+  } finally {
+    setBtn('pros-csv-btn', false, 'Upload & Ingest');
+  }
+}
+async function addProspectManually() {
+  const first = document.getElementById('pros-first').value.trim();
+  const last  = document.getElementById('pros-last').value.trim();
+  const phone = document.getElementById('pros-phone').value.trim();
+  const email = document.getElementById('pros-email').value.trim();
+  const addr  = document.getElementById('pros-addr').value.trim();
+  if (!first) { setError('pros-add-result', 'First Name is required.'); return; }
+  if (!phone && !email) { setError('pros-add-result', 'Enter at least a Phone or Email.'); return; }
+  setBtn('pros-add-btn', true, 'Adding…');
+  document.getElementById('pros-add-result').innerHTML = '';
+  try {
+    const res  = await fetch('/api/prospects/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ first_name: first, last_name: last, phone, email, address: addr }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setError('pros-add-result', data.detail || 'Failed'); return; }
+    const lc = data.lifecycle || {};
+    const label = data.status === 'added' ? '✓ New prospect added' : '✓ Existing contact updated';
+    const color = data.status === 'added' ? '#28a745' : '#17a2b8';
+    let msg = `<p style="color:${color};font-size:0.88rem">${label} (id: ${data.contact_id})`;
+    if (lc.campaigns_queued > 0) msg += ` — ${lc.campaigns_queued} campaign(s) queued.`;
+    msg += '</p>';
+    document.getElementById('pros-add-result').innerHTML = msg;
+    // Clear form on success
+    ['pros-first','pros-last','pros-phone','pros-email','pros-addr'].forEach(id => document.getElementById(id).value = '');
+  } catch(e) {
+    setError('pros-add-result', 'Network error: ' + e.message);
+  } finally {
+    setBtn('pros-add-btn', false, 'Add Prospect');
+  }
 }
 
 // ─── upload ───────────────────────────────────────────────────────────────────

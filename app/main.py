@@ -5,7 +5,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, campaigns, broadcasts, chatbot, daily_orders, delivery, events, field_agent, intelligence, lifecycle, opportunities, playbook, query, reports, shipday_historical, sms, team_content, telnyx
+from app.routers import agents, agent, campaigns, broadcasts, chatbot, daily_orders, delivery, events, field_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, sms, team_content, telnyx, webhooks
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
@@ -80,6 +80,8 @@ app.include_router(team_content.router, prefix="/api/team-content", tags=["team-
 app.include_router(field_agent.router, prefix="/api/field-agent", tags=["field-agent"])
 app.include_router(chatbot.router, prefix="/api/chatbot", tags=["chatbot"])
 app.include_router(broadcasts.router, prefix="/api/broadcasts", tags=["broadcasts"])
+app.include_router(prospects.router, prefix="/api/prospects", tags=["prospects"])
+app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
