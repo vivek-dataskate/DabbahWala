@@ -437,6 +437,15 @@ async def shipday_webhook(request: Request):
     ONLY updates existing records (shipday_orders_raw + delivery_status).
     Never creates new orders, contacts, or events.
     """
+    # Verify Bearer token sent by Shipday
+    expected = os.environ.get("SHIPDAY_WEBHOOK_TOKEN", "").strip()
+    if expected:
+        auth = request.headers.get("Authorization", "")
+        token = auth.removeprefix("Bearer ").strip()
+        if token != expected:
+            logger.warning("Shipday webhook rejected — invalid token")
+            raise HTTPException(status_code=401, detail="Unauthorized")
+
     try:
         payload = await request.json()
     except Exception:
