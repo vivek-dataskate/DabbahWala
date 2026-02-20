@@ -178,6 +178,96 @@ def sync_campaigns(body: SyncCampaignsBody = None):
     }
 
 
+# ── Campaign list endpoint (used by n8n performance tracker) ─────────────────
+
+@router.get("/campaigns")
+def list_campaigns():
+    """
+    Return all DabbahWala campaigns tracked in instantly_campaigns,
+    including latest performance stats. Used by n8n to know which
+    campaign IDs to fetch analytics for from Instantly.
+    """
+    try:
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT campaign_id, campaign_name, status, source,
+                       leads_count, emails_sent, unique_opens, opens,
+                       replies, clicks, bounces, open_rate, reply_rate,
+                       stats_synced_at, last_seen_at
+                FROM instantly_campaigns
+                ORDER BY last_seen_at DESC
+            """)
+            rows = cur.fetchall()
+            # Also include hardcoded IDs not yet in DB
+            known = {r["campaign_id"] for r in rows}
+            extra = []
+            for name, meta in _CAMPAIGN_META.items():
+                if meta["instantly_id"] not in known:
+                    extra.append({"campaign_id": meta["instantly_id"],
+                                  "campaign_name": meta["label"],
+                                  "source": "hardcoded"})
+            campaigns = [dict(r) for r in rows] + extra
+            return {"campaigns": campaigns, "total": len(campaigns)}
+    except Exception as e:
+        logger.error("list_campaigns failed: %s", e)
+        return {"campaigns": [c for c in [
+            {"campaign_id": meta["instantly_id"], "campaign_name": meta["label"], "source": "hardcoded"}
+            for meta in _CAMPAIGN_META.values()
+        ]], "total": len(_CAMPAIGN_META), "fallback": True}
+
+
+# ── Campaign stats endpoint (n8n posts Instantly analytics here) ──────────────
+
+class CampaignStatsBody(BaseModel):
+    campaign_id: str
+    leads_count:  int | None = None
+    emails_sent:  int | None = None
+    unique_opens: int | None = None
+    opens:        int | None = None
+    replies:      int | None = None
+    clicks:       int | None = None
+    bounces:      int | None = None
+    unsubscribes: int | None = None
+    open_rate:    float | None = None
+    reply_rate:   float | None = None
+
+
+@router.post("/campaign-stats")
+def update_campaign_stats(body: CampaignStatsBody):
+    """
+    Receive campaign performance stats from n8n (sourced from Instantly analytics API)
+    and update the instantly_campaigns row. Called once per campaign per polling cycle.
+    """
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute("""
+                UPDATE instantly_campaigns SET
+                    leads_count    = COALESCE(%s, leads_count),
+                    emails_sent    = COALESCE(%s, emails_sent),
+                    unique_opens   = COALESCE(%s, unique_opens),
+                    opens          = COALESCE(%s, opens),
+                    replies        = COALESCE(%s, replies),
+                    clicks         = COALESCE(%s, clicks),
+                    bounces        = COALESCE(%s, bounces),
+                    unsubscribes   = COALESCE(%s, unsubscribes),
+                    open_rate      = COALESCE(%s, open_rate),
+                    reply_rate     = COALESCE(%s, reply_rate),
+                    stats_synced_at = now()
+                WHERE campaign_id = %s
+            """, (
+                body.leads_count, body.emails_sent, body.unique_opens,
+                body.opens, body.replies, body.clicks, body.bounces,
+                body.unsubscribes, body.open_rate, body.reply_rate,
+                body.campaign_id,
+            ))
+            updated = cur.rowcount
+        logger.info("campaign-stats: updated campaign_id=%s rows=%d", body.campaign_id, updated)
+        return {"status": "ok", "campaign_id": body.campaign_id, "updated": updated}
+    except Exception as e:
+        logger.error("campaign-stats update failed: %s", e)
+        return {"status": "error", "detail": str(e)[:300]}
+
+
 # ── Payload helpers ──────────────────────────────────────────────────────────
 
 def _extract_lead(payload: dict) -> dict:
