@@ -112,8 +112,23 @@ async def startup_run_migrations():
             logger.info("startup_run_migrations — APPLIED %s", filename)
             applied += 1
         except Exception as e:
-            logger.error("startup_run_migrations — FAILED %s: %s", filename, e)
-            failed += 1
+            import psycopg2.errors as _pgerr
+            already_exists = isinstance(e, (_pgerr.DuplicateTable, _pgerr.DuplicateObject, _pgerr.UniqueViolation))
+            if already_exists:
+                # Migration ran before the schema_migrations tracker existed — mark it applied now
+                try:
+                    with get_cursor(commit=True) as cur:
+                        cur.execute(
+                            "INSERT INTO dabbahwala.schema_migrations (filename) VALUES (%s) ON CONFLICT DO NOTHING",
+                            (filename,),
+                        )
+                except Exception:
+                    pass
+                logger.info("startup_run_migrations — BACKFILLED %s (already applied)", filename)
+                skipped += 1
+            else:
+                logger.error("startup_run_migrations — FAILED %s: %s", filename, e)
+                failed += 1
 
     logger.info(
         "startup_run_migrations — done: applied=%d skipped=%d failed=%d",
