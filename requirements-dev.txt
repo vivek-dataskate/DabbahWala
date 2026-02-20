@@ -1,0 +1,16 @@
+# Development and test dependencies (not installed on Render)
+# Install with: pip install -r requirements-dev.txt
+
+# Core test framework
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-cov==6.0.0
+
+# HTTP test client for FastAPI
+httpx==0.28.1         # already in requirements.txt — needed for TestClient too
+
+# Mocking support (built into Python stdlib via unittest.mock, but this is handy)
+pytest-mock==3.14.0
+
+# Env var management in tests
+python-dotenv==1.0.1
