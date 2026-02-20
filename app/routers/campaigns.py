@@ -566,49 +566,26 @@ def _get_all_account_emails(headers: dict) -> list[str]:
 
 def _add_accounts_to_campaign(headers: dict, campaign_id: str, emails: list[str]) -> dict:
     """
-    Attach sending accounts to a campaign.
-    Tries POST /api/v2/account-campaign-mappings (bulk), falls back per-email.
-    Returns {"ok": N, "failed": N, "details": {...}}.
+    Attach sending accounts to a campaign via PATCH /api/v2/campaigns/{id}.
+    Returns {"ok": N, "accounts_set": N} or {"error": str}.
     """
     if not emails:
-        return {"ok": 0, "failed": 0, "details": {}}
-
-    # Try bulk endpoint first: POST /api/v2/account-campaign-mappings
+        return {"ok": 0, "accounts_set": 0}
     try:
-        resp = httpx.post(
-            "https://api.instantly.ai/api/v2/account-campaign-mappings",
+        resp = httpx.patch(
+            f"https://api.instantly.ai/api/v2/campaigns/{campaign_id}",
             headers=headers,
-            json={"campaign_id": campaign_id, "emails": emails},
+            json={"email_accounts": emails},
             timeout=20,
         )
         resp.raise_for_status()
         logger.info(
-            "setup-instantly: bulk-added %d accounts to campaign %s", len(emails), campaign_id
+            "setup-instantly: set %d email_accounts on campaign %s", len(emails), campaign_id
         )
-        return {"ok": len(emails), "failed": 0, "bulk": True}
-    except Exception as bulk_err:
-        logger.warning("setup-instantly: bulk account mapping failed (%s), trying per-email", bulk_err)
-
-    # Fall back: per-email POST to /api/v2/account-campaign-mappings
-    details: dict = {}
-    for email in emails:
-        try:
-            resp = httpx.post(
-                "https://api.instantly.ai/api/v2/account-campaign-mappings",
-                headers=headers,
-                json={"campaign_id": campaign_id, "email": email},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            details[email] = "ok"
-        except Exception as e:
-            details[email] = f"failed:{str(e)[:100]}"
-            logger.warning("setup-instantly: add account %s failed: %s", email, e)
-
-    ok = sum(1 for v in details.values() if v == "ok")
-    failed = len(details) - ok
-    logger.info("setup-instantly: added accounts — ok=%d failed=%d", ok, failed)
-    return {"ok": ok, "failed": failed, "details": details}
+        return {"ok": len(emails), "accounts_set": len(emails)}
+    except Exception as e:
+        logger.warning("setup-instantly: set email_accounts failed: %s", e)
+        return {"ok": 0, "error": str(e)[:200]}
 
 
 @router.post("/setup-instantly")
@@ -647,8 +624,13 @@ def setup_instantly_campaigns():
     # 3. Fetch all sending account emails
     account_emails = _get_all_account_emails(headers)
 
-    # 4. Create DW-ActiveCustomer campaign
-    active_customer_id = _create_instantly_campaign(headers, "DW-ActiveCustomer")
+    # 4. Use existing campaign if already created; otherwise create it
+    _existing_id = _CAMPAIGN_META.get("ACTIVE_CUSTOMER", {}).get("instantly_id", "").strip()
+    if _existing_id:
+        active_customer_id = _existing_id
+        logger.info("setup-instantly: using existing ACTIVE_CUSTOMER id=%s", active_customer_id)
+    else:
+        active_customer_id = _create_instantly_campaign(headers, "DW-ActiveCustomer")
     configure_results: dict = {}
 
     if active_customer_id:
