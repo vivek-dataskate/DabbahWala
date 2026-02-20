@@ -102,32 +102,32 @@ _CAMPAIGN_META: dict[str, dict] = {
     "NURTURE_SLOW": {
         "label": "DW-NurtureSlow-ColdContacts",
         "json_file": "nurture_slow.json",
-        "instantly_id": "",  # set by setup-instantly endpoint
+        "instantly_id": "90ecd160-22cc-46b1-9fa5-9342fe970837",
     },
     "PROMO_STANDARD": {
-        "label": "DW-PromoStandard-Engaged",
+        "label": "DW-PromoStandard-ActiveEngaged",
         "json_file": "promo_standard.json",
-        "instantly_id": "",  # set by setup-instantly endpoint
+        "instantly_id": "30292b3d-9f39-4ef3-b0ba-ea15c634acef",
     },
     "ACTIVE_CUSTOMER": {
         "label": "DW-ActiveCustomer",
-        "json_file": "promo_standard.json",  # reuse promo_standard sequences
-        "instantly_id": "",  # set by setup-instantly endpoint
+        "json_file": "promo_standard.json",  # reuse promo_standard sequences until dedicated copy is made
+        "instantly_id": "",  # populated after setup-instantly creates this campaign
     },
     "PROMO_AGGRESSIVE": {
-        "label": "DW-PromoAggressive-Lapsed",
+        "label": "DW-PromoAggressive-LapsedCustomers",
         "json_file": "promo_aggressive.json",
-        "instantly_id": "",  # set by setup-instantly endpoint
+        "instantly_id": "c9af877a-77ac-491c-a5ee-a8ea7646416b",
     },
     "NEW_CUSTOMER_ONBOARDING": {
         "label": "DW-NewCustomerOnboarding",
         "json_file": "new_customer_onboarding.json",
-        "instantly_id": "",  # set by setup-instantly endpoint
+        "instantly_id": "c4c42e73-83fd-4d43-b629-db5b11be66ae",
     },
     "REACTIVATION": {
         "label": "DW-Reactivation-LongDormant",
         "json_file": "reactivation.json",
-        "instantly_id": "",  # set by setup-instantly endpoint
+        "instantly_id": "0c760ec8-3415-48cd-87ff-b58babc17dde",
     },
 }
 
@@ -420,43 +420,39 @@ Return ONLY a valid JSON object with two keys — "subject" and "body" — no ot
     }
 
 
-# ── One-time setup: create / ensure all DabbahWala campaigns exist in Instantly ──
+# ── One-time setup: tag existing campaigns + create ACTIVE_CUSTOMER ──────────
 
 _DABBAHWALA_TAG = "Dabbahwala"
 
-_CAMPAIGN_INSTANTLY_NAMES = {
-    "NURTURE_SLOW":           "DW-NurtureSlow-ColdContacts",
-    "PROMO_STANDARD":         "DW-PromoStandard-Engaged",
-    "ACTIVE_CUSTOMER":        "DW-ActiveCustomer",
-    "PROMO_AGGRESSIVE":       "DW-PromoAggressive-Lapsed",
-    "NEW_CUSTOMER_ONBOARDING":"DW-NewCustomerOnboarding",
-    "REACTIVATION":           "DW-Reactivation-LongDormant",
-}
+# The 5 campaigns that already exist in Instantly (confirmed IDs)
+_EXISTING_CAMPAIGN_IDS: list[str] = [
+    "90ecd160-22cc-46b1-9fa5-9342fe970837",  # NURTURE_SLOW
+    "30292b3d-9f39-4ef3-b0ba-ea15c634acef",  # PROMO_STANDARD
+    "c9af877a-77ac-491c-a5ee-a8ea7646416b",  # PROMO_AGGRESSIVE
+    "c4c42e73-83fd-4d43-b629-db5b11be66ae",  # NEW_CUSTOMER_ONBOARDING
+    "0c760ec8-3415-48cd-87ff-b58babc17dde",  # REACTIVATION
+]
 
 
-def _get_or_create_instantly_campaign(headers: dict, name: str) -> Optional[str]:
-    """
-    Look up a campaign by name in Instantly; create it if missing.
-    Returns the campaign ID string, or None on failure.
-    """
-    # 1. Fetch existing campaigns and look for a match by name
+def _tag_instantly_campaign(headers: dict, campaign_id: str, tag: str) -> bool:
+    """Add a tag to an Instantly campaign. Returns True on success."""
     try:
-        resp = httpx.get(
-            "https://api.instantly.ai/api/v2/campaigns",
+        resp = httpx.post(
+            f"https://api.instantly.ai/api/v2/campaigns/{campaign_id}/tags",
             headers=headers,
-            params={"limit": 100},
-            timeout=15,
+            json={"tags": [tag]},
+            timeout=10,
         )
         resp.raise_for_status()
-        data = resp.json()
-        items = data if isinstance(data, list) else (data.get("items") or data.get("campaigns") or [])
-        for c in items:
-            if (c.get("name") or "").strip() == name:
-                return str(c.get("id") or c.get("campaign_id") or "").strip() or None
+        logger.info("setup-instantly: tagged campaign %s with '%s'", campaign_id, tag)
+        return True
     except Exception as e:
-        logger.warning("setup-instantly: failed to list campaigns: %s", e)
+        logger.warning("setup-instantly: tagging campaign %s failed: %s", campaign_id, e)
+        return False
 
-    # 2. Create campaign
+
+def _create_instantly_campaign(headers: dict, name: str) -> Optional[str]:
+    """Create a new campaign in Instantly. Returns the new campaign ID or None."""
     try:
         resp = httpx.post(
             "https://api.instantly.ai/api/v2/campaigns",
@@ -472,32 +468,20 @@ def _get_or_create_instantly_campaign(headers: dict, name: str) -> Optional[str]
             return campaign_id
     except Exception as e:
         logger.error("setup-instantly: failed to create campaign '%s': %s", name, e)
-
     return None
-
-
-def _tag_instantly_campaign(headers: dict, campaign_id: str, tag: str) -> None:
-    """Add a tag to an Instantly campaign. Non-fatal on failure."""
-    try:
-        resp = httpx.post(
-            f"https://api.instantly.ai/api/v2/campaigns/{campaign_id}/tags",
-            headers=headers,
-            json={"tags": [tag]},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        logger.info("setup-instantly: tagged campaign %s with '%s'", campaign_id, tag)
-    except Exception as e:
-        logger.warning("setup-instantly: tagging campaign %s failed (non-fatal): %s", campaign_id, e)
 
 
 @router.post("/setup-instantly")
 def setup_instantly_campaigns():
     """
-    One-time setup: ensure every DabbahWala campaign exists in Instantly with the
-    'Dabbahwala' tag. Creates any missing campaign, then returns all campaign IDs.
+    One-time setup endpoint:
+      1. Tags the 5 existing DabbahWala campaigns in Instantly with 'Dabbahwala'
+      2. Creates the new DW-ActiveCustomer campaign (active_customer segment)
+      3. Tags the new campaign with 'Dabbahwala'
+      4. Saves the new campaign ID into campaign_routing DB row
 
-    After calling this endpoint, copy the returned IDs into _CAMPAIGN_META.
+    After this runs, update ACTIVE_CUSTOMER instantly_id in _CAMPAIGN_META
+    and in migration 044.
     """
     if not INSTANTLY_API_KEY:
         raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
@@ -507,18 +491,35 @@ def setup_instantly_campaigns():
         "Content-Type": "application/json",
     }
 
-    results = {}
-    for campaign_key, instantly_name in _CAMPAIGN_INSTANTLY_NAMES.items():
-        campaign_id = _get_or_create_instantly_campaign(headers, instantly_name)
-        if campaign_id:
-            _tag_instantly_campaign(headers, campaign_id, _DABBAHWALA_TAG)
-        results[campaign_key] = {
-            "instantly_name": instantly_name,
-            "instantly_id": campaign_id or "FAILED",
-        }
+    # 1. Tag the 5 existing campaigns
+    tag_results = {}
+    for cid in _EXISTING_CAMPAIGN_IDS:
+        tag_results[cid] = _tag_instantly_campaign(headers, cid, _DABBAHWALA_TAG)
+
+    # 2. Create ACTIVE_CUSTOMER campaign
+    active_customer_id = _create_instantly_campaign(headers, "DW-ActiveCustomer")
+    if active_customer_id:
+        _tag_instantly_campaign(headers, active_customer_id, _DABBAHWALA_TAG)
+        # 3. Persist the new ID into campaign_routing
+        try:
+            with get_cursor(commit=True) as cur:
+                cur.execute(
+                    """UPDATE campaign_routing
+                          SET instantly_campaign_id   = %s,
+                              instantly_campaign_name = 'DW-ActiveCustomer'
+                        WHERE lifecycle_segment = 'active_customer'""",
+                    (active_customer_id,),
+                )
+            logger.info("setup-instantly: saved ACTIVE_CUSTOMER id=%s to campaign_routing", active_customer_id)
+        except Exception as e:
+            logger.error("setup-instantly: failed to save ACTIVE_CUSTOMER id to DB: %s", e)
 
     return {
         "status": "ok",
-        "campaigns": results,
-        "next_step": "Copy the instantly_id values into _CAMPAIGN_META in campaigns.py and create migration 044",
+        "tagged_existing": tag_results,
+        "active_customer_campaign_id": active_customer_id or "FAILED",
+        "next_step": (
+            f"Update _CAMPAIGN_META['ACTIVE_CUSTOMER']['instantly_id'] = '{active_customer_id or 'FAILED'}' "
+            "in campaigns.py, then redeploy."
+        ),
     }
