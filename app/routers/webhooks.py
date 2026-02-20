@@ -532,10 +532,38 @@ async def shipday_webhook(request: Request):
                              "source": "webhook", "driver_name": driver_name}))
             )
 
+        # Ingest delivery_update event for every status change (contact_id always present)
+        if contact_id:
+            try:
+                cur.execute(
+                    "SELECT ingest_event(%s, %s::event_type, %s)",
+                    (contact_id, "delivery_update",
+                     json.dumps({"shipday_order_id": order_id, "raw_status": raw_status,
+                                 "mapped_status": our_status, "order_ref": order_ref,
+                                 "source": "shipday_webhook"}))
+                )
+            except Exception as e:
+                logger.warning("Shipday webhook: could not ingest delivery_update event (non-fatal): %s", e)
+
+        # Run lifecycle so the contact is re-evaluated immediately
+        lifecycle_result = {}
+        if contact_id:
+            try:
+                cur.execute("SELECT * FROM run_lifecycle_cycle()")
+                lc = cur.fetchone()
+                lifecycle_result = {
+                    "contacts_updated": lc["contacts_updated"] if lc else 0,
+                    "campaigns_queued": lc["campaigns_queued"] if lc else 0,
+                }
+            except Exception as e:
+                logger.warning("Shipday webhook: lifecycle cycle failed (non-fatal): %s", e)
+                lifecycle_result = {"error": str(e)}
+
     return {
         "status":         "ok",
         "order_id":       order_id,
         "shipday_status": raw_status,
         "mapped_status":  our_status,
         "contact_found":  contact_id is not None,
+        "lifecycle":      lifecycle_result,
     }
