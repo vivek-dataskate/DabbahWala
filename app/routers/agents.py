@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from app.db import get_cursor
 from app.routers.campaigns import push_lead_to_instantly
 from app.services.airtable_sync import create_field_sales_task
+from app.services.drive import upload_csv as _drive_upload_csv
 
 logger = logging.getLogger(__name__)
 
@@ -1901,16 +1902,18 @@ def send_activity_report(req: ReportRequest):
     summary, detail_rows = _fetch_activity_data(report_date)
     client = _claude()
     html_body = _run_activity_report_agent(client, report_date, summary)
+    csv_filename = f"dabbahwala_activity_{report_date}.csv"
     csv_content = _rows_to_csv(detail_rows)
 
     _send_email_via_smtp(
         to=to_email,
         subject=f"DabbahWala Activity Report — {report_date}",
         html_body=html_body,
-        csv_filename=f"dabbahwala_activity_{report_date}.csv",
+        csv_filename=csv_filename,
         csv_content=csv_content,
     )
-    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary}
+    drive_url = _drive_upload_csv(csv_content, csv_filename)
+    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary, "drive_url": drive_url or None}
 
 
 @router.post("/report/outcome")
@@ -1922,16 +1925,18 @@ def send_outcome_report(req: ReportRequest):
     summary, detail_rows = _fetch_outcome_data(report_date)
     client = _claude()
     html_body = _run_outcome_report_agent(client, report_date, summary)
+    csv_filename = f"dabbahwala_outcomes_{report_date}.csv"
     csv_content = _rows_to_csv(detail_rows)
 
     _send_email_via_smtp(
         to=to_email,
         subject=f"DabbahWala Results Report — {report_date}",
         html_body=html_body,
-        csv_filename=f"dabbahwala_outcomes_{report_date}.csv",
+        csv_filename=csv_filename,
         csv_content=csv_content,
     )
-    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary}
+    drive_url = _drive_upload_csv(csv_content, csv_filename)
+    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary, "drive_url": drive_url or None}
 
 
 # --- Action queue management ---

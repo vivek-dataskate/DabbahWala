@@ -23,6 +23,7 @@ from pydantic import BaseModel
 
 from app.db import get_cursor
 from app.services.airtable_sync import create_field_sales_task
+from app.services.drive import upload_csv as _drive_upload_csv
 
 logger = logging.getLogger(__name__)
 
@@ -289,49 +290,44 @@ def _save_shipday_csv(orders_grouped: dict) -> str:
 
 
 def _upload_shipday_csv_to_drive(csv_content: str, filename: str) -> str:
-    """Upload a CSV string to Google Drive and return the web view link.
+    """Thin wrapper around the shared Drive upload service."""
+    return _drive_upload_csv(csv_content, filename)
 
-    Requires env vars:
-      GOOGLE_SERVICE_ACCOUNT_JSON  — full JSON of the service account key file
-      GOOGLE_DRIVE_FOLDER_ID       — Drive folder ID to upload into
 
-    Returns the Drive web view URL, or empty string on any failure.
-    """
+@router.get("/test-drive")
+def test_drive_connection():
+    """Test Google Drive connectivity. Returns service account email and upload status."""
     sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
     folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
-    if not sa_json or not folder_id:
-        return ""
+
+    if not sa_json:
+        return {"ok": False, "error": "GOOGLE_SERVICE_ACCOUNT_JSON is not set"}
+    if not folder_id:
+        return {"ok": False, "error": "GOOGLE_DRIVE_FOLDER_ID is not set"}
 
     try:
-        from google.oauth2 import service_account
-        from googleapiclient.discovery import build
-        from googleapiclient.http import MediaIoBaseUpload
-
-        creds = service_account.Credentials.from_service_account_info(
-            json.loads(sa_json),
-            scopes=["https://www.googleapis.com/auth/drive.file"],
-        )
-        service = build("drive", "v3", credentials=creds, cache_discovery=False)
-
-        file_metadata = {"name": filename, "parents": [folder_id]}
-        media = MediaIoBaseUpload(
-            io.BytesIO(csv_content.encode("utf-8")),
-            mimetype="text/csv",
-            resumable=False,
-        )
-        uploaded = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields="id,webViewLink",
-            supportsAllDrives=True,
-        ).execute()
-
-        link = uploaded.get("webViewLink", "")
-        logger.info("Shipday CSV uploaded to Drive: %s", link)
-        return link
+        sa_data = json.loads(sa_json)
+        client_email = sa_data.get("client_email", "unknown")
     except Exception as e:
-        logger.warning("Google Drive upload failed: %s", e)
-        return ""
+        return {"ok": False, "error": f"Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON: {e}"}
+
+    test_content = "test,file\n1,drive_connection_ok"
+    link = _drive_upload_csv(test_content, "_dabbahwala_drive_test.csv")
+    if link:
+        return {
+            "ok": True,
+            "service_account_email": client_email,
+            "folder_id": folder_id,
+            "test_file_url": link,
+            "message": f"Drive connection OK. Service account: {client_email}",
+        }
+    return {
+        "ok": False,
+        "service_account_email": client_email,
+        "folder_id": folder_id,
+        "error": "Upload failed — check Render logs for details (look for 'Drive upload failed')",
+        "hint": f"Ensure the Drive folder is shared with Editor access for: {client_email}",
+    }
 
 
 @router.get("/download-shipday-csv/{file_id}")
