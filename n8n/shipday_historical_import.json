@@ -1,0 +1,198 @@
+{
+  "name": "DabbahWala \u2014 Shipday Historical Import (Manual)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Run Import",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Config — edit days_back here if you want a shorter window\nreturn [{ json: {\n  days_back: 365,\n  max_pages: 500\n}}];"
+      },
+      "id": "set-config",
+      "name": "Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/shipday/import-all-and-run-agents",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ days_back: $json.days_back, max_pages: $json.max_pages }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "start-pipeline",
+      "name": "Start Import Pipeline",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const result = $input.item.json;\nconst started = result.status === 'started';\nconsole.log(`Pipeline kick-off: status=${result.status} days_back=${result.days_back}`);\nif (!started) {\n  console.warn('Unexpected response from import-all-and-run-agents:', JSON.stringify(result));\n}\nreturn [{ json: { kicked_off: started, kick_off_response: result } }];"
+      },
+      "id": "log-kickoff",
+      "name": "Log Kick-off",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "unit": "minutes",
+        "value": 5
+      },
+      "id": "wait-phase1",
+      "name": "Wait 5 min (orders syncing)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1100, 300],
+      "webhookId": "shipday-import-wait-1"
+    },
+    {
+      "parameters": {
+        "url": "https://dabbahwala-latest.onrender.com/api/shipday/import-pipeline-status",
+        "options": { "timeout": 15000 }
+      },
+      "id": "poll-status-1",
+      "name": "Poll Status (5 min)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "still-running",
+              "leftValue": "={{ $json.pipeline_state.running }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "still-running-check",
+      "name": "Still Running?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1540, 300]
+    },
+    {
+      "parameters": {
+        "unit": "minutes",
+        "value": 10
+      },
+      "id": "wait-phase2",
+      "name": "Wait 10 more min",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1760, 200],
+      "webhookId": "shipday-import-wait-2"
+    },
+    {
+      "parameters": {
+        "url": "https://dabbahwala-latest.onrender.com/api/shipday/import-pipeline-status",
+        "options": { "timeout": 15000 }
+      },
+      "id": "poll-status-2",
+      "name": "Poll Status (15 min)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1980, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "unit": "minutes",
+        "value": 20
+      },
+      "id": "wait-phase3",
+      "name": "Wait 20 more min",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2200, 200],
+      "webhookId": "shipday-import-wait-3"
+    },
+    {
+      "parameters": {
+        "url": "https://dabbahwala-latest.onrender.com/api/shipday/import-pipeline-status",
+        "options": { "timeout": 15000 }
+      },
+      "id": "poll-status-final",
+      "name": "Poll Status (35 min — final)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2420, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const s = ($json.pipeline_state || $json);\nconst lines = [\n  `=== Shipday Historical Import — COMPLETE ===`,\n  `Phase:            ${s.phase || 'unknown'}`,\n  `Orders synced:    ${s.orders_synced || 0}`,\n  `Orders matched:   ${s.orders_matched || 0}`,\n  `Contacts created: ${s.contacts_created || 0}`,\n  `Orders created:   ${s.orders_created || 0}`,\n  `Orders updated:   ${s.orders_updated || 0}`,\n  `Comms synced:     ${s.comms_synced || 0}`,\n  `Agents run:       ${s.agents_run || 0}`,\n  `Agent errors:     ${s.agent_errors || 0}`,\n  `Started:          ${s.started_at || '-'}`,\n  `Completed:        ${s.completed_at || '(still running)'}`,\n  s.error ? `ERROR: ${s.error}` : null\n].filter(Boolean);\nconsole.log(lines.join('\\n'));\nreturn [{ json: { summary: lines.join('\\n'), pipeline_state: s } }];"
+      },
+      "id": "summary",
+      "name": "Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2640, 300]
+    }
+  ],
+  "connections": {
+    "Run Import": {
+      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+    },
+    "Config": {
+      "main": [[{ "node": "Start Import Pipeline", "type": "main", "index": 0 }]]
+    },
+    "Start Import Pipeline": {
+      "main": [[{ "node": "Log Kick-off", "type": "main", "index": 0 }]]
+    },
+    "Log Kick-off": {
+      "main": [[{ "node": "Wait 5 min (orders syncing)", "type": "main", "index": 0 }]]
+    },
+    "Wait 5 min (orders syncing)": {
+      "main": [[{ "node": "Poll Status (5 min)", "type": "main", "index": 0 }]]
+    },
+    "Poll Status (5 min)": {
+      "main": [[{ "node": "Still Running?", "type": "main", "index": 0 }]]
+    },
+    "Still Running?": {
+      "main": [
+        [{ "node": "Wait 10 more min", "type": "main", "index": 0 }],
+        [{ "node": "Summary", "type": "main", "index": 0 }]
+      ]
+    },
+    "Wait 10 more min": {
+      "main": [[{ "node": "Poll Status (15 min)", "type": "main", "index": 0 }]]
+    },
+    "Poll Status (15 min)": {
+      "main": [[{ "node": "Wait 20 more min", "type": "main", "index": 0 }]]
+    },
+    "Wait 20 more min": {
+      "main": [[{ "node": "Poll Status (35 min — final)", "type": "main", "index": 0 }]]
+    },
+    "Poll Status (35 min — final)": {
+      "main": [[{ "node": "Summary", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "executionTimeout": 3600
+  }
+}
