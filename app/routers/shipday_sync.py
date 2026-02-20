@@ -210,10 +210,11 @@ _sync_state: dict = {
 }
 
 
-def _run_feedback_sync(days_back: int = 7) -> None:
+def _run_feedback_sync(days_back: int = 7, all_historical: bool = False) -> None:
     """
     Background worker.  For every delivered Shipday order in the last N days
-    that hasn't been communication-synced yet:
+    (or ALL delivered orders when all_historical=True) that hasn't been
+    communication-synced yet:
       1. Fetch full order detail from Shipday API
       2. Store feedback / delivery notes / proof-of-delivery
       3. Create opportunities for actionable sentiment
@@ -244,28 +245,48 @@ def _run_feedback_sync(days_back: int = 7) -> None:
     try:
         # Find delivered orders that have not yet had their feedback pulled
         with get_cursor(commit=False) as cur:
-            cur.execute(
-                """
-                SELECT sor.shipday_order_id,
-                       sor.contact_id,
-                       sor.actual_delivery
-                FROM   shipday_orders_raw sor
-                WHERE  sor.shipday_status IN ('COMPLETED', 'DELIVERED')
-                  AND  sor.contact_id IS NOT NULL
-                  AND  (
-                      sor.actual_delivery >= %s
-                      OR sor.synced_at    >= %s
-                  )
-                  AND  NOT EXISTS (
-                      SELECT 1
-                      FROM   shipday_communications sc
-                      WHERE  sc.shipday_order_id = sor.shipday_order_id
-                        AND  sc.comm_type = 'customer_feedback'
-                  )
-                ORDER BY sor.actual_delivery DESC NULLS LAST
-                """,
-                (cutoff, cutoff),
-            )
+            if all_historical:
+                # Process ALL delivered orders regardless of date
+                cur.execute(
+                    """
+                    SELECT sor.shipday_order_id,
+                           sor.contact_id,
+                           sor.actual_delivery
+                    FROM   shipday_orders_raw sor
+                    WHERE  sor.shipday_status IN ('COMPLETED', 'DELIVERED')
+                      AND  sor.contact_id IS NOT NULL
+                      AND  NOT EXISTS (
+                          SELECT 1
+                          FROM   shipday_communications sc
+                          WHERE  sc.shipday_order_id = sor.shipday_order_id
+                            AND  sc.comm_type = 'customer_feedback'
+                      )
+                    ORDER BY sor.actual_delivery DESC NULLS LAST
+                    """
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT sor.shipday_order_id,
+                           sor.contact_id,
+                           sor.actual_delivery
+                    FROM   shipday_orders_raw sor
+                    WHERE  sor.shipday_status IN ('COMPLETED', 'DELIVERED')
+                      AND  sor.contact_id IS NOT NULL
+                      AND  (
+                          sor.actual_delivery >= %s
+                          OR sor.synced_at    >= %s
+                      )
+                      AND  NOT EXISTS (
+                          SELECT 1
+                          FROM   shipday_communications sc
+                          WHERE  sc.shipday_order_id = sor.shipday_order_id
+                            AND  sc.comm_type = 'customer_feedback'
+                      )
+                    ORDER BY sor.actual_delivery DESC NULLS LAST
+                    """,
+                    (cutoff, cutoff),
+                )
             pending = [dict(r) for r in cur.fetchall()]
 
         logger.info("Feedback sync: %d unprocessed delivered orders", len(pending))
@@ -347,6 +368,7 @@ def _run_feedback_sync(days_back: int = 7) -> None:
 class FeedbackSyncRequest(BaseModel):
     days_back:          int  = 7     # look back N days for delivered orders
     run_in_background:  bool = True
+    all_historical:     bool = False  # if True, ignore date filter and sync all orders
 
 
 @router.post("/sync-feedback")
@@ -354,6 +376,8 @@ async def sync_feedback(req: FeedbackSyncRequest, background_tasks: BackgroundTa
     """
     Poll Shipday for customer feedback, delivery instructions, and
     proof-of-delivery on all delivered orders in the last N days.
+
+    Set all_historical=True to sync ALL delivered orders regardless of date.
 
     Stores results in shipday_communications and creates Opportunities for
     actionable sentiment (negative → recovery, positive → re-order nudge).
@@ -365,14 +389,15 @@ async def sync_feedback(req: FeedbackSyncRequest, background_tasks: BackgroundTa
         return {"status": "already_running", "state": _sync_state}
 
     if req.run_in_background:
-        background_tasks.add_task(_run_feedback_sync, req.days_back)
+        background_tasks.add_task(_run_feedback_sync, req.days_back, req.all_historical)
         return {
-            "status":    "started",
-            "days_back": req.days_back,
-            "message":   "Feedback sync running in background. Poll /api/shipday/feedback-stats for results.",
+            "status":        "started",
+            "days_back":     req.days_back,
+            "all_historical": req.all_historical,
+            "message":       "Feedback sync running in background. Poll /api/shipday/feedback-stats for results.",
         }
 
-    _run_feedback_sync(req.days_back)
+    _run_feedback_sync(req.days_back, req.all_historical)
     return {"status": "complete", "state": _sync_state}
 
 
