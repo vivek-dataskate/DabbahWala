@@ -150,7 +150,7 @@
       "note": "Calls POST /api/webhooks/sync-campaigns to fetch Instantly campaigns tagged 'dabbahwala' and upsert into instantly_campaigns DB table."
     },
     "shipday_feedback_sync": {
-      "id": "",
+      "id": "HTi0M05Qc0QO3WMT",
       "name": "DabbahWala \u2014 Shipday Feedback Sync",
       "schedule": "Every hour",
       "active": true,
