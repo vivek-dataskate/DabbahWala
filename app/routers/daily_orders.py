@@ -964,7 +964,7 @@ async def process_daily_orders(
                                    task.get('first_name'), task.get('last_name'), e)
         logger.info("Airtable sync complete: %d/%d pushed", airtable_synced, len(airtable_tasks))
 
-    # Exclude duplicate orders from Shipday push and CSV generation
+    # Exclude already-existing orders from Shipday API push (no duplicates), but CSV uses all orders
     orders_to_dispatch = {k: v for k, v in orders_grouped.items() if k not in existing_order_nums}
 
     # Push orders to Shipday only when the caller explicitly opts in
@@ -983,9 +983,9 @@ async def process_daily_orders(
     # Always generate a Shipday CSV so the user can do a manual import if needed
     shipday_csv_url = ""
     shipday_drive_url = ""
-    if orders_to_dispatch:
+    if orders_grouped:
         try:
-            csv_content = _generate_shipday_csv(orders_to_dispatch)
+            csv_content = _generate_shipday_csv(orders_grouped)
             # Save locally as a download fallback
             _SHIPDAY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
             file_id = str(uuid.uuid4())
