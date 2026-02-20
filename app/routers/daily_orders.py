@@ -982,14 +982,24 @@ async def process_daily_orders(
     if orders_grouped:
         try:
             csv_content = _generate_shipday_csv(orders_grouped)
-            # Save locally as a download fallback
-            _SHIPDAY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-            file_id = str(uuid.uuid4())
             csv_filename = f"shipday_orders_{order_date_str}.csv"
-            (_SHIPDAY_EXPORT_DIR / f"{file_id}.csv").write_text(csv_content, encoding="utf-8")
-            shipday_csv_url = f"/api/daily-orders/download-shipday-csv/{file_id}"
             # Upload to Google Drive if credentials are configured
             shipday_drive_url = _upload_shipday_csv_to_drive(csv_content, csv_filename)
+            if shipday_drive_url:
+                # Build a direct download URL from the Drive file ID so the
+                # "Download CSV" button works without relying on /tmp (which
+                # is wiped on every Render redeploy).
+                _m = re.search(r'/file/d/([^/?]+)', shipday_drive_url)
+                if _m:
+                    shipday_csv_url = (
+                        f"https://drive.google.com/uc?export=download&id={_m.group(1)}"
+                    )
+            if not shipday_csv_url:
+                # Fallback when Drive is not configured: save locally
+                _SHIPDAY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+                file_id = str(uuid.uuid4())
+                (_SHIPDAY_EXPORT_DIR / f"{file_id}.csv").write_text(csv_content, encoding="utf-8")
+                shipday_csv_url = f"/api/daily-orders/download-shipday-csv/{file_id}"
         except Exception as e:
             logger.warning("Failed to generate Shipday CSV: %s", e)
 
