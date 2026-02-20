@@ -1613,14 +1613,19 @@ class SingleContactRequest(BaseModel):
 class ContactEventRequest(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
+    name: Optional[str] = None
 
 
 class ReportRequest(BaseModel):
     report_date: Optional[str] = None  # defaults to today
 
 
-def _lookup_contact_id(phone: Optional[str] = None, email: Optional[str] = None) -> Optional[int]:
-    """Find a contact by phone or email. Returns None if not found."""
+def _lookup_contact_id(
+    phone: Optional[str] = None,
+    email: Optional[str] = None,
+    name: Optional[str] = None,
+) -> Optional[int]:
+    """Find a contact by phone, email, or name. Returns None if not found."""
     with get_cursor(commit=False) as cur:
         if phone:
             # Normalise: strip spaces/dashes, keep leading +
@@ -1631,6 +1636,17 @@ def _lookup_contact_id(phone: Optional[str] = None, email: Optional[str] = None)
             )
         elif email:
             cur.execute("SELECT id FROM contacts WHERE email = %s LIMIT 1", (email,))
+        elif name:
+            parts = name.strip().split(None, 1)
+            first = parts[0]
+            last  = parts[1] if len(parts) > 1 else ""
+            cur.execute(
+                """SELECT id FROM contacts
+                   WHERE (first_name ILIKE %s AND last_name ILIKE %s)
+                      OR CONCAT(first_name, ' ', last_name) ILIKE %s
+                   LIMIT 1""",
+                (first, last if last else "%", f"%{name.strip()}%"),
+            )
         else:
             return None
         row = cur.fetchone()
@@ -1667,13 +1683,13 @@ def run_cycle_for_contact(req: ContactEventRequest):
     Called by the Telnyx inbound collector immediately after every new event,
     so every piece of evidence is evaluated for opportunity in real time.
     """
-    logger.info("POST /cycle/run-for-contact phone=%s email=%s", req.phone, req.email)
-    contact_id = _lookup_contact_id(phone=req.phone, email=req.email)
+    logger.info("POST /cycle/run-for-contact phone=%s email=%s name=%s", req.phone, req.email, req.name)
+    contact_id = _lookup_contact_id(phone=req.phone, email=req.email, name=req.name)
     if not contact_id:
         logger.warning(
-            "Contact not found for phone=%s email=%s — skipping cycle", req.phone, req.email
+            "Contact not found for phone=%s email=%s name=%s — skipping cycle", req.phone, req.email, req.name
         )
-        return {"status": "skipped", "reason": "Contact not found", "phone": req.phone, "email": req.email}
+        return {"status": "skipped", "reason": "Contact not found", "phone": req.phone, "email": req.email, "name": req.name}
     try:
         result = _run_full_cycle(contact_id)
         return {"status": "ok", **result}

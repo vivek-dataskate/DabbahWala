@@ -36,6 +36,7 @@ CATEGORIES = {
     "order_summary_by_delivery_date": "Orders grouped and summarized by delivery date",
     "revenue_trends": "Weekly and monthly revenue totals with trend analysis",
     "communication_history": "SMS/call history for a specific customer",
+    "team_notes": "Browse or submit field notes, customer feedback, and delivery issues",
     "ground_team_notes": "Browse recent field notes from the ground team",
     "ad_copies": "Browse recent social media ad copies",
     "submit_input": "Submit a new observation, note, or question",
@@ -999,6 +1000,81 @@ def _handle_submit_input(
     ), {"id": row["id"], "type": actual_type, "author": actual_author}
 
 
+def _handle_team_notes(
+    question: str,
+    input_type: str | None,
+    author: str | None,
+) -> tuple[str, dict]:
+    """Combined handler: browse notes or submit a new one.
+
+    - input_type == 'browse' (or None/empty)  → list recent notes across all types
+    - any other input_type                     → submit a new note of that type
+    """
+    NOTE_TYPES = ("ground_note", "customer_feedback", "delivery_issue", "observation")
+
+    # ── Submit mode ──────────────────────────────────────────────────────────
+    if input_type and input_type in NOTE_TYPES:
+        return _handle_submit_input(question, author, input_type)
+
+    # ── Browse mode ──────────────────────────────────────────────────────────
+    with get_cursor(commit=False) as cur:
+        # Search if keyword given; otherwise show latest across field note types
+        if question and len(question) > 3:
+            # search across all field note content types
+            cur.execute(
+                """
+                SELECT id, content_type, title, body, author, created_at
+                FROM team_content
+                WHERE content_type IN ('ground_note','customer_feedback','delivery_issue','observation')
+                  AND (body ILIKE %s OR title ILIKE %s)
+                ORDER BY created_at DESC
+                LIMIT 20
+                """,
+                (f"%{question}%", f"%{question}%"),
+            )
+        else:
+            cur.execute(
+                """
+                SELECT id, content_type, title, body, author, created_at
+                FROM team_content
+                WHERE content_type IN ('ground_note','customer_feedback','delivery_issue','observation')
+                ORDER BY created_at DESC
+                LIMIT 20
+                """
+            )
+        results = [dict(r) for r in cur.fetchall()]
+
+    if not results:
+        return (
+            "No team notes found yet.\n\n"
+            "To submit a note, select a note type (Field Observation, Customer Feedback, etc.) "
+            "and type your content above.", {}
+        )
+
+    TYPE_LABEL = {
+        "ground_note": "Field Note",
+        "customer_feedback": "Customer Feedback",
+        "delivery_issue": "Delivery Issue",
+        "observation": "Observation",
+    }
+    lines = [f"## Team Notes ({len(results)} recent)", ""]
+    for r in results:
+        date_str = r.get("created_at", "")
+        if hasattr(date_str, "strftime"):
+            date_str = date_str.strftime("%b %d, %Y")
+        label = TYPE_LABEL.get(r.get("content_type", ""), r.get("content_type", ""))
+        author_str = r.get("author") or "Anonymous"
+        body = (r.get("body") or "")[:300]
+        lines.extend([
+            f"### [{label}] {r.get('title', 'Untitled')}",
+            f"**By**: {author_str} | **Date**: {date_str}",
+            body,
+            "",
+        ])
+
+    return "\n".join(lines), {"count": len(results)}
+
+
 # ---------------------------------------------------------------------------
 # Tier 2: Free-form — Claude with real data context
 # ---------------------------------------------------------------------------
@@ -1296,6 +1372,8 @@ async def handle_query(req: QueryRequest):
             answer, data = _handle_revenue_trends(question, date_from, date_to)
         elif category == "communication_history":
             answer, data = _handle_communication_history(question, email, phone, name)
+        elif category == "team_notes":
+            answer, data = _handle_team_notes(question, req.input_type, req.author)
         elif category == "ground_team_notes":
             answer, data = _handle_ground_team_notes(question)
         elif category == "ad_copies":
@@ -1303,7 +1381,14 @@ async def handle_query(req: QueryRequest):
         elif category == "submit_input":
             answer, data = _handle_submit_input(question, req.author, req.input_type)
         elif category == "broadcast_history":
-            answer, data = _handle_broadcast_history(question, date_from, date_to)
+            try:
+                answer, data = _handle_broadcast_history(question, date_from, date_to)
+            except Exception as exc:
+                if "broadcast_jobs" in str(exc).lower() or "does not exist" in str(exc).lower():
+                    answer = "Broadcast history is not yet available — the broadcast_jobs table has not been created on this environment."
+                    data = {}
+                else:
+                    raise
         elif category == "free_form":
             answer, data = await _handle_free_form(question)
         else:
