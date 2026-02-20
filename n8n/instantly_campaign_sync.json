@@ -20,17 +20,61 @@
     },
     {
       "parameters": {
+        "method": "GET",
+        "url": "https://api.instantly.ai/api/v2/campaigns",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "instantly-api-key",
+          "name": "Instantly API Key"
+        }
+      },
+      "id": "fetch-instantly-campaigns",
+      "name": "Fetch All Instantly Campaigns",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter campaigns whose tags include 'dabbahwala' (case-insensitive)\nconst data = $input.first().json;\nconst list = Array.isArray(data) ? data\n  : (data.items || data.campaigns || data.data || []);\n\nconst filtered = list.filter(c => {\n  const tags = c.tags || [];\n  return tags.some(t => {\n    const name = typeof t === 'string' ? t : (t.name || t.label || '');\n    return name.trim().toLowerCase() === 'dabbahwala';\n  });\n});\n\nif (filtered.length === 0) {\n  return [{ json: { campaigns: [] } }];\n}\n\n// Normalise into the shape Render expects\nconst campaigns = filtered.map(c => {\n  const rawTags = c.tags || [];\n  const tagNames = rawTags.map(t => typeof t === 'string' ? t : (t.name || t.label || ''));\n  return {\n    campaign_id: String(c.id || c.campaign_id || ''),\n    name:        c.name || c.campaign_name || '',\n    tags:        tagNames,\n    status:      String(c.status || c.campaign_status || '')\n  };\n});\n\nreturn [{ json: { campaigns } }];"
+      },
+      "id": "filter-dabbahwala",
+      "name": "Filter: tag = dabbahwala",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
         "method": "POST",
         "url": "https://dabbahwala-latest.onrender.com/api/webhooks/sync-campaigns",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
           "timeout": 30000
         }
       },
-      "id": "sync-campaigns",
-      "name": "Sync DabbahWala Campaigns",
+      "id": "upsert-to-render",
+      "name": "Upsert Campaigns in Render DB",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300]
+      "position": [880, 300]
     },
     {
       "parameters": {},
@@ -38,7 +82,7 @@
       "name": "Done",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [660, 300]
+      "position": [1100, 300]
     }
   ],
   "connections": {
@@ -46,14 +90,36 @@
       "main": [
         [
           {
-            "node": "Sync DabbahWala Campaigns",
+            "node": "Fetch All Instantly Campaigns",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Sync DabbahWala Campaigns": {
+    "Fetch All Instantly Campaigns": {
+      "main": [
+        [
+          {
+            "node": "Filter: tag = dabbahwala",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter: tag = dabbahwala": {
+      "main": [
+        [
+          {
+            "node": "Upsert Campaigns in Render DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Campaigns in Render DB": {
       "main": [
         [
           {

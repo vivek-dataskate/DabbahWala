@@ -14,6 +14,7 @@ import logging
 
 import httpx
 from fastapi import APIRouter, Request
+from pydantic import BaseModel
 
 from app.config import INSTANTLY_API_KEY
 from app.db import get_cursor
@@ -73,16 +74,32 @@ def _dabbahwala_campaign_ids() -> set[str]:
 
 # ── n8n-callable sync endpoint ───────────────────────────────────────────────
 
-@router.post("/sync-campaigns")
-def sync_campaigns():
+class SyncCampaignsBody(BaseModel):
     """
-    Fetch all Instantly campaigns tagged 'dabbahwala' (case-insensitive) and
-    upsert them into instantly_campaigns with their name, tags and status.
-    Also seeds the 5 hardcoded campaigns.
+    Optional body sent by n8n after it fetches and filters campaigns from Instantly.
+    Each item: {campaign_id, name, tags: [...], status}
+    If omitted, the endpoint falls back to calling Instantly directly (manual/emergency use).
+    """
+    campaigns: list[dict] = []
 
-    Call this from n8n on a schedule (e.g. every 6 hours).
+
+@router.post("/sync-campaigns")
+def sync_campaigns(body: SyncCampaignsBody = None):
     """
-    # 1. Seed hardcoded campaigns
+    Upsert DabbahWala campaigns into instantly_campaigns.
+
+    Primary flow (n8n-driven):
+      n8n fetches campaigns from Instantly, filters by 'dabbahwala' tag, and
+      POSTs them here as {"campaigns": [{campaign_id, name, tags, status}, ...]}.
+      This endpoint just does the DB upsert — no outbound Instantly call needed.
+
+    Fallback (manual / emergency):
+      If called with no body, falls back to fetching from Instantly directly.
+      Always seeds the 5 hardcoded campaigns regardless.
+    """
+    body = body or SyncCampaignsBody()
+
+    # 1. Always seed hardcoded campaigns
     seeded = 0
     for name, meta in _CAMPAIGN_META.items():
         _upsert_campaign_db(
@@ -92,52 +109,66 @@ def sync_campaigns():
         )
         seeded += 1
 
-    # 2. Tag-based discovery from Instantly API
+    # 2a. n8n passed pre-filtered campaigns — just upsert them
     discovered = 0
     api_error = None
-    if not INSTANTLY_API_KEY:
-        api_error = "INSTANTLY_API_KEY not configured"
-    else:
-        try:
-            resp = httpx.get(
-                "https://api.instantly.ai/api/v2/campaigns",
-                headers={"Authorization": f"Bearer {INSTANTLY_API_KEY}"},
-                params={"limit": 100},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            campaigns = data if isinstance(data, list) else (
-                data.get("items") or data.get("campaigns") or []
-            )
-            for c in campaigns:
-                raw_tags = c.get("tags") or []
-                tag_names: list[str] = []
-                for t in raw_tags:
-                    if isinstance(t, str):
-                        tag_names.append(t)
-                    elif isinstance(t, dict):
-                        tag_names.append(t.get("name") or t.get("label") or "")
+    if body.campaigns:
+        for c in body.campaigns:
+            cid    = str(c.get("campaign_id") or c.get("id") or "").strip()
+            cname  = c.get("name") or c.get("campaign_name") or ""
+            tags   = c.get("tags") or []
+            status = str(c.get("status") or "")
+            if cid:
+                _upsert_campaign_db(
+                    campaign_id=cid,
+                    name=cname,
+                    tags=tags if isinstance(tags, list) else [tags],
+                    status=status,
+                    source="tag_discovered",
+                )
+                discovered += 1
+        logger.info("sync-campaigns (n8n payload): seeded=%d upserted=%d", seeded, discovered)
 
-                if any(tag.strip().lower() == "dabbahwala" for tag in tag_names):
-                    cid    = str(c.get("id") or c.get("campaign_id") or "").strip()
-                    cname  = c.get("name") or c.get("campaign_name") or ""
-                    status = str(c.get("status") or c.get("campaign_status") or "")
-                    if cid:
-                        _upsert_campaign_db(
-                            campaign_id=cid,
-                            name=cname,
-                            tags=tag_names,
-                            status=status,
-                            source="tag_discovered",
-                        )
-                        discovered += 1
-        except Exception as e:
-            api_error = str(e)[:300]
-            logger.warning("Instantly tag-based campaign sync failed: %s", e)
+    # 2b. Fallback — call Instantly ourselves
+    else:
+        logger.info("sync-campaigns: no n8n payload, falling back to Instantly API call")
+        if not INSTANTLY_API_KEY:
+            api_error = "INSTANTLY_API_KEY not configured"
+        else:
+            try:
+                resp = httpx.get(
+                    "https://api.instantly.ai/api/v2/campaigns",
+                    headers={"Authorization": f"Bearer {INSTANTLY_API_KEY}"},
+                    params={"limit": 100},
+                    timeout=10,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                campaigns = data if isinstance(data, list) else (
+                    data.get("items") or data.get("campaigns") or []
+                )
+                for c in campaigns:
+                    raw_tags = c.get("tags") or []
+                    tag_names: list[str] = []
+                    for t in raw_tags:
+                        if isinstance(t, str):
+                            tag_names.append(t)
+                        elif isinstance(t, dict):
+                            tag_names.append(t.get("name") or t.get("label") or "")
+                    if any(tag.strip().lower() == "dabbahwala" for tag in tag_names):
+                        cid    = str(c.get("id") or c.get("campaign_id") or "").strip()
+                        cname  = c.get("name") or c.get("campaign_name") or ""
+                        status = str(c.get("status") or c.get("campaign_status") or "")
+                        if cid:
+                            _upsert_campaign_db(campaign_id=cid, name=cname,
+                                                tags=tag_names, status=status,
+                                                source="tag_discovered")
+                            discovered += 1
+            except Exception as e:
+                api_error = str(e)[:300]
+                logger.warning("Instantly fallback sync failed: %s", e)
 
     total = len(_load_db_campaign_ids())
-    logger.info("sync-campaigns: seeded=%d tag_discovered=%d total_in_db=%d", seeded, discovered, total)
     return {
         "status": "ok",
         "hardcoded_seeded": seeded,
