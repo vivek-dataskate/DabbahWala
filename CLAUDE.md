@@ -33,5 +33,5 @@ After making any code changes:
 - The base64 string `OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOkJVbkNMdkRjVW5zWQ==` is the **Instantly** credential (not n8n)
 
 ### GitHub
-- Token: `GITHUB_TOKEN` env var — used for PR creation/merge via GitHub API
+- Token: stored in `$GITHUB_TOKEN` env var (PAT with repo scope) — use for PR creation/merge via GitHub API
 - Repo: `vivek-dataskate/DabbahWala`
