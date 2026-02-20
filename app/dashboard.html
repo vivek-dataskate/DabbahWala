@@ -240,13 +240,12 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
         <option value="campaign_performance">Campaign Performance — Email campaign stats</option>
         <option value="broadcast_history">Broadcast History — Past blasts, alerts &amp; delivery stats</option>
       </optgroup>
-      <optgroup label="📋 Team Content">
-        <option value="ground_team_notes">Ground Team Notes — Field notes from the team</option>
+      <optgroup label="📋 Team Notes">
+        <option value="team_notes">Team Notes — View field notes or submit a new one</option>
         <option value="ad_copies">Ad Copies — Social media ad copy library</option>
-        <option value="submit_input">Submit Note / Observation — Add a team entry</option>
       </optgroup>
       <optgroup label="🧠 AI">
-        <option value="free_form">Ask Anything (AI) — Free-form question</option>
+        <option value="free_form">Ask Anything — This week's operational data + AI analysis</option>
       </optgroup>
     </select>
   </div>
@@ -265,18 +264,29 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
     </div>
   </div>
 
-  <div class="form-group" id="q-question-group">
-    <label>Question or details <span class="hint">(optional for most categories)</span></label>
+  <div class="form-group" id="q-question-group" style="display:none">
+    <label id="q-question-label">Question or details</label>
     <textarea id="q-question" placeholder="e.g. How many lapsed customers came back this week?"></textarea>
   </div>
 
+  <div class="form-group" id="q-note-type-group" style="display:none">
+    <label>Note type <span class="hint">(select to submit a new note, or leave on Browse to view recent notes)</span></label>
+    <select id="q-note-type">
+      <option value="browse">Browse recent notes</option>
+      <option value="ground_note">Field Observation — driver or kitchen team note</option>
+      <option value="customer_feedback">Customer Feedback — compliment, complaint, request</option>
+      <option value="delivery_issue">Delivery Issue — missed, late, or damaged delivery</option>
+      <option value="observation">General Observation — anything else worth noting</option>
+    </select>
+  </div>
+
   <div class="form-group" id="q-email-group">
-    <label>Customer email <span class="hint" id="q-email-hint">(required for Customer Lookup and Communication History)</span></label>
+    <label>Customer email <span class="hint" id="q-email-hint">(at least one of: email, phone, or name)</span></label>
     <input id="q-email" type="email" placeholder="customer@example.com">
   </div>
 
   <div class="form-group" id="q-phone-group">
-    <label>Phone number <span class="hint">(optional)</span></label>
+    <label>Phone number <span class="hint">(at least one of: email, phone, or name)</span></label>
     <input id="q-phone" type="tel" placeholder="+1234567890">
   </div>
 
@@ -294,14 +304,20 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   <div class="panel-title">Run Agent Cycle</div>
   <div class="panel-desc">Run the full inference → decision → orchestrator pipeline for a single contact. Returns their sentiment, intent, engagement score, and the recommended next action. Takes 20–40 seconds.</div>
 
+  <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:8px;padding:11px 14px;margin-bottom:18px;font-size:0.84rem;color:#555">
+    Provide <strong>at least one</strong> of: email, phone, or name. All three are optional individually.
+  </div>
   <div class="form-group">
-    <label>Customer email <span class="hint">(or provide phone below)</span></label>
+    <label>Email</label>
     <input id="a-email" type="email" placeholder="customer@example.com">
   </div>
-
   <div class="form-group">
-    <label>Phone number <span class="hint">(optional — used if email is blank)</span></label>
+    <label>Phone number</label>
     <input id="a-phone" type="tel" placeholder="+1234567890">
+  </div>
+  <div class="form-group">
+    <label>Name</label>
+    <input id="a-name" type="text" placeholder="e.g. Ayasha Khan">
   </div>
 
   <button class="btn" id="a-btn" onclick="runAgent()">Run Inference &amp; Get Recommendation</button>
@@ -519,13 +535,14 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
     <div class="row2">
       <div class="form-group">
         <label>Delivery date affected <span class="hint">(defaults to today)</span></label>
-        <input type="date" id="bc-delay-date">
+        <input type="date" id="bc-delay-date" onchange="loadDelayDatePreview()">
       </div>
       <div class="form-group">
         <label>Your name <span class="hint">(optional)</span></label>
         <input type="text" id="bc-delay-author" placeholder="e.g. Vivek">
       </div>
     </div>
+    <div id="bc-delay-preview" style="display:none;background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:0.88rem;color:#0c5460"></div>
     <div class="form-group">
       <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
       <textarea id="bc-delay-sms" rows="3" placeholder="Hi! Your DabbahWala delivery for today is running 45–60 min late due to heavy rain. We appreciate your patience!"></textarea>
@@ -815,46 +832,55 @@ function resetSmsEditor() {
 }
 
 // ─── query ───────────────────────────────────────────────────────────────────
-const Q_DATE_CATS    = ['order_summary_by_order_date','order_summary_by_delivery_date','revenue_trends','broadcast_history','order_analytics'];
-const Q_CONTACT_CATS = ['customer_lookup','communication_history'];
-const Q_HIDE_CONTACT = ['pipeline_snapshot','daily_summary','order_summary_by_order_date',
-                        'order_summary_by_delivery_date','order_analytics','revenue_trends',
-                        'campaign_performance','broadcast_history','ground_team_notes','ad_copies',
-                        'who_to_contact'];
-const Q_DATE_LABELS  = {
+const Q_DATE_CATS     = ['order_summary_by_order_date','order_summary_by_delivery_date','revenue_trends','broadcast_history','order_analytics'];
+const Q_CONTACT_CATS  = ['customer_lookup','communication_history'];
+const Q_QUESTION_CATS = ['team_notes','free_form','customer_lookup','ad_copies'];
+const Q_NOTE_TYPE_CATS= ['team_notes'];
+const Q_HIDE_CONTACT  = ['pipeline_snapshot','daily_summary','order_summary_by_order_date',
+                         'order_summary_by_delivery_date','order_analytics','revenue_trends',
+                         'campaign_performance','broadcast_history','team_notes','ad_copies',
+                         'who_to_contact','free_form'];
+const Q_DATE_LABELS   = {
   order_summary_by_order_date:    'Order date range',
   order_summary_by_delivery_date: 'Delivery date range',
   revenue_trends:                 'Period (leave blank for last 12 weeks)',
   order_analytics:                'Order date range (leave blank for last 30 days)',
 };
+const Q_QUESTION_LABELS = {
+  team_notes:      'Note content or search keyword',
+  free_form:       'Your question',
+  customer_lookup: 'Customer name (if not entering email or phone)',
+  ad_copies:       'Search keyword (optional)',
+};
 const Q_PLACEHOLDERS = {
-  order_summary_by_order_date:    'Leave blank to use the date range above',
-  order_summary_by_delivery_date: 'Leave blank to use the date range above',
-  ground_team_notes:  'Search keyword (optional — leave blank for recent notes)',
-  ad_copies:          'Search keyword (optional — leave blank for recent copies)',
-  submit_input:       'Enter your observation, note, or question here…',
+  team_notes:     'Write a note to submit, or enter a keyword to search existing notes…',
+  free_form:      'e.g. Which customers are most at risk this week? What drove revenue today?',
+  customer_lookup:'e.g. John Smith (only needed if not providing email or phone)',
+  ad_copies:      'Search keyword (optional — leave blank for recent copies)',
 };
 
 function onCategoryChange() {
-  const cat      = document.getElementById('q-category').value;
-  const needsDate    = Q_DATE_CATS.includes(cat);
-  const hideContact  = Q_HIDE_CONTACT.includes(cat);
-  const needsEmail   = Q_CONTACT_CATS.includes(cat);
+  const cat         = document.getElementById('q-category').value;
+  const needsDate   = Q_DATE_CATS.includes(cat);
+  const hideContact = Q_HIDE_CONTACT.includes(cat);
+  const needsEmail  = Q_CONTACT_CATS.includes(cat);
+  const showQuestion= Q_QUESTION_CATS.includes(cat);
+  const showNoteType= Q_NOTE_TYPE_CATS.includes(cat);
 
-  document.getElementById('q-daterange-group').style.display = needsDate    ? 'block' : 'none';
-  document.getElementById('q-email-group').style.display     = hideContact  ? 'none'  : 'block';
-  document.getElementById('q-phone-group').style.display     = hideContact  ? 'none'  : 'block';
-  document.getElementById('q-name-group').style.display      = hideContact  ? 'none'  : 'block';
-  document.getElementById('q-email-hint').textContent        = needsEmail   ? '(required)' : '(optional)';
+  document.getElementById('q-daterange-group').style.display  = needsDate    ? 'block' : 'none';
+  document.getElementById('q-email-group').style.display      = hideContact  ? 'none'  : 'block';
+  document.getElementById('q-phone-group').style.display      = hideContact  ? 'none'  : 'block';
+  document.getElementById('q-name-group').style.display       = hideContact  ? 'none'  : 'block';
+  document.getElementById('q-question-group').style.display   = showQuestion ? 'block' : 'none';
+  document.getElementById('q-note-type-group').style.display  = showNoteType ? 'block' : 'none';
+  document.getElementById('q-email-hint').textContent         = needsEmail   ? '(at least one of: email, phone, or name)' : '(optional)';
   if (needsDate) document.getElementById('q-daterange-label').textContent = Q_DATE_LABELS[cat] || 'Date range';
 
-  const nameLabel = document.querySelector('#q-name-group label');
-  if (nameLabel) nameLabel.innerHTML = cat === 'submit_input'
-    ? 'Your name <span class="hint">(optional — shown as author)</span>'
-    : 'Customer name <span class="hint">(optional)</span>';
+  const qLabel = document.getElementById('q-question-label');
+  if (qLabel) qLabel.innerHTML = (Q_QUESTION_LABELS[cat] || 'Question or details') +
+    (cat === 'free_form' ? ' <span class="hint">(required)</span>' : ' <span class="hint">(optional)</span>');
 
-  document.getElementById('q-question').placeholder =
-    Q_PLACEHOLDERS[cat] || 'e.g. How many lapsed customers came back this week?';
+  document.getElementById('q-question').placeholder = Q_PLACEHOLDERS[cat] || '';
 }
 
 async function runQuery() {
@@ -869,7 +895,7 @@ async function runQuery() {
   try {
     const res  = await fetch('/api/query', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null, date_from: dateFrom || null, date_to: dateTo || null, author: cat === 'submit_input' ? (name || null) : null }),
+      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null, date_from: dateFrom || null, date_to: dateTo || null, author: name || null, input_type: cat === 'team_notes' ? document.getElementById('q-note-type').value : null }),
     });
     const data = await res.json();
     if (!res.ok) { setError('q-result', data.detail || JSON.stringify(data)); return; }
@@ -927,13 +953,14 @@ async function executeOpportunity(oppId) {
 async function runAgent() {
   const email = document.getElementById('a-email').value.trim();
   const phone = document.getElementById('a-phone').value.trim();
-  if (!email && !phone) { setError('a-result', 'Please enter a customer email or phone number.'); return; }
+  const name  = document.getElementById('a-name').value.trim();
+  if (!email && !phone && !name) { setError('a-result', 'Please enter at least one of: email, phone, or name.'); return; }
   setLoading('a-result', 'Running inference → decision → orchestration… (20–40 s)');
   setBtn('a-btn', true, 'Running…');
   try {
     const res  = await fetch('/api/agents/cycle/run-for-contact', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email: email || null, phone: phone || null }),
+      body: JSON.stringify({ email: email || null, phone: phone || null, name: name || null }),
     });
     const data = await res.json();
     setBtn('a-btn', false, 'Run Inference & Get Recommendation');
@@ -942,7 +969,7 @@ async function runAgent() {
       setError('a-result', data.detail || data.error || JSON.stringify(data)); return;
     }
     if (data.status === 'skipped') {
-      setError('a-result', `Contact not found for email: ${email}`); return;
+      setError('a-result', `Contact not found for: ${email || phone || name}`); return;
     }
 
     const action  = data.chosen_action || 'none';
@@ -1804,11 +1831,107 @@ function loadCampaignAnalytics() {
     });
 }
 
+// ─── delay alert preview ──────────────────────────────────────────────────────
+async function loadDelayDatePreview() {
+  const d   = document.getElementById('bc-delay-date').value;
+  const box = document.getElementById('bc-delay-preview');
+  if (!d) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  box.textContent = 'Loading…';
+  try {
+    const res  = await fetch(`/api/daily-orders/summary/${d}`);
+    const data = await res.json();
+    if (!res.ok) { box.textContent = 'Could not load order data for this date.'; return; }
+    const orders    = data.total_orders   || 0;
+    const customers = data.unique_customers || 0;
+    box.innerHTML = `<strong>${orders}</strong> order${orders !== 1 ? 's' : ''} · <strong>${customers}</strong> unique customer${customers !== 1 ? 's' : ''} will receive this alert on <strong>${d}</strong>`;
+  } catch(e) { box.textContent = 'Could not load preview.'; }
+}
+
+// ─── send delay alert ────────────────────────────────────────────────────────
+async function sendDelayAlert() {
+  const date    = document.getElementById('bc-delay-date').value;
+  const sms     = document.getElementById('bc-delay-sms').value.trim();
+  const subject = document.getElementById('bc-delay-subject').value.trim();
+  const body    = document.getElementById('bc-delay-body').value.trim();
+  const author  = document.getElementById('bc-delay-author').value.trim();
+
+  if (!sms)     { setError('bc-delay-result', 'Please enter an SMS message.'); return; }
+  if (!subject) { setError('bc-delay-result', 'Please enter an email subject.'); return; }
+  if (!body)    { setError('bc-delay-result', 'Please enter an email body.'); return; }
+
+  setLoading('bc-delay-result', 'Creating delay alert broadcast…');
+  setBtn('bc-delay-btn', true, 'Sending…');
+  try {
+    const res  = await fetch('/api/broadcasts/delay-alert', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ sms_message: sms, email_subject: subject, email_body: body, target_date: date || null, created_by: author || null }),
+    });
+    const data = await res.json();
+    setBtn('bc-delay-btn', false, 'Send Delay Alert Now');
+    if (!res.ok) { setError('bc-delay-result', data.detail || JSON.stringify(data)); return; }
+    setPreResult('bc-delay-result',
+      `Delay alert queued!\n\nJob ID: ${data.id}\nRecipients: ${data.total_recipients || '(queuing…)'}\nStatus: ${data.status}`
+    );
+  } catch(e) {
+    setBtn('bc-delay-btn', false, 'Send Delay Alert Now');
+    setError('bc-delay-result', 'Network error: ' + e.message);
+  }
+}
+
+// ─── send promotional blast ───────────────────────────────────────────────────
+async function sendPromo() {
+  const title   = document.getElementById('bc-promo-title').value.trim();
+  const author  = document.getElementById('bc-promo-author').value.trim();
+  const hasSms  = document.getElementById('bc-promo-ch-sms').checked;
+  const hasEmail= document.getElementById('bc-promo-ch-email').checked;
+  const sms     = hasSms  ? document.getElementById('bc-promo-sms').value.trim()     : null;
+  const subject = hasEmail? document.getElementById('bc-promo-subject').value.trim() : null;
+  const body    = hasEmail? document.getElementById('bc-promo-body').value.trim()    : null;
+
+  if (!title)              { setError('bc-promo-result', 'Please enter a campaign title.'); return; }
+  if (!hasSms && !hasEmail){ setError('bc-promo-result', 'Please select at least one channel.'); return; }
+  if (hasSms  && !sms)     { setError('bc-promo-result', 'Please enter an SMS message.'); return; }
+  if (hasEmail && !subject){ setError('bc-promo-result', 'Please enter an email subject.'); return; }
+  if (hasEmail && !body)   { setError('bc-promo-result', 'Please enter an email body.'); return; }
+
+  const channels = [];
+  if (hasSms)  channels.push('sms');
+  if (hasEmail) channels.push('email');
+
+  setLoading('bc-promo-result', 'Queuing promotional blast…');
+  setBtn('bc-promo-btn', true, 'Queuing…');
+  try {
+    const res  = await fetch('/api/broadcasts/', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        title, broadcast_type: 'promotional', channels,
+        sms_message: sms, email_subject: subject, email_body: body,
+        target_type: 'all_customers', created_by: author || null,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) { setBtn('bc-promo-btn', false, 'Queue Promotional Blast'); setError('bc-promo-result', data.detail || JSON.stringify(data)); return; }
+    // Queue it
+    const qRes  = await fetch(`/api/broadcasts/${data.id}/queue`, { method: 'POST' });
+    const qData = await qRes.json();
+    setBtn('bc-promo-btn', false, 'Queue Promotional Blast');
+    if (!qRes.ok) { setError('bc-promo-result', qData.detail || JSON.stringify(qData)); return; }
+    setPreResult('bc-promo-result',
+      `Blast queued!\n\nJob ID: ${qData.id}\nRecipients: ${qData.total_recipients || 0}\nStatus: ${qData.status}`
+    );
+  } catch(e) {
+    setBtn('bc-promo-btn', false, 'Queue Promotional Blast');
+    setError('bc-promo-result', 'Network error: ' + e.message);
+  }
+}
+
 // ─── init ─────────────────────────────────────────────────────────────────────
 const _today = new Date();
 const _d = d => { const x = new Date(_today); x.setDate(x.getDate() + d); return x.toISOString().slice(0,10); };
 document.getElementById('r-date').value        = _d(0);
 document.getElementById('bc-delay-date').value = _d(0);
+loadDelayDatePreview();
 document.getElementById('q-date-from').value   = _d(-30);
 document.getElementById('q-date-to').value     = _d(0);
 bcAttachCounter('bc-delay-sms', 'bc-delay-sms-count');
