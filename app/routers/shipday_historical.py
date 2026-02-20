@@ -453,6 +453,10 @@ async def shipday_webhook(request: Request):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
+        body = await request.body()
+        if not body:
+            # Shipday verification ping with empty body — just acknowledge
+            return {"status": "ok"}
         payload = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")

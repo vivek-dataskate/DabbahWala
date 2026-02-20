@@ -20,6 +20,10 @@ from app.config import INSTANTLY_API_KEY
 from app.db import get_cursor
 from app.routers.campaigns import _CAMPAIGN_META
 from app.routers.prospects import _upsert_contact
+from app.routers.shipday_historical import (
+    shipday_webhook_ping as _shipday_ping,
+    shipday_webhook as _shipday_webhook,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -391,3 +395,26 @@ async def instantly_webhook(request: Request):
         "is_new": is_new,
         "lifecycle": lifecycle_result,
     }
+
+
+# ── Shipday webhook aliases ───────────────────────────────────────────────────
+# Shipday is configured to POST to /api/webhooks/shipday, so we alias
+# the handlers from shipday_historical here.
+
+@router.get("/shipday")
+async def shipday_ping():
+    logger.info("Shipday webhook verification ping (GET /api/webhooks/shipday)")
+    return await _shipday_ping()
+
+
+@router.post("/shipday")
+async def shipday_webhook(request: Request):
+    body_bytes = await request.body()
+    logger.info(
+        "Shipday webhook incoming: method=POST path=/api/webhooks/shipday "
+        "content_type=%s content_length=%d body_preview=%s",
+        request.headers.get("content-type", ""),
+        len(body_bytes),
+        body_bytes[:200].decode("utf-8", errors="replace"),
+    )
+    return await _shipday_webhook(request)
