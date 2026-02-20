@@ -215,21 +215,28 @@ _SHIPDAY_EXPORT_DIR = Path("/tmp/shipday_exports")
 def _generate_shipday_csv(orders_grouped: dict) -> str:
     """Convert orders_grouped into a Shipday-compatible CSV string for manual import.
 
-    One row per order. Order items are joined as 'Dish (xQty)' entries separated by ' | '.
+    Produces the same column layout as the 'Shipday Daily' import format.
     """
+    def _to_12h(t: str) -> str:
+        """Normalise a time string to 12-hour format with AM/PM (e.g. '9:30 AM')."""
+        t = t.strip()
+        for fmt in ('%I:%M %p', '%I %p', '%H:%M'):
+            try:
+                return datetime.strptime(t, fmt).strftime('%-I:%M %p')
+            except ValueError:
+                pass
+        return t
+
     output = io.StringIO()
     fieldnames = [
         "Order Number",
-        "Customer Name",
-        "Customer Phone",
-        "Customer Address",
-        "Restaurant Name",
-        "Expected Delivery Date",
-        "Expected Pickup Time",
-        "Expected Delivery Time",
-        "Delivery Instruction",
-        "Order Items",
-        "Order Total",
+        "Delivery customer Name",
+        "Customer Phone number",
+        "Delivery Address",
+        "Delivery Date",
+        "Delivery Time",
+        "Pickup Time",
+        "Delivery instructions",
     ]
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
@@ -237,43 +244,31 @@ def _generate_shipday_csv(orders_grouped: dict) -> str:
     for order_num, item_rows in orders_grouped.items():
         first = item_rows[0]
         customer_name = _col(first, 'Customer Name', 'Name', 'Customer', 'customer_name').strip()
-        phone = _col(first, 'Customer Phone Number', 'Phone', 'Customer Phone', 'phone').strip()
+        phone = re.sub(r'^\+', '', _col(first, 'Customer Phone Number', 'Phone', 'Customer Phone', 'phone').strip())
         address = _col(first, 'Customer Address', 'Address', 'address').strip()
         date_raw = _col(first, 'Date', 'Order Date', 'date', 'order_date').strip()
         delivery_slot = _col(first, 'Delivery Slot Name', 'Delivery Slot', 'delivery_slot').strip()
         delivery_instr = _col(first, 'Delivery Instructions', 'Delivery Instruction',
                               'delivery_instructions', 'Notes', 'notes').strip()
-        restaurant_name = os.environ.get("SHIPDAY_RESTAURANT_NAME", "DabbahWala")
 
         try:
-            delivery_date = datetime.strptime(date_raw, '%d/%m/%Y').strftime('%Y-%m-%d')
+            delivery_date = datetime.strptime(date_raw, '%d/%m/%Y').strftime('%-m/%-d/%Y')
         except Exception:
-            delivery_date = datetime.now().strftime('%Y-%m-%d')
+            delivery_date = datetime.now().strftime('%-m/%-d/%Y')
 
-        pickup_time, delivery_time = _parse_delivery_slot(delivery_slot)
-
-        item_parts = []
-        order_total = 0.0
-        for row in item_rows:
-            dish = _col(row, 'Dish Name', 'Item Name', 'Product', 'dish_name', 'item_name', 'Item').strip()
-            qty = int(_col(row, 'Quantity', 'Qty', 'qty', 'quantity') or 1)
-            price = float(_col(row, 'Unit Price', 'Price', 'unit_price', 'price') or 0)
-            if dish:
-                item_parts.append(f"{dish} (x{qty})")
-                order_total += qty * price
+        parts = [p.strip() for p in delivery_slot.split(' - ', 1)]
+        pickup_time = _to_12h(parts[0]) if len(parts) >= 1 and parts[0] else ''
+        delivery_time = _to_12h(parts[1]) if len(parts) == 2 and parts[1] else ''
 
         writer.writerow({
             "Order Number": order_num,
-            "Customer Name": customer_name,
-            "Customer Phone": phone,
-            "Customer Address": address,
-            "Restaurant Name": restaurant_name,
-            "Expected Delivery Date": delivery_date,
-            "Expected Pickup Time": pickup_time,
-            "Expected Delivery Time": delivery_time,
-            "Delivery Instruction": delivery_instr,
-            "Order Items": " | ".join(item_parts),
-            "Order Total": f"{order_total:.2f}",
+            "Delivery customer Name": customer_name,
+            "Customer Phone number": phone,
+            "Delivery Address": address,
+            "Delivery Date": delivery_date,
+            "Delivery Time": delivery_time,
+            "Pickup Time": pickup_time,
+            "Delivery instructions": delivery_instr,
         })
 
     return output.getvalue()
