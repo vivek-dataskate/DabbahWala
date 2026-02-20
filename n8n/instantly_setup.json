@@ -1,0 +1,92 @@
+{
+  "name": "DabbahWala — Instantly Setup",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily at Midnight",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/campaigns/setup-instantly",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "call-setup-instantly",
+      "name": "POST /api/campaigns/setup-instantly",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\nif (body.status === 'already_setup') {\n  return [{ json: { skipped: true, message: body.message, campaign_count: body.campaign_count } }];\n}\n// Full setup ran — surface key info\nconst created = body.created_campaigns || {};\nconst resolved = body.resolved_campaign_ids || {};\nreturn [{ json: {\n  skipped: false,\n  created_campaigns: created,\n  campaign_count: Object.keys(resolved).length,\n  active_customer_id: body.active_customer_campaign_id,\n  configure_results: body.configure_results,\n  dedup_results: body.dedup_results,\n} }];"
+      },
+      "id": "parse-response",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {},
+      "id": "done",
+      "name": "Done",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [880, 300]
+    }
+  ],
+  "connections": {
+    "Daily at Midnight": {
+      "main": [
+        [
+          {
+            "node": "POST /api/campaigns/setup-instantly",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST /api/campaigns/setup-instantly": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

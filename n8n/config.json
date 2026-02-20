@@ -164,6 +164,14 @@
       "active": false,
       "file": "shipday_historical_import.json",
       "note": "One-shot backfill: kicks off POST /api/shipday/import-all-and-run-agents (days_back=365, max_pages=500). Polls pipeline status at 5 min, 15 min, and 35 min, then logs a summary. Run once to seed the database with up to 1 year of Shipday orders, contacts, and delivery dates."
+    },
+    "instantly_setup": {
+      "id": "EwMU7tgQ3MX8wkvs",
+      "name": "DabbahWala \u2014 Instantly Setup",
+      "schedule": "Daily at midnight",
+      "active": true,
+      "file": "instantly_setup.json",
+      "note": "Calls POST /api/campaigns/setup-instantly daily. No-op if all 6 campaigns already exist in Instantly. Runs full setup (create missing, configure sequences, tag) only if campaigns are missing or duplicates are detected."
     }
   },
 
