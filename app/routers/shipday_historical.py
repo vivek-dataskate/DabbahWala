@@ -430,8 +430,12 @@ _SHIPDAY_TO_STATUS = {
 
 
 @router.get("/webhook")
-async def shipday_webhook_ping():
+async def shipday_webhook_ping(request: Request):
     """Shipday verification ping — just needs a 200 OK."""
+    logger.info(
+        "Shipday GET /webhook ping — headers: %s",
+        dict(request.headers),
+    )
     return {"status": "ok"}
 
 
@@ -443,34 +447,50 @@ async def shipday_webhook(request: Request):
     ONLY updates existing records (shipday_orders_raw + delivery_status).
     Never creates new orders, contacts, or events.
     """
-    # Read body first — empty body means Shipday verification ping, always 200
+    # Log everything immediately so we can see what Shipday sends
     try:
         body = await request.body()
-    except Exception:
+    except Exception as e:
+        logger.error("Shipday webhook: failed to read body: %s", e)
         raise HTTPException(status_code=400, detail="Could not read request body")
 
-    if not body:
-        logger.info("Shipday webhook: empty body (verification ping) — returning 200")
+    logger.info(
+        "Shipday POST /webhook — content_type=%s content_length=%s auth=%s body_bytes=%d body=%s",
+        request.headers.get("content-type", "(none)"),
+        request.headers.get("content-length", "(none)"),
+        request.headers.get("authorization", "(none)"),
+        len(body),
+        body[:500].decode("utf-8", errors="replace"),
+    )
+
+    # Empty or whitespace-only body = Shipday verification ping
+    if not body or not body.strip():
+        logger.info("Shipday webhook: empty body — verification ping, returning 200")
         return {"status": "ok"}
 
-    # Non-empty body: now verify Bearer token
+    # Non-empty body: verify Bearer token if configured
     expected = os.environ.get("SHIPDAY_WEBHOOK_TOKEN", "").strip()
     if expected:
         auth = request.headers.get("Authorization", "")
         token = auth.removeprefix("Bearer ").strip()
         if token != expected:
-            logger.warning("Shipday webhook rejected — invalid token")
+            logger.warning(
+                "Shipday webhook rejected — token mismatch (got=%r expected_len=%d)",
+                token[:8] + "..." if token else "(none)",
+                len(expected),
+            )
             raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
-        payload = await request.json()
+        payload = json.loads(body)
     except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+        logger.warning("Shipday webhook: non-JSON body — returning 200 (body=%s)", body[:200].decode("utf-8", errors="replace"))
+        return {"status": "ok"}
 
     order_id    = str(payload.get("orderId") or payload.get("id") or "").strip()
     if not order_id:
-        logger.info("Shipday webhook received with no orderId — ignoring")
-        return {"status": "ignored", "reason": "no_order_id"}
+        logger.info("Shipday webhook: no orderId in payload (likely verification) — returning 200. payload=%s", str(payload)[:300])
+        return {"status": "ok"}
 
     raw_status  = (payload.get("orderStatus") or payload.get("status") or "UNKNOWN").upper()
     our_status  = _SHIPDAY_TO_STATUS.get(raw_status)   # None if unknown status

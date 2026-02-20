@@ -1,5 +1,6 @@
 import logging
 import os
+import time
 import traceback
 
 from fastapi import FastAPI, Request
@@ -23,6 +24,23 @@ app = FastAPI(
     description="Lifecycle-driven marketing orchestration API",
     version="0.1.0",
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    """Log every incoming request with method, path, status, and duration."""
+    start = time.time()
+    response = await call_next(request)
+    ms = int((time.time() - start) * 1000)
+    logger.info(
+        "HTTP %s %s → %d (%dms) client=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        ms,
+        request.client.host if request.client else "unknown",
+    )
+    return response
 
 
 @app.on_event("startup")
