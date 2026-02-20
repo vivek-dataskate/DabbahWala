@@ -534,7 +534,7 @@ async def process_daily_orders(
     menu_matched = 0
     menu_created = 0
     duplicate_orders_skipped = 0
-    order_date_str = ''
+    order_date_str = datetime.now().strftime('%Y-%m-%d')
     agent_analysis: list = []
     field_opportunities: list = []
     airtable_tasks: list = []
