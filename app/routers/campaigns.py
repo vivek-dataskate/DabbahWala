@@ -680,35 +680,44 @@ def setup_instantly_campaigns():
     # 1. Get or create the Dabbahwala tag (also deduplicates if multiple exist)
     tag_id = _get_or_create_tag_id(headers, _DABBAHWALA_TAG)
 
-    # 2. Resolve ACTIVE_CUSTOMER campaign ID
-    #    Priority: hardcoded ID → existing by name in Instantly → create new
-    _existing_id = _CAMPAIGN_META.get("ACTIVE_CUSTOMER", {}).get("instantly_id", "").strip()
-    if _existing_id:
-        active_customer_id: str = _existing_id
-        logger.info("setup-instantly: using hardcoded ACTIVE_CUSTOMER id=%s", active_customer_id)
-    else:
-        # Guard: check if a campaign with this name already exists before creating
-        _existing_by_name = next(
-            (c for c in all_campaigns if c.get("name") == "DW-ActiveCustomer"), None
-        )
-        if _existing_by_name:
-            active_customer_id = str(_existing_by_name["id"]).strip()
-            logger.info(
-                "setup-instantly: found ACTIVE_CUSTOMER by name, id=%s (skipping create)",
-                active_customer_id,
-            )
+    # 2. Resolve ALL campaign IDs: hardcoded if still alive → find by name → create fresh
+    existing_ids_in_instantly: set[str] = {c["id"] for c in all_campaigns}
+    existing_by_name: dict[str, str] = {c["name"]: c["id"] for c in all_campaigns}
+    resolved_ids: dict[str, str] = {}   # campaign_key → id
+    created_campaigns: dict[str, str] = {}  # campaign_key → newly created id
+
+    for campaign_key, meta in _CAMPAIGN_META.items():
+        label = meta["label"]
+        hardcoded = meta.get("instantly_id", "").strip()
+
+        if hardcoded and hardcoded in existing_ids_in_instantly:
+            resolved_ids[campaign_key] = hardcoded
+            logger.info("setup-instantly: %s using existing id=%s", campaign_key, hardcoded)
+        elif label in existing_by_name:
+            resolved_ids[campaign_key] = existing_by_name[label]
+            logger.info("setup-instantly: %s found by name, id=%s", campaign_key, existing_by_name[label])
         else:
-            active_customer_id = _create_instantly_campaign(headers, "DW-ActiveCustomer") or ""
+            new_id = _create_instantly_campaign(headers, label)
+            if new_id:
+                resolved_ids[campaign_key] = new_id
+                created_campaigns[campaign_key] = new_id
+                # Update in-memory so push_lead_to_instantly works in this process
+                _CAMPAIGN_META[campaign_key]["instantly_id"] = new_id
+                logger.info("setup-instantly: %s created fresh id=%s", campaign_key, new_id)
+            else:
+                logger.error("setup-instantly: could not resolve id for %s", campaign_key)
+
+    active_customer_id = resolved_ids.get("ACTIVE_CUSTOMER", "")
 
     # 3. Fetch all sending account emails
     account_emails = _get_all_account_emails(headers)
 
     configure_results: dict = {}
 
-    # 4. Push HTML-wrapped sequences + settings + email_accounts to EVERY campaign in _CAMPAIGN_META
+    # 4. Push HTML-wrapped sequences + settings + email_accounts to EVERY campaign
     seq_results: dict = {}
-    for campaign_key, meta in _CAMPAIGN_META.items():
-        cid = active_customer_id if campaign_key == "ACTIVE_CUSTOMER" else meta.get("instantly_id", "")
+    for campaign_key in _CAMPAIGN_META:
+        cid = resolved_ids.get(campaign_key, "")
         if not cid:
             seq_results[campaign_key] = "no_id"
             continue
@@ -745,11 +754,7 @@ def setup_instantly_campaigns():
     configure_results["sequences_and_settings"] = seq_results
 
     # 5. Tag every campaign
-    all_campaign_ids = [
-        active_customer_id if k == "ACTIVE_CUSTOMER" else meta.get("instantly_id", "")
-        for k, meta in _CAMPAIGN_META.items()
-    ]
-    all_campaign_ids = [cid for cid in all_campaign_ids if cid]
+    all_campaign_ids = [cid for cid in resolved_ids.values() if cid]
     if tag_id and all_campaign_ids:
         _tag_instantly_campaigns(headers, all_campaign_ids, tag_id)
         configure_results["tagged"] = True
@@ -777,6 +782,8 @@ def setup_instantly_campaigns():
         "status": "ok",
         "dedup_results": dedup_results,
         "dabbahwala_tag_id": tag_id or "FAILED",
+        "resolved_campaign_ids": resolved_ids,
+        "created_campaigns": created_campaigns,
         "active_customer_campaign_id": active_customer_id or "FAILED",
         "configure_results": configure_results,
     }
