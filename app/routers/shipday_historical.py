@@ -429,6 +429,12 @@ _SHIPDAY_TO_STATUS = {
 }
 
 
+@router.get("/webhook")
+async def shipday_webhook_ping():
+    """Shipday verification ping — just needs a 200 OK."""
+    return {"status": "ok"}
+
+
 @router.post("/webhook")
 async def shipday_webhook(request: Request):
     """
