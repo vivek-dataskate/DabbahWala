@@ -58,6 +58,70 @@ async def startup_ensure_schema():
 
 
 @app.on_event("startup")
+async def startup_run_migrations():
+    """Run any pending SQL migrations from the migrations/ directory."""
+    import glob as _glob
+    from app.db import get_cursor
+
+    migrations_dir = os.path.join(os.path.dirname(__file__), "..", "migrations")
+    files = sorted(_glob.glob(os.path.join(migrations_dir, "*.sql")))
+    if not files:
+        logger.warning("startup_run_migrations — no migration files found at %s", migrations_dir)
+        return
+
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS dabbahwala.schema_migrations (
+                    filename   TEXT PRIMARY KEY,
+                    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )
+            """)
+    except Exception as e:
+        logger.error("startup_run_migrations — could not create schema_migrations: %s", e)
+        return
+
+    applied = skipped = failed = 0
+    for path in files:
+        filename = os.path.basename(path)
+        try:
+            with get_cursor() as cur:
+                cur.execute(
+                    "SELECT 1 FROM dabbahwala.schema_migrations WHERE filename = %s",
+                    (filename,),
+                )
+                already = cur.fetchone()
+        except Exception as e:
+            logger.error("startup_run_migrations — could not check %s: %s", filename, e)
+            failed += 1
+            continue
+
+        if already:
+            skipped += 1
+            continue
+
+        try:
+            with open(path) as f:
+                sql = f.read()
+            with get_cursor(commit=True) as cur:
+                cur.execute(sql)
+                cur.execute(
+                    "INSERT INTO dabbahwala.schema_migrations (filename) VALUES (%s) ON CONFLICT DO NOTHING",
+                    (filename,),
+                )
+            logger.info("startup_run_migrations — APPLIED %s", filename)
+            applied += 1
+        except Exception as e:
+            logger.error("startup_run_migrations — FAILED %s: %s", filename, e)
+            failed += 1
+
+    logger.info(
+        "startup_run_migrations — done: applied=%d skipped=%d failed=%d",
+        applied, skipped, failed,
+    )
+
+
+@app.on_event("startup")
 async def startup_sync_chatbot_docs():
     """Kick off chatbot doc reindex in a background thread so port binds immediately."""
     import threading
