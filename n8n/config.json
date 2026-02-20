@@ -156,6 +156,14 @@
       "active": true,
       "file": "shipday_feedback_sync.json",
       "note": "Calls POST /api/shipday/sync-feedback (days_back=3, synchronous). Polls Shipday API for customer feedback, delivery instructions, and proof-of-delivery on all delivered orders not yet synced. Stores in shipday_communications, fires delivery_update events, creates Opportunities for actionable sentiment. If new comms found, triggers POST /api/lifecycle/run."
+    },
+    "shipday_historical_import": {
+      "id": "ZiT41FnhkCFYyHHJ",
+      "name": "DabbahWala \u2014 Shipday Historical Import (Manual)",
+      "schedule": "Manual trigger only",
+      "active": false,
+      "file": "shipday_historical_import.json",
+      "note": "One-shot backfill: kicks off POST /api/shipday/import-all-and-run-agents (days_back=365, max_pages=500). Polls pipeline status at 5 min, 15 min, and 35 min, then logs a summary. Run once to seed the database with up to 1 year of Shipday orders, contacts, and delivery dates."
     }
   },
 
