@@ -1701,16 +1701,36 @@ def run_cycle_for_contact(req: ContactEventRequest):
 
 @router.post("/cycle/run-all")
 def run_agent_cycle_all():
-    """Run full agent cycle for all contacts with an active goal or high engagement."""
+    """Run full agent cycle for all contacts eligible for nightly processing.
+
+    Eligibility (any one condition, excluding churned/optout):
+      - Has an active sales goal
+      - Opened or clicked an email in the last 30 days
+      - Had any event (delivery, order, SMS click) in the last 30 days
+      - Placed an order in the last 60 days
+    """
     logger.info("POST /cycle/run-all — querying eligible contacts")
     with get_cursor(commit=False) as cur:
         cur.execute(
             """
             SELECT DISTINCT c.id FROM contacts c
-            LEFT JOIN customer_goals g ON g.contact_id = c.id AND g.status = 'active'
-            LEFT JOIN engagement_rollups er ON er.contact_id = c.id
-            WHERE g.id IS NOT NULL
-               OR (er.opens_30d > 0 AND c.lifecycle_segment != 'churned')
+            LEFT JOIN customer_goals g
+                   ON g.contact_id = c.id AND g.status = 'active'
+            LEFT JOIN engagement_rollups er
+                   ON er.contact_id = c.id
+            LEFT JOIN events ev
+                   ON ev.contact_id = c.id
+                  AND ev.occurred_at > now() - interval '30 days'
+            LEFT JOIN orders o
+                   ON o.contact_id = c.id
+                  AND o.order_date > CURRENT_DATE - 60
+            WHERE c.lifecycle_segment NOT IN ('churned', 'optout')
+              AND (
+                  g.id IS NOT NULL      -- active sales goal
+                  OR er.opens_30d > 0  -- email engaged in last 30 days
+                  OR ev.id IS NOT NULL  -- any event in last 30 days (delivery, order, etc.)
+                  OR o.id IS NOT NULL   -- ordered in last 60 days
+              )
             LIMIT 500
             """
         )
