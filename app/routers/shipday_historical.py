@@ -416,3 +416,181 @@ def run_shipday_migration():
         raise HTTPException(status_code=500, detail=f"Migration failed: {e}")
 
 
+# ─────────────────────────────────────────────────────────────────
+# Full import pipeline: orders → notes/feedback → evidence → agents
+# ─────────────────────────────────────────────────────────────────
+
+_pipeline_state = {
+    "running":          False,
+    "phase":            None,   # "orders" | "feedback" | "rollups" | "agents" | "done"
+    "started_at":       None,
+    "completed_at":     None,
+    "orders_synced":    0,
+    "orders_matched":   0,
+    "comms_synced":     0,
+    "agents_run":       0,
+    "agent_errors":     0,
+    "error":            None,
+}
+
+
+def _run_import_pipeline(api_key: str, days_back: int, max_pages: int) -> None:
+    """
+    Full sequential pipeline:
+      1. Sync ALL historic Shipday orders into shipday_orders_raw
+      2. Pull all notes / feedback / proof-of-delivery into shipday_communications
+      3. Refresh engagement rollups (evidence layer)
+      4. Run the Claude agent cycle for every active contact
+    """
+    from app.routers.shipday_sync import _run_feedback_sync
+    from app.routers.agents import _run_full_cycle
+
+    global _pipeline_state
+    _pipeline_state.update({
+        "running":       True,
+        "phase":         "orders",
+        "started_at":    datetime.now(timezone.utc).isoformat(),
+        "completed_at":  None,
+        "orders_synced": 0,
+        "orders_matched": 0,
+        "comms_synced":  0,
+        "agents_run":    0,
+        "agent_errors":  0,
+        "error":         None,
+    })
+
+    try:
+        # ── Phase 1: Sync all historic orders ──────────────────────────────
+        logger.info("=== PIPELINE Phase 1: Syncing historic Shipday orders ===")
+        from_date = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%d")
+        _run_historical_sync(api_key, from_date, max_pages)
+        _pipeline_state["orders_synced"]  = _sync_state.get("orders_synced", 0)
+        _pipeline_state["orders_matched"] = _sync_state.get("orders_matched", 0)
+        logger.info(
+            "Pipeline Phase 1 done: synced=%d matched=%d errors=%d",
+            _pipeline_state["orders_synced"],
+            _pipeline_state["orders_matched"],
+            _sync_state.get("errors", 0),
+        )
+
+        # ── Phase 2: Pull all notes / feedback into evidence ───────────────
+        _pipeline_state["phase"] = "feedback"
+        logger.info("=== PIPELINE Phase 2: Syncing all Shipday feedback & notes ===")
+        _run_feedback_sync(days_back=days_back, all_historical=True)
+        from app.routers import shipday_sync as _ss
+        _pipeline_state["comms_synced"] = _ss._sync_state.get("orders_with_comms", 0)
+        logger.info(
+            "Pipeline Phase 2 done: comms_synced=%d positive=%d negative=%d",
+            _pipeline_state["comms_synced"],
+            _ss._sync_state.get("feedback_positive", 0),
+            _ss._sync_state.get("feedback_negative", 0),
+        )
+
+        # ── Phase 3: Refresh engagement rollups (evidence) ────────────────
+        _pipeline_state["phase"] = "rollups"
+        logger.info("=== PIPELINE Phase 3: Refreshing engagement rollups ===")
+        try:
+            with get_cursor(commit=True) as cur:
+                cur.execute("SELECT refresh_engagement_rollups()")
+            logger.info("Pipeline Phase 3 done: engagement rollups refreshed")
+        except Exception as e:
+            logger.warning("Pipeline Phase 3: rollup refresh failed (non-fatal): %s", e)
+
+        # ── Phase 4: Run agent cycle for all active contacts ───────────────
+        _pipeline_state["phase"] = "agents"
+        logger.info("=== PIPELINE Phase 4: Running agent cycle for all contacts ===")
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                """
+                SELECT id FROM contacts
+                WHERE lifecycle_segment != 'optout'
+                  AND (email IS NOT NULL OR phone IS NOT NULL)
+                ORDER BY last_order_at DESC NULLS LAST
+                LIMIT 1000
+                """
+            )
+            contact_ids = [r["id"] for r in cur.fetchall()]
+
+        logger.info("Pipeline Phase 4: %d contacts to process", len(contact_ids))
+        for i, cid in enumerate(contact_ids, 1):
+            try:
+                _run_full_cycle(cid)
+                _pipeline_state["agents_run"] += 1
+            except Exception as e:
+                _pipeline_state["agent_errors"] += 1
+                logger.warning("Pipeline Phase 4: agent cycle failed contact_id=%s: %s", cid, e)
+            if i % 50 == 0:
+                logger.info(
+                    "Pipeline Phase 4 progress: %d/%d processed (%d errors)",
+                    i, len(contact_ids), _pipeline_state["agent_errors"],
+                )
+
+        logger.info(
+            "Pipeline Phase 4 done: agents_run=%d errors=%d",
+            _pipeline_state["agents_run"],
+            _pipeline_state["agent_errors"],
+        )
+
+    except Exception as e:
+        logger.error("Import pipeline crashed: %s", e, exc_info=True)
+        _pipeline_state["error"] = str(e)
+
+    finally:
+        _pipeline_state["running"]      = False
+        _pipeline_state["phase"]        = "done"
+        _pipeline_state["completed_at"] = datetime.now(timezone.utc).isoformat()
+        logger.info(
+            "=== PIPELINE complete: orders=%d comms=%d agents=%d agent_errors=%d ===",
+            _pipeline_state["orders_synced"],
+            _pipeline_state["comms_synced"],
+            _pipeline_state["agents_run"],
+            _pipeline_state["agent_errors"],
+        )
+
+
+class ImportAllRequest(BaseModel):
+    days_back:          int  = 365   # How many days of Shipday history to pull
+    max_pages:          int  = 500   # Safety cap on order pagination
+
+
+@router.post("/import-all-and-run-agents")
+async def import_all_and_run_agents(req: ImportAllRequest, background_tasks: BackgroundTasks):
+    """
+    Full import pipeline (runs in background):
+      1. Pull ALL historic Shipday orders into the database
+      2. Pull all delivery notes, customer feedback, and proof-of-delivery
+         into the evidence layer (shipday_communications)
+      3. Refresh engagement rollups so agents have up-to-date signals
+      4. Run the Claude agent cycle for every active contact
+
+    Poll /api/shipday/import-pipeline-status for progress.
+    """
+    if _pipeline_state["running"]:
+        return {"status": "already_running", "state": _pipeline_state}
+
+    if _sync_state["running"]:
+        return {
+            "status": "blocked",
+            "reason": "A historical sync is already running. Wait for it to finish.",
+            "sync_state": _sync_state,
+        }
+
+    api_key = _get_shipday_key()
+    background_tasks.add_task(_run_import_pipeline, api_key, req.days_back, req.max_pages)
+    return {
+        "status":    "started",
+        "days_back": req.days_back,
+        "message":   (
+            "Full import pipeline started in background. "
+            "Phases: orders → feedback/notes → rollups → agents. "
+            "Poll /api/shipday/import-pipeline-status for progress."
+        ),
+    }
+
+
+@router.get("/import-pipeline-status")
+def import_pipeline_status():
+    """Return current status of the full import pipeline."""
+    return {"pipeline_state": _pipeline_state}
+
+
