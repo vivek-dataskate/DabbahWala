@@ -123,6 +123,7 @@ _sync_state = {
     "orders_fetched": 0,
     "orders_synced": 0,
     "orders_matched": 0,
+    "contacts_created": 0,
     "errors": 0,
     "last_error": None,
     "completed_at": None,
@@ -143,6 +144,7 @@ def _run_historical_sync(api_key: str, from_date: str, max_pages: int = 500) -> 
         "orders_fetched": 0,
         "orders_synced": 0,
         "orders_matched": 0,
+        "contacts_created": 0,
         "errors": 0,
         "last_error": None,
         "completed_at": None,
@@ -201,6 +203,12 @@ def _run_historical_sync(api_key: str, from_date: str, max_pages: int = 500) -> 
                         _sync_state["orders_synced"] += 1
                     if result.get("matched"):
                         _sync_state["orders_matched"] += 1
+                    if result.get("contact_created"):
+                        _sync_state["contacts_created"] += 1
+                        logger.info(
+                            "Auto-created contact for Shipday order %s",
+                            result.get("order_id", "?"),
+                        )
                 except Exception as e:
                     _sync_state["errors"] += 1
                     _sync_state["last_error"] = f"order {order.get('orderId', '?')}: {e}"
@@ -222,11 +230,12 @@ def _run_historical_sync(api_key: str, from_date: str, max_pages: int = 500) -> 
         _sync_state["running"] = False
         _sync_state["completed_at"] = datetime.now(timezone.utc).isoformat()
         logger.info(
-            "=== Shipday historical sync complete: pages=%d fetched=%d synced=%d matched=%d errors=%d ===",
+            "=== Shipday historical sync complete: pages=%d fetched=%d synced=%d matched=%d contacts_created=%d errors=%d ===",
             _sync_state["pages_fetched"],
             _sync_state["orders_fetched"],
             _sync_state["orders_synced"],
             _sync_state["orders_matched"],
+            _sync_state["contacts_created"],
             _sync_state["errors"],
         )
 
@@ -421,16 +430,17 @@ def run_shipday_migration():
 # ─────────────────────────────────────────────────────────────────
 
 _pipeline_state = {
-    "running":          False,
-    "phase":            None,   # "orders" | "feedback" | "rollups" | "agents" | "done"
-    "started_at":       None,
-    "completed_at":     None,
-    "orders_synced":    0,
-    "orders_matched":   0,
-    "comms_synced":     0,
-    "agents_run":       0,
-    "agent_errors":     0,
-    "error":            None,
+    "running":           False,
+    "phase":             None,   # "orders" | "feedback" | "rollups" | "agents" | "done"
+    "started_at":        None,
+    "completed_at":      None,
+    "orders_synced":     0,
+    "orders_matched":    0,
+    "contacts_created":  0,
+    "comms_synced":      0,
+    "agents_run":        0,
+    "agent_errors":      0,
+    "error":             None,
 }
 
 
@@ -447,16 +457,17 @@ def _run_import_pipeline(api_key: str, days_back: int, max_pages: int) -> None:
 
     global _pipeline_state
     _pipeline_state.update({
-        "running":       True,
-        "phase":         "orders",
-        "started_at":    datetime.now(timezone.utc).isoformat(),
-        "completed_at":  None,
-        "orders_synced": 0,
-        "orders_matched": 0,
-        "comms_synced":  0,
-        "agents_run":    0,
-        "agent_errors":  0,
-        "error":         None,
+        "running":          True,
+        "phase":            "orders",
+        "started_at":       datetime.now(timezone.utc).isoformat(),
+        "completed_at":     None,
+        "orders_synced":    0,
+        "orders_matched":   0,
+        "contacts_created": 0,
+        "comms_synced":     0,
+        "agents_run":       0,
+        "agent_errors":     0,
+        "error":            None,
     })
 
     try:
@@ -464,12 +475,14 @@ def _run_import_pipeline(api_key: str, days_back: int, max_pages: int) -> None:
         logger.info("=== PIPELINE Phase 1: Syncing historic Shipday orders ===")
         from_date = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%d")
         _run_historical_sync(api_key, from_date, max_pages)
-        _pipeline_state["orders_synced"]  = _sync_state.get("orders_synced", 0)
-        _pipeline_state["orders_matched"] = _sync_state.get("orders_matched", 0)
+        _pipeline_state["orders_synced"]    = _sync_state.get("orders_synced", 0)
+        _pipeline_state["orders_matched"]   = _sync_state.get("orders_matched", 0)
+        _pipeline_state["contacts_created"] = _sync_state.get("contacts_created", 0)
         logger.info(
-            "Pipeline Phase 1 done: synced=%d matched=%d errors=%d",
+            "Pipeline Phase 1 done: synced=%d matched=%d contacts_created=%d errors=%d",
             _pipeline_state["orders_synced"],
             _pipeline_state["orders_matched"],
+            _pipeline_state["contacts_created"],
             _sync_state.get("errors", 0),
         )
 
@@ -540,8 +553,9 @@ def _run_import_pipeline(api_key: str, days_back: int, max_pages: int) -> None:
         _pipeline_state["phase"]        = "done"
         _pipeline_state["completed_at"] = datetime.now(timezone.utc).isoformat()
         logger.info(
-            "=== PIPELINE complete: orders=%d comms=%d agents=%d agent_errors=%d ===",
+            "=== PIPELINE complete: orders=%d contacts_created=%d comms=%d agents=%d agent_errors=%d ===",
             _pipeline_state["orders_synced"],
+            _pipeline_state["contacts_created"],
             _pipeline_state["comms_synced"],
             _pipeline_state["agents_run"],
             _pipeline_state["agent_errors"],
