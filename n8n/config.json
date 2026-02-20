@@ -132,6 +132,14 @@
       "schedule": "Every 30 minutes",
       "active": false,
       "note": "Inactive until Google Drive + Google Docs OAuth2 credentials are configured in n8n. Folder ID is hardcoded in workflow."
+    },
+    "instantly_campaign_sync": {
+      "id": "C4nF1cOKAScWFwKN",
+      "name": "DabbahWala \u2014 Instantly Campaign Sync",
+      "schedule": "Every 6 hours",
+      "active": true,
+      "file": "instantly_campaign_sync.json",
+      "note": "Calls POST /api/webhooks/sync-campaigns to fetch Instantly campaigns tagged 'dabbahwala' and upsert into instantly_campaigns DB table."
     }
   },
 
