@@ -33,16 +33,19 @@ async def startup_ensure_schema():
         with get_cursor(commit=True) as cur:
             cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_date DATE")
             cur.execute("UPDATE orders SET delivery_date = order_date WHERE delivery_date IS NULL")
-        logger.info("startup_ensure_schema — orders.delivery_date present")
+            cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT")
+        logger.info("startup_ensure_schema — orders.delivery_date and notes present")
     except Exception as e:
         logger.error("startup_ensure_schema failed: %s", e)
 
 
 @app.on_event("startup")
 async def startup_sync_chatbot_docs():
-    """Auto-reindex chatbot docs if markdown files changed since last deploy."""
+    """Kick off chatbot doc reindex in a background thread so port binds immediately."""
+    import threading
     from app.routers.chatbot import sync_docs_on_startup
-    sync_docs_on_startup()
+    t = threading.Thread(target=sync_docs_on_startup, daemon=True, name="chatbot-reindex")
+    t.start()
 
 
 @app.exception_handler(Exception)
