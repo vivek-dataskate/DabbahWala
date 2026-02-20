@@ -677,6 +677,17 @@ def setup_instantly_campaigns():
             except Exception as de:
                 dedup_results.setdefault(name, []).append(f"delete_failed:{c['id']}:{str(de)[:80]}")
 
+    # Early exit: all canonical campaigns already exist and no duplicates — nothing to do
+    fetched_ids: set[str] = {c["id"] for c in all_campaigns}
+    all_canonical_present = bool(canonical_ids) and canonical_ids.issubset(fetched_ids)
+    if all_canonical_present and not dedup_results:
+        logger.info("setup-instantly: all %d campaigns already present, skipping setup", len(_CAMPAIGN_META))
+        return {
+            "status": "already_setup",
+            "message": "All campaigns already exist in Instantly — no changes made",
+            "campaign_count": len(_CAMPAIGN_META),
+        }
+
     # 1. Get or create the Dabbahwala tag (also deduplicates if multiple exist)
     tag_id = _get_or_create_tag_id(headers, _DABBAHWALA_TAG)
 
