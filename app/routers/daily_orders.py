@@ -982,7 +982,8 @@ async def process_daily_orders(
     if orders_grouped:
         try:
             csv_content = _generate_shipday_csv(orders_grouped)
-            csv_filename = f"shipday_orders_{order_date_str}.csv"
+            _export_ts = datetime.now().strftime("%H%M")
+            csv_filename = f"shipday_orders_{order_date_str}_{_export_ts}.csv"
             # Upload to Google Drive if credentials are configured
             shipday_drive_url = _upload_shipday_csv_to_drive(csv_content, csv_filename)
             if shipday_drive_url:
