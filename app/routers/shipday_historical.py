@@ -443,7 +443,17 @@ async def shipday_webhook(request: Request):
     ONLY updates existing records (shipday_orders_raw + delivery_status).
     Never creates new orders, contacts, or events.
     """
-    # Verify Bearer token sent by Shipday
+    # Read body first — empty body means Shipday verification ping, always 200
+    try:
+        body = await request.body()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Could not read request body")
+
+    if not body:
+        logger.info("Shipday webhook: empty body (verification ping) — returning 200")
+        return {"status": "ok"}
+
+    # Non-empty body: now verify Bearer token
     expected = os.environ.get("SHIPDAY_WEBHOOK_TOKEN", "").strip()
     if expected:
         auth = request.headers.get("Authorization", "")
@@ -453,10 +463,6 @@ async def shipday_webhook(request: Request):
             raise HTTPException(status_code=401, detail="Unauthorized")
 
     try:
-        body = await request.body()
-        if not body:
-            # Shipday verification ping with empty body — just acknowledge
-            return {"status": "ok"}
         payload = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
