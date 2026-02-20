@@ -461,6 +461,13 @@ async def process_daily_orders(
     except UnicodeDecodeError:
         logger.warning("UTF-8 decode failed — falling back to latin-1 for file '%s'", file.filename)
         text = content.decode('latin-1')
+
+    # Archive the raw source file to Google Drive
+    _ts = datetime.now().strftime("%Y-%m-%d_%H%M")
+    _src_filename = f"source_orders_{_ts}.csv"
+    _drive_upload_csv(text, _src_filename)
+    logger.info("Source file archived to Drive as '%s'", _src_filename)
+
     reader = csv.DictReader(io.StringIO(text))
     rows = list(reader)
 
