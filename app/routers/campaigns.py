@@ -454,8 +454,41 @@ _DW_SCHEDULE = {
 }
 
 
+def _get_all_campaigns(headers: dict) -> list[dict]:
+    """Fetch all campaigns from Instantly, paginating through all pages."""
+    all_campaigns: list[dict] = []
+    starting_after: Optional[str] = None
+    while True:
+        params: dict = {"limit": 100}
+        if starting_after:
+            params["starting_after"] = starting_after
+        try:
+            resp = httpx.get(
+                "https://api.instantly.ai/api/v2/campaigns",
+                headers=headers,
+                params=params,
+                timeout=15,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            page = data.get("items", [])
+            all_campaigns.extend(page)
+            # Stop if we got fewer than limit (last page) or no next_cursor
+            if len(page) < 100 or not data.get("next_cursor"):
+                break
+            starting_after = data["next_cursor"]
+        except Exception as e:
+            logger.warning("setup-instantly: error fetching campaigns page: %s", e)
+            break
+    return all_campaigns
+
+
 def _get_or_create_tag_id(headers: dict, tag_name: str) -> Optional[str]:
-    """Find or create a custom tag in Instantly. Returns the tag ID or None."""
+    """
+    Find or create a custom tag in Instantly.
+    If multiple tags with the same name exist (duplicates), deletes extras and returns the surviving ID.
+    Returns the tag ID or None.
+    """
     try:
         resp = httpx.get(
             "https://api.instantly.ai/api/v2/custom-tags",
@@ -465,13 +498,39 @@ def _get_or_create_tag_id(headers: dict, tag_name: str) -> Optional[str]:
         resp.raise_for_status()
         data = resp.json()
         tags = data if isinstance(data, list) else data.get("items", data.get("tags", []))
-        for tag in tags:
-            # Instantly v2 uses "label" (not "name") for the tag display text
-            name_field = tag.get("label") or tag.get("name") or ""
-            if name_field.lower() == tag_name.lower():
-                tag_id = str(tag.get("id", "")).strip()
-                logger.info("setup-instantly: found existing tag '%s' → %s", tag_name, tag_id)
-                return tag_id
+
+        # Collect ALL matching tags (duplicates may exist)
+        matching = [
+            tag for tag in tags
+            if (tag.get("label") or tag.get("name") or "").lower() == tag_name.lower()
+        ]
+
+        if len(matching) > 1:
+            # Keep the first one, delete the rest to eliminate duplicates
+            keep = matching[0]
+            tag_id = str(keep.get("id", "")).strip()
+            logger.warning(
+                "setup-instantly: found %d duplicate '%s' tags — keeping %s, deleting others",
+                len(matching), tag_name, tag_id,
+            )
+            for dup in matching[1:]:
+                dup_id = str(dup.get("id", "")).strip()
+                try:
+                    httpx.delete(
+                        f"https://api.instantly.ai/api/v2/custom-tags/{dup_id}",
+                        headers=headers,
+                        timeout=10,
+                    )
+                    logger.info("setup-instantly: deleted duplicate tag %s", dup_id)
+                except Exception as de:
+                    logger.warning("setup-instantly: could not delete duplicate tag %s: %s", dup_id, de)
+            return tag_id
+
+        if len(matching) == 1:
+            tag_id = str(matching[0].get("id", "")).strip()
+            logger.info("setup-instantly: found existing tag '%s' → %s", tag_name, tag_id)
+            return tag_id
+
         # Not found — create it (Instantly v2 uses "label" field)
         create = httpx.post(
             "https://api.instantly.ai/api/v2/custom-tags",
@@ -590,51 +649,56 @@ def setup_instantly_campaigns():
         if meta.get("instantly_id")
     }
 
-    # 0. Dedup: list all Instantly campaigns, delete copies whose ID is not canonical
+    # 0. Fetch ALL campaigns (paginated) and dedup: delete copies whose ID is not canonical
     dedup_results: dict = {}
-    try:
-        list_resp = httpx.get(
-            "https://api.instantly.ai/api/v2/campaigns?limit=100",
-            headers=headers,
-            timeout=15,
-        )
-        list_resp.raise_for_status()
-        all_campaigns: list[dict] = list_resp.json().get("items", [])
-        by_name: dict[str, list] = {}
-        for c in all_campaigns:
-            by_name.setdefault(c["name"], []).append(c)
-        for name, copies in by_name.items():
-            if len(copies) <= 1:
-                continue
-            to_delete = [c for c in copies if c["id"] not in canonical_ids]
-            for c in to_delete:
-                try:
-                    del_resp = httpx.delete(
-                        f"https://api.instantly.ai/api/v2/campaigns/{c['id']}",
-                        headers=headers,
-                        timeout=10,
-                    )
-                    if del_resp.status_code < 300:
-                        dedup_results.setdefault(name, []).append(f"deleted:{c['id']}")
-                        logger.info("setup-instantly: deleted duplicate %s (%s)", c["id"], name)
-                    else:
-                        dedup_results.setdefault(name, []).append(f"delete_failed:{c['id']}:http{del_resp.status_code}")
-                        logger.warning("setup-instantly: could not delete %s (%s): %s %s", c["id"], name, del_resp.status_code, del_resp.text[:100])
-                except Exception as de:
-                    dedup_results.setdefault(name, []).append(f"delete_failed:{c['id']}:{str(de)[:80]}")
-    except Exception as e:
-        dedup_results["_list_error"] = str(e)[:200]
+    all_campaigns: list[dict] = _get_all_campaigns(headers)
+    logger.info("setup-instantly: fetched %d total campaigns from Instantly", len(all_campaigns))
 
-    # 1. Get or create the Dabbahwala tag
+    by_name: dict[str, list] = {}
+    for c in all_campaigns:
+        by_name.setdefault(c["name"], []).append(c)
+    for name, copies in by_name.items():
+        if len(copies) <= 1:
+            continue
+        to_delete = [c for c in copies if c["id"] not in canonical_ids]
+        for c in to_delete:
+            try:
+                del_resp = httpx.delete(
+                    f"https://api.instantly.ai/api/v2/campaigns/{c['id']}",
+                    headers=headers,
+                    timeout=10,
+                )
+                if del_resp.status_code < 300:
+                    dedup_results.setdefault(name, []).append(f"deleted:{c['id']}")
+                    logger.info("setup-instantly: deleted duplicate %s (%s)", c["id"], name)
+                else:
+                    dedup_results.setdefault(name, []).append(f"delete_failed:{c['id']}:http{del_resp.status_code}")
+                    logger.warning("setup-instantly: could not delete %s (%s): %s %s", c["id"], name, del_resp.status_code, del_resp.text[:100])
+            except Exception as de:
+                dedup_results.setdefault(name, []).append(f"delete_failed:{c['id']}:{str(de)[:80]}")
+
+    # 1. Get or create the Dabbahwala tag (also deduplicates if multiple exist)
     tag_id = _get_or_create_tag_id(headers, _DABBAHWALA_TAG)
 
-    # 2. Resolve ACTIVE_CUSTOMER campaign ID (use hardcoded or create)
+    # 2. Resolve ACTIVE_CUSTOMER campaign ID
+    #    Priority: hardcoded ID → existing by name in Instantly → create new
     _existing_id = _CAMPAIGN_META.get("ACTIVE_CUSTOMER", {}).get("instantly_id", "").strip()
     if _existing_id:
         active_customer_id: str = _existing_id
-        logger.info("setup-instantly: using existing ACTIVE_CUSTOMER id=%s", active_customer_id)
+        logger.info("setup-instantly: using hardcoded ACTIVE_CUSTOMER id=%s", active_customer_id)
     else:
-        active_customer_id = _create_instantly_campaign(headers, "DW-ActiveCustomer") or ""
+        # Guard: check if a campaign with this name already exists before creating
+        _existing_by_name = next(
+            (c for c in all_campaigns if c.get("name") == "DW-ActiveCustomer"), None
+        )
+        if _existing_by_name:
+            active_customer_id = str(_existing_by_name["id"]).strip()
+            logger.info(
+                "setup-instantly: found ACTIVE_CUSTOMER by name, id=%s (skipping create)",
+                active_customer_id,
+            )
+        else:
+            active_customer_id = _create_instantly_campaign(headers, "DW-ActiveCustomer") or ""
 
     # 3. Fetch all sending account emails
     account_emails = _get_all_account_emails(headers)
