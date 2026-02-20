@@ -9,6 +9,7 @@ Called by n8n form workflow. Returns formatted text answers.
 """
 import json
 import os
+import re
 import traceback
 from datetime import date, datetime, timedelta
 
@@ -25,7 +26,7 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
 
 CATEGORIES = {
-    "customer_lookup": "Look up a specific customer by email",
+    "customer_lookup": "Look up a specific customer by email, phone, or name",
     "pipeline_snapshot": "How many contacts are in each lifecycle stage",
     "campaign_performance": "How are email campaigns performing",
     "who_to_contact": "Which customers should we reach out to today",
@@ -68,12 +69,33 @@ class QueryResponse(BaseModel):
 # Tier 1 handlers — direct stored proc / SQL queries
 # ---------------------------------------------------------------------------
 
-def _handle_customer_lookup(question: str, contact_email: str | None) -> tuple[str, dict]:
-    # If no email, try name search using the question text
+def _handle_customer_lookup(
+    question: str,
+    contact_email: str | None,
+    contact_phone: str | None = None,
+    contact_name: str | None = None,
+) -> tuple[str, dict]:
+    # 1. Phone lookup — resolve to email first
+    if not contact_email and contact_phone:
+        raw = contact_phone.strip()
+        digits = re.sub(r"\D", "", raw)
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT email FROM contacts
+                WHERE phone = %s OR phone = %s OR regexp_replace(phone, '\\D', '', 'g') = %s
+                LIMIT 1
+            """, (raw, digits, digits))
+            row = cur.fetchone()
+        if row:
+            contact_email = row["email"]
+        else:
+            return f"No customer found with phone: {raw}", {}
+
+    # 2. Name lookup (from contact_name field or question text)
     if not contact_email:
-        name = question.strip()
+        name = contact_name or question.strip()
         if not name:
-            return "Please provide a customer email address or name to look up.", {}
+            return "Please provide a customer email, phone, or name to look up.", {}
 
         with get_cursor(commit=False) as cur:
             cur.execute("""
@@ -98,7 +120,6 @@ def _handle_customer_lookup(question: str, contact_email: str | None) -> tuple[s
             lines.append("\nEnter the email address to get full details.")
             return "\n".join(lines), {"matches": matches}
 
-        # Exactly one match — use their email for full detail lookup
         contact_email = matches[0]["email"]
 
     with get_cursor(commit=False) as cur:
@@ -1256,7 +1277,7 @@ async def handle_query(req: QueryRequest):
 
     try:
         if category == "customer_lookup":
-            answer, data = _handle_customer_lookup(question, email)
+            answer, data = _handle_customer_lookup(question, email, phone, name)
         elif category == "pipeline_snapshot":
             answer, data = _handle_pipeline_snapshot(question)
         elif category == "campaign_performance":

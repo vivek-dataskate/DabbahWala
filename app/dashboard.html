@@ -271,12 +271,12 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
   </div>
 
   <div class="form-group" id="q-email-group">
-    <label>Customer email <span class="hint" id="q-email-hint">(required for Customer Lookup and Communication History)</span></label>
+    <label>Customer email <span class="hint" id="q-email-hint">(at least one of: email, phone, or name)</span></label>
     <input id="q-email" type="email" placeholder="customer@example.com">
   </div>
 
   <div class="form-group" id="q-phone-group">
-    <label>Phone number <span class="hint">(optional)</span></label>
+    <label>Phone number <span class="hint">(at least one of: email, phone, or name)</span></label>
     <input id="q-phone" type="tel" placeholder="+1234567890">
   </div>
 
@@ -845,7 +845,7 @@ function onCategoryChange() {
   document.getElementById('q-email-group').style.display     = hideContact  ? 'none'  : 'block';
   document.getElementById('q-phone-group').style.display     = hideContact  ? 'none'  : 'block';
   document.getElementById('q-name-group').style.display      = hideContact  ? 'none'  : 'block';
-  document.getElementById('q-email-hint').textContent        = needsEmail   ? '(required)' : '(optional)';
+  document.getElementById('q-email-hint').textContent        = needsEmail   ? '(at least one of: email, phone, or name)' : '(optional)';
   if (needsDate) document.getElementById('q-daterange-label').textContent = Q_DATE_LABELS[cat] || 'Date range';
 
   const nameLabel = document.querySelector('#q-name-group label');
