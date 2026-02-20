@@ -459,20 +459,20 @@ def _handle_order_analytics(
 
         # Orders per day within date range
         cur.execute("""
-            SELECT order_date::date as day, count(*) as orders,
+            SELECT order_date::date as day, count(DISTINCT id) as orders,
                    coalesce(sum(total_amount), 0) as revenue
             FROM orders
             WHERE order_date::date BETWEEN %s AND %s
-            GROUP BY day ORDER BY day DESC
+            GROUP BY order_date::date ORDER BY order_date::date DESC
         """, (d_from, d_to))
         daily = [dict(r) for r in cur.fetchall()]
 
-        # Avg order value within date range
+        # Total orders + avg order value (avg only on non-zero amounts)
         cur.execute("""
-            SELECT avg(total_amount) as avg_order, count(*) as total_orders
+            SELECT count(*) as total_orders,
+                   avg(NULLIF(total_amount, 0)) as avg_order
             FROM orders
-            WHERE total_amount > 0
-              AND order_date::date BETWEEN %s AND %s
+            WHERE order_date::date BETWEEN %s AND %s
         """, (d_from, d_to))
         avg_row = cur.fetchone()
 
@@ -567,7 +567,7 @@ def _handle_order_summary_by_delivery_date(
                    coalesce(avg(total_amount), 0) AS avg_order_value
             FROM orders
             WHERE order_date::date BETWEEN %s AND %s
-            GROUP BY delivery_date ORDER BY delivery_date DESC
+            GROUP BY order_date::date ORDER BY order_date::date DESC
         """, (d_from, d_to))
         day_rows = [dict(r) for r in cur.fetchall()]
 
@@ -577,7 +577,7 @@ def _handle_order_summary_by_delivery_date(
                 SELECT oi.item_name, sum(oi.quantity) AS qty, sum(oi.line_total) AS revenue
                 FROM order_items oi JOIN orders o ON o.id = oi.order_id
                 WHERE o.order_date::date = %s
-                GROUP BY oi.item_name ORDER BY qty DESC LIMIT 10
+                GROUP BY oi.item_name ORDER BY qty DESC LIMIT 20
             """, (d_from,))
             items = [dict(r) for r in cur.fetchall()]
 
@@ -619,6 +619,7 @@ def _handle_order_summary_by_order_date(
         d_from = date.today() - timedelta(days=30)
     if not d_to:
         d_to = date.today()
+    single_day = d_from == d_to
 
     with get_cursor(commit=False) as cur:
         cur.execute("""
@@ -626,18 +627,30 @@ def _handle_order_summary_by_order_date(
                    count(DISTINCT id) AS order_count,
                    count(DISTINCT contact_id) AS unique_customers,
                    coalesce(sum(total_amount), 0) AS revenue,
-                   coalesce(avg(total_amount), 0) AS avg_order_value
+                   coalesce(avg(NULLIF(total_amount, 0)), 0) AS avg_order_value
             FROM orders WHERE order_date::date BETWEEN %s AND %s
-            GROUP BY order_day ORDER BY order_day DESC
+            GROUP BY order_date::date ORDER BY order_date::date DESC
         """, (d_from, d_to))
         day_rows = [dict(r) for r in cur.fetchall()]
 
         cur.execute("""
-            SELECT source, count(*) AS cnt, coalesce(sum(total_amount), 0) AS revenue
+            SELECT source, count(DISTINCT id) AS cnt, coalesce(sum(total_amount), 0) AS revenue
             FROM orders WHERE order_date::date BETWEEN %s AND %s
             GROUP BY source ORDER BY cnt DESC
         """, (d_from, d_to))
         sources = [dict(r) for r in cur.fetchall()]
+
+        items = []
+        if single_day:
+            cur.execute("""
+                SELECT oi.item_name, sum(oi.quantity) AS qty,
+                       count(DISTINCT oi.order_id) AS order_count,
+                       sum(oi.line_total) AS revenue
+                FROM order_items oi JOIN orders o ON o.id = oi.order_id
+                WHERE o.order_date::date = %s
+                GROUP BY oi.item_name ORDER BY qty DESC LIMIT 20
+            """, (d_from,))
+            items = [dict(r) for r in cur.fetchall()]
 
     if not day_rows:
         return f"No orders found between {d_from} and {d_to}.", {}
@@ -658,7 +671,12 @@ def _handle_order_summary_by_order_date(
         for s in sources:
             lines.append(f"- **{s['source'] or 'Unknown'}**: {s['cnt']} orders  (${float(s['revenue']):.2f})")
 
-    return "\n".join(lines), {"days": day_rows, "sources": sources, "total_orders": total_orders, "total_revenue": total_revenue}
+    if items:
+        lines.extend(["", "### Dishes Ordered"])
+        for it in items:
+            lines.append(f"- **{it['item_name']}**: {it['qty']} qty, {it['order_count']} orders  (${float(it.get('revenue') or 0):.2f})")
+
+    return "\n".join(lines), {"days": day_rows, "sources": sources, "items": items, "total_orders": total_orders, "total_revenue": total_revenue}
 
 
 def _handle_revenue_trends(

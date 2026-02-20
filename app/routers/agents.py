@@ -1470,11 +1470,11 @@ def _fetch_activity_data(report_date: str) -> tuple[dict, list]:
 def _fetch_outcome_data(report_date: str) -> tuple[dict, list]:
     """Returns (summary_dict, detail_rows) for outcome report."""
     with get_cursor(commit=False) as cur:
-        # Order signals detected today
+        # Orders placed today (one row per order, deduped via orders table)
         cur.execute(
             """
-            SELECT COUNT(*) AS c FROM events
-            WHERE DATE(occurred_at) = %s::date AND event_type = 'order_placed'
+            SELECT COUNT(*) AS c FROM orders
+            WHERE order_date = %s::date
             """,
             (report_date,),
         )
@@ -1520,14 +1520,17 @@ def _fetch_outcome_data(report_date: str) -> tuple[dict, list]:
         )
         goals_achieved = cur.fetchone()["c"]
 
-        # Detail: customers who ordered today
+        # Detail: unique customers who ordered today (from orders table — one row per order)
         cur.execute(
             """
-            SELECT DISTINCT c.first_name, c.last_name, c.email, c.phone,
-                   c.lifecycle_segment, c.total_orders
-            FROM events e
-            JOIN contacts c ON c.id = e.contact_id
-            WHERE DATE(e.occurred_at) = %s::date AND e.event_type = 'order_placed'
+            SELECT c.first_name, c.last_name, c.email, c.phone,
+                   c.lifecycle_segment, c.total_orders,
+                   COUNT(o.id) AS orders_today
+            FROM orders o
+            JOIN contacts c ON c.id = o.contact_id
+            WHERE o.order_date = %s::date
+            GROUP BY c.id, c.first_name, c.last_name, c.email, c.phone,
+                     c.lifecycle_segment, c.total_orders
             ORDER BY c.last_name
             LIMIT 200
             """,
