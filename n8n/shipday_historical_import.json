@@ -119,6 +119,28 @@
     },
     {
       "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "still-running-15",
+              "leftValue": "={{ $json.pipeline_state.running }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "true" }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "still-running-check-2",
+      "name": "Still Running? (15 min)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2200, 200]
+    },
+    {
+      "parameters": {
         "unit": "minutes",
         "value": 20
       },
@@ -126,7 +148,7 @@
       "name": "Wait 20 more min",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [2200, 200],
+      "position": [2440, 200],
       "webhookId": "shipday-import-wait-3"
     },
     {
@@ -138,7 +160,7 @@
       "name": "Poll Status (35 min — final)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2420, 200],
+      "position": [2660, 200],
       "continueOnFail": true
     },
     {
@@ -181,7 +203,13 @@
       "main": [[{ "node": "Poll Status (15 min)", "type": "main", "index": 0 }]]
     },
     "Poll Status (15 min)": {
-      "main": [[{ "node": "Wait 20 more min", "type": "main", "index": 0 }]]
+      "main": [[{ "node": "Still Running? (15 min)", "type": "main", "index": 0 }]]
+    },
+    "Still Running? (15 min)": {
+      "main": [
+        [{ "node": "Wait 20 more min", "type": "main", "index": 0 }],
+        [{ "node": "Summary", "type": "main", "index": 0 }]
+      ]
     },
     "Wait 20 more min": {
       "main": [[{ "node": "Poll Status (35 min — final)", "type": "main", "index": 0 }]]
