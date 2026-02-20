@@ -112,7 +112,7 @@ _CAMPAIGN_META: dict[str, dict] = {
     "ACTIVE_CUSTOMER": {
         "label": "DW-ActiveCustomer",
         "json_file": "promo_standard.json",  # reuse promo_standard sequences until dedicated copy is made
-        "instantly_id": "",  # populated after setup-instantly creates this campaign
+        "instantly_id": "28aa366f-50c3-41e9-9a9b-cc4e892c18df",
     },
     "PROMO_AGGRESSIVE": {
         "label": "DW-PromoAggressive-LapsedCustomers",
@@ -466,15 +466,17 @@ def _get_or_create_tag_id(headers: dict, tag_name: str) -> Optional[str]:
         data = resp.json()
         tags = data if isinstance(data, list) else data.get("items", data.get("tags", []))
         for tag in tags:
-            if tag.get("name", "").lower() == tag_name.lower():
+            # Instantly v2 uses "label" (not "name") for the tag display text
+            name_field = tag.get("label") or tag.get("name") or ""
+            if name_field.lower() == tag_name.lower():
                 tag_id = str(tag.get("id", "")).strip()
                 logger.info("setup-instantly: found existing tag '%s' → %s", tag_name, tag_id)
                 return tag_id
-        # Not found — create it
+        # Not found — create it (Instantly v2 uses "label" field)
         create = httpx.post(
             "https://api.instantly.ai/api/v2/custom-tags",
             headers=headers,
-            json={"name": tag_name},
+            json={"label": tag_name},
             timeout=10,
         )
         create.raise_for_status()
@@ -564,29 +566,49 @@ def _get_all_account_emails(headers: dict) -> list[str]:
 
 def _add_accounts_to_campaign(headers: dict, campaign_id: str, emails: list[str]) -> dict:
     """
-    Attach sending accounts to a campaign via account-campaign-mappings.
-    Returns {email: "ok"|"failed"}.
+    Attach sending accounts to a campaign.
+    Tries POST /api/v2/account-campaign-mappings (bulk), falls back per-email.
+    Returns {"ok": N, "failed": N, "details": {...}}.
     """
-    results = {}
+    if not emails:
+        return {"ok": 0, "failed": 0, "details": {}}
+
+    # Try bulk endpoint first: POST /api/v2/account-campaign-mappings
+    try:
+        resp = httpx.post(
+            "https://api.instantly.ai/api/v2/account-campaign-mappings",
+            headers=headers,
+            json={"campaign_id": campaign_id, "emails": emails},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        logger.info(
+            "setup-instantly: bulk-added %d accounts to campaign %s", len(emails), campaign_id
+        )
+        return {"ok": len(emails), "failed": 0, "bulk": True}
+    except Exception as bulk_err:
+        logger.warning("setup-instantly: bulk account mapping failed (%s), trying per-email", bulk_err)
+
+    # Fall back: per-email POST to /api/v2/account-campaign-mappings
+    details: dict = {}
     for email in emails:
         try:
             resp = httpx.post(
-                f"https://api.instantly.ai/api/v2/account-campaign-mappings/{email}",
+                "https://api.instantly.ai/api/v2/account-campaign-mappings",
                 headers=headers,
-                json={"campaign_id": campaign_id},
+                json={"campaign_id": campaign_id, "email": email},
                 timeout=10,
             )
             resp.raise_for_status()
-            results[email] = "ok"
+            details[email] = "ok"
         except Exception as e:
-            results[email] = f"failed:{str(e)[:80]}"
+            details[email] = f"failed:{str(e)[:100]}"
             logger.warning("setup-instantly: add account %s failed: %s", email, e)
-    logger.info(
-        "setup-instantly: added accounts — ok=%d failed=%d",
-        sum(1 for v in results.values() if v == "ok"),
-        sum(1 for v in results.values() if v != "ok"),
-    )
-    return results
+
+    ok = sum(1 for v in details.values() if v == "ok")
+    failed = len(details) - ok
+    logger.info("setup-instantly: added accounts — ok=%d failed=%d", ok, failed)
+    return {"ok": ok, "failed": failed, "details": details}
 
 
 @router.post("/setup-instantly")
