@@ -90,12 +90,14 @@ def store_message(payload: TelnyxMessageIn):
             logger.error("store_message: unexpected error: %s", e, exc_info=True)
             raise
 
-    # Fire full agent cycle in background — every SMS is fresh evidence
-    threading.Thread(
-        target=_fire_agent_cycle,
-        args=(contact_email, f"sms_{payload.direction}"),
-        daemon=True,
-    ).start()
+    # For inbound SMS only, fire agent immediately — customer replied, context is live
+    # Outbound SMS is evidence stored; nightly cycle reads it with full context
+    if payload.direction == "inbound":
+        threading.Thread(
+            target=_fire_agent_cycle,
+            args=(contact_email, "sms_inbound"),
+            daemon=True,
+        ).start()
     return IdResponse(id=msg_id)
 
 
@@ -138,12 +140,7 @@ def store_call(payload: TelnyxCallIn):
             logger.error("store_call: unexpected error: %s", e, exc_info=True)
             raise
 
-    # Fire full agent cycle in background — call transcript/summary is high-value evidence
-    threading.Thread(
-        target=_fire_agent_cycle,
-        args=(contact_email, f"call_{payload.direction}"),
-        daemon=True,
-    ).start()
+    # Call transcript stored — nightly cycle reads it with full evidence context
     return IdResponse(id=call_id)
 
 
@@ -182,10 +179,5 @@ def log_field_agent_sms(payload: FieldAgentSmsIn):
                 raise HTTPException(status_code=404, detail=f"Contact not found: {email}")
             raise
 
-    # Fire full agent cycle in background — field agent SMS adds fresh communication evidence
-    threading.Thread(
-        target=_fire_agent_cycle,
-        args=(email, "field_agent_sms"),
-        daemon=True,
-    ).start()
+    # Field agent SMS stored — nightly cycle reads it with full evidence context
     return IdResponse(id=msg_id)

@@ -390,36 +390,16 @@ async def instantly_webhook(request: Request):
             except Exception as e:
                 logger.warning("Could not record engagement event (non-fatal): %s", e)
 
-            lifecycle_result = {}
-            try:
-                cur.execute("SELECT * FROM run_lifecycle_cycle()")
-                lc = cur.fetchone()
-                lifecycle_result = {
-                    "contacts_updated": lc["contacts_updated"] if lc else 0,
-                    "campaigns_queued": lc["campaigns_queued"] if lc else 0,
-                }
-            except Exception as e:
-                logger.warning("Lifecycle cycle after Instantly webhook failed: %s", e)
-                lifecycle_result = {"error": str(e)}
-
     except Exception as e:
         logger.error("Instantly webhook processing failed: %s", e, exc_info=True)
         return {"status": "error", "detail": str(e)[:300]}
 
-    # Fire full agent cycle in background — every campaign engagement updates evidence
-    threading.Thread(
-        target=_fire_agent_cycle,
-        args=(contact_id, f"instantly_{event_type}"),
-        daemon=True,
-    ).start()
-
+    # Evidence stored — lifecycle and agent cycle run on nightly schedule with full evidence
     return {
         "status": "ok",
         "event_type": event_type,
         "contact_id": contact_id,
         "is_new": is_new,
-        "lifecycle": lifecycle_result,
-        "agent_cycle": "triggered",
     }
 
 
@@ -571,27 +551,16 @@ async def shipday_webhook(request: Request):
             except Exception as e:
                 logger.warning("Shipday webhook: could not ingest delivery_update event (non-fatal): %s", e)
 
-        # Run lifecycle so the contact is re-evaluated immediately
-        lifecycle_result = {}
-        if contact_id:
-            try:
-                cur.execute("SELECT * FROM run_lifecycle_cycle()")
-                lc = cur.fetchone()
-                lifecycle_result = {
-                    "contacts_updated": lc["contacts_updated"] if lc else 0,
-                    "campaigns_queued": lc["campaigns_queued"] if lc else 0,
-                }
-            except Exception as e:
-                logger.warning("Shipday webhook: lifecycle cycle failed (non-fatal): %s", e)
-                lifecycle_result = {"error": str(e)}
-
-    # Fire full agent cycle in background — every delivery status change is fresh evidence
-    if contact_id:
+    # For DELIVERED and FAILED only, fire agent immediately — these have real time windows:
+    # DELIVERED = prime reorder window (~1-2h), FAILED = same-day escalation needed
+    agent_cycle = "skipped"
+    if contact_id and our_status in {"delivered", "failed"}:
         threading.Thread(
             target=_fire_agent_cycle,
             args=(contact_id, f"shipday_{raw_status.lower()}"),
             daemon=True,
         ).start()
+        agent_cycle = "triggered"
 
     return {
         "status":         "ok",
@@ -599,6 +568,5 @@ async def shipday_webhook(request: Request):
         "shipday_status": raw_status,
         "mapped_status":  our_status,
         "contact_found":  contact_id is not None,
-        "lifecycle":      lifecycle_result,
-        "agent_cycle":    "triggered" if contact_id else "skipped",
+        "agent_cycle":    agent_cycle,
     }
