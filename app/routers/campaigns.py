@@ -564,29 +564,6 @@ def _get_all_account_emails(headers: dict) -> list[str]:
         return []
 
 
-def _add_accounts_to_campaign(headers: dict, campaign_id: str, emails: list[str]) -> dict:
-    """
-    Attach sending accounts to a campaign via PATCH /api/v2/campaigns/{id}.
-    Returns {"ok": N, "accounts_set": N} or {"error": str}.
-    """
-    if not emails:
-        return {"ok": 0, "accounts_set": 0}
-    try:
-        resp = httpx.patch(
-            f"https://api.instantly.ai/api/v2/campaigns/{campaign_id}",
-            headers=headers,
-            json={"email_accounts": emails},
-            timeout=20,
-        )
-        resp.raise_for_status()
-        logger.info(
-            "setup-instantly: set %d email_accounts on campaign %s", len(emails), campaign_id
-        )
-        return {"ok": len(emails), "accounts_set": len(emails)}
-    except Exception as e:
-        logger.warning("setup-instantly: set email_accounts failed: %s", e)
-        return {"ok": 0, "error": str(e)[:200]}
-
 
 @router.post("/setup-instantly")
 def setup_instantly_campaigns():
@@ -595,9 +572,8 @@ def setup_instantly_campaigns():
       0. Deletes duplicate campaigns in Instantly (keeps canonical IDs from _CAMPAIGN_META)
       1. Gets or creates the 'Dabbahwala' custom tag
       2. Tags all campaigns with it
-      3. Pushes full HTML-wrapped sequences + settings to every campaign in _CAMPAIGN_META
-      4. Attaches all sending accounts to every campaign
-      5. Persists ACTIVE_CUSTOMER campaign ID to campaign_routing DB row
+      3. Pushes full HTML-wrapped sequences + settings + email_accounts in one PATCH per campaign
+      4. Persists ACTIVE_CUSTOMER campaign ID to campaign_routing DB row
     """
     if not INSTANTLY_API_KEY:
         raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
@@ -633,13 +609,17 @@ def setup_instantly_campaigns():
             to_delete = [c for c in copies if c["id"] not in canonical_ids]
             for c in to_delete:
                 try:
-                    httpx.delete(
+                    del_resp = httpx.delete(
                         f"https://api.instantly.ai/api/v2/campaigns/{c['id']}",
                         headers=headers,
                         timeout=10,
                     )
-                    dedup_results.setdefault(name, []).append(f"deleted:{c['id']}")
-                    logger.info("setup-instantly: deleted duplicate %s (%s)", c["id"], name)
+                    if del_resp.status_code < 300:
+                        dedup_results.setdefault(name, []).append(f"deleted:{c['id']}")
+                        logger.info("setup-instantly: deleted duplicate %s (%s)", c["id"], name)
+                    else:
+                        dedup_results.setdefault(name, []).append(f"delete_failed:{c['id']}:http{del_resp.status_code}")
+                        logger.warning("setup-instantly: could not delete %s (%s): %s %s", c["id"], name, del_resp.status_code, del_resp.text[:100])
                 except Exception as de:
                     dedup_results.setdefault(name, []).append(f"delete_failed:{c['id']}:{str(de)[:80]}")
     except Exception as e:
@@ -661,7 +641,7 @@ def setup_instantly_campaigns():
 
     configure_results: dict = {}
 
-    # 4. Push HTML-wrapped sequences + settings to EVERY campaign in _CAMPAIGN_META
+    # 4. Push HTML-wrapped sequences + settings + email_accounts to EVERY campaign in _CAMPAIGN_META
     seq_results: dict = {}
     for campaign_key, meta in _CAMPAIGN_META.items():
         cid = active_customer_id if campaign_key == "ACTIVE_CUSTOMER" else meta.get("instantly_id", "")
@@ -677,19 +657,22 @@ def setup_instantly_campaigns():
                         for variant in step.get("variants", []):
                             if "body" in variant:
                                 variant["body"] = _wrap_body(variant["body"])
+            patch_body: dict = {
+                "sequences": seqs_to_push,
+                "daily_limit": 100,
+                "open_tracking": True,
+                "link_tracking": True,
+                "stop_on_reply": True,
+                "stop_on_auto_reply": True,
+                "prioritize_new_leads": True,
+                "insert_unsubscribe_header": True,
+            }
+            if account_emails:
+                patch_body["email_accounts"] = account_emails
             patch_resp = httpx.patch(
                 f"https://api.instantly.ai/api/v2/campaigns/{cid}",
                 headers=headers,
-                json={
-                    "sequences": seqs_to_push,
-                    "daily_limit": 100,
-                    "open_tracking": True,
-                    "link_tracking": True,
-                    "stop_on_reply": True,
-                    "stop_on_auto_reply": True,
-                    "prioritize_new_leads": True,
-                    "insert_unsubscribe_header": True,
-                },
+                json=patch_body,
                 timeout=20,
             )
             seq_results[campaign_key] = "ok" if patch_resp.status_code < 300 else f"failed:{patch_resp.text[:200]}"
@@ -697,16 +680,7 @@ def setup_instantly_campaigns():
             seq_results[campaign_key] = f"error:{str(e)[:200]}"
     configure_results["sequences_and_settings"] = seq_results
 
-    # 5. Attach sending accounts to every campaign
-    accounts_results: dict = {}
-    for campaign_key, meta in _CAMPAIGN_META.items():
-        cid = active_customer_id if campaign_key == "ACTIVE_CUSTOMER" else meta.get("instantly_id", "")
-        if not cid:
-            continue
-        accounts_results[campaign_key] = _add_accounts_to_campaign(headers, cid, account_emails)
-    configure_results["accounts"] = accounts_results
-
-    # 6. Tag every campaign
+    # 5. Tag every campaign
     all_campaign_ids = [
         active_customer_id if k == "ACTIVE_CUSTOMER" else meta.get("instantly_id", "")
         for k, meta in _CAMPAIGN_META.items()
@@ -718,7 +692,7 @@ def setup_instantly_campaigns():
     else:
         configure_results["tagged"] = False
 
-    # 7. Persist ACTIVE_CUSTOMER ID to campaign_routing
+    # 6. Persist ACTIVE_CUSTOMER ID to campaign_routing
     if active_customer_id:
         try:
             with get_cursor(commit=True) as cur:
