@@ -8,6 +8,10 @@ After making any code changes:
 3. Always target `main` as the base branch for PRs
 5. Branch names must start with `claude/` and end with the session ID suffix
 
+### GitHub Token
+The `GITHUB_TOKEN` is stored in `~/.claude/CLAUDE.md` (global memory, never commit it to the repo).
+If the env var is empty, read it from that file and use it directly in API calls.
+
 ## Deployment
 - Hosted on **Render**, auto-deploys on merge to `main`
 - Build command: `scripts/render_build.sh` (installs deps + runs all `migrations/*.sql`)
