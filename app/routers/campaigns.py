@@ -102,32 +102,32 @@ _CAMPAIGN_META: dict[str, dict] = {
     "NURTURE_SLOW": {
         "label": "DW-NurtureSlow-ColdContacts",
         "json_file": "nurture_slow.json",
-        "instantly_id": "90ecd160-22cc-46b1-9fa5-9342fe970837",
+        "instantly_id": "76a88797-961a-47b6-af11-77e2211c4e73",
     },
     "PROMO_STANDARD": {
         "label": "DW-PromoStandard-ActiveEngaged",
         "json_file": "promo_standard.json",
-        "instantly_id": "30292b3d-9f39-4ef3-b0ba-ea15c634acef",
+        "instantly_id": "f3e2d621-9bf2-4130-bc1c-f8168fc44e1e",
     },
     "ACTIVE_CUSTOMER": {
         "label": "DW-ActiveCustomer",
         "json_file": "promo_standard.json",  # reuse promo_standard sequences until dedicated copy is made
-        "instantly_id": "28aa366f-50c3-41e9-9a9b-cc4e892c18df",
+        "instantly_id": "c763e229-f633-468b-bfe4-7f9a4fd21036",
     },
     "PROMO_AGGRESSIVE": {
         "label": "DW-PromoAggressive-LapsedCustomers",
         "json_file": "promo_aggressive.json",
-        "instantly_id": "c9af877a-77ac-491c-a5ee-a8ea7646416b",
+        "instantly_id": "87d44ff1-8720-4c1d-92ff-b827970f323f",
     },
     "NEW_CUSTOMER_ONBOARDING": {
         "label": "DW-NewCustomerOnboarding",
         "json_file": "new_customer_onboarding.json",
-        "instantly_id": "c4c42e73-83fd-4d43-b629-db5b11be66ae",
+        "instantly_id": "8a5ccbfb-500d-4060-ad99-76aa0159bbf2",
     },
     "REACTIVATION": {
         "label": "DW-Reactivation-LongDormant",
         "json_file": "reactivation.json",
-        "instantly_id": "0c760ec8-3415-48cd-87ff-b58babc17dde",
+        "instantly_id": "69c84455-d9b8-437f-b249-8325d23798e6",
     },
 }
 
