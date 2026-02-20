@@ -566,11 +566,54 @@ async def ask(req: ChatRequest):
         logger.debug("Returning canned answer for: %s", question[:60])
         return ChatResponse(question=question, answer=cached["answer"], sources=cached["sources"])
 
-    # Ensure knowledge base is populated
-    try:
-        _ensure_indexed()
-    except Exception as exc:
-        logger.warning("Doc indexing failed: %s", exc)
+    chunks = _relevant_chunks(question)
+    history = _similar_history(question)
+    sources = sorted({c["source"] for c in chunks})
+
+    # Build context block
+    context_lines: list[str] = []
+    if chunks:
+        context_lines.append("## Relevant Documentation\n")
+        for c in chunks:
+            context_lines.append(f"[{c['source']}]\n{c['content']}\n")
+    if history:
+        context_lines.append("\n## Related Previous Q&A\n")
+        for h in history:
+            context_lines.append(f"Q: {h['question']}\nA: {h['answer']}\n")
+
+    context = "\n".join(context_lines)
+
+    system_prompt = (
+        "You are the AI assistant embedded in the DabbahWala marketing automation dashboard. "
+        "DabbahWala is a fresh Indian food delivery service in Atlanta. This system is its "
+        "fully automated, AI-driven marketing brain.\n\n"
+        "You can answer questions at ANY level:\n"
+        "- **Business purpose & strategy** — why this system exists, what problem it solves, "
+        "what the marketing goals are, how the business approaches customer acquisition and retention.\n"
+        "- **Functional & process level** — how lifecycle stages work, what triggers a re-engagement "
+        "campaign, how a failed delivery is handled, when a contact gets escalated, how the "
+        "email and SMS channels are coordinated, what the offer strategy looks like.\n"
+        "- **Operational & technical level** — how the agent pipeline works, what n8n workflows "
+        "run and when, how data flows between services, what the API endpoints do.\n\n"
+        "WHAT TO AVOID:\n"
+        "- Do NOT answer questions that require looking up *specific live records* — e.g. "
+        "fetching a named customer's profile, today's order count, or real-time revenue figures. "
+        "For those, tell the user to use the **Query** tab.\n"
+        "- Do NOT make up facts not supported by the documentation. If the docs are silent on "
+        "something, say so honestly and reason from what is documented.\n\n"
+        "TONE: Speak as an expert who deeply understands both the business and the system. "
+        "When asked 'why' questions (why this approach, why are you confident it works), "
+        "draw on the documented design choices and reason through the logic — e.g. why a "
+        "4-layer agent pipeline gives better decisions than a single call, why lifecycle "
+        "segmentation improves conversion, why multi-channel coordination matters.\n\n"
+        "Use markdown formatting. Be concise but thorough."
+    )
+
+    user_message = (
+        f"Context from system documentation:\n\n{context}\n\n"
+        f"Question: {question}\n\n"
+        "Answer based on the documentation and your understanding of the system's purpose and design."
+    )
 
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
