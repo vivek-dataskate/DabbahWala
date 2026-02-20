@@ -1,0 +1,169 @@
+{
+  "name": "DabbahWala \u2014 Shipday Feedback Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/shipday/sync-feedback",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"days_back\": 3, \"run_in_background\": false}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "trigger-feedback-sync",
+      "name": "Sync Shipday Feedback",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log sync result and decide whether to run lifecycle\nconst result = $input.item.json;\nconst state = result.state || {};\nconst ordersWithComms = state.orders_with_comms || 0;\nconst feedbackNeg  = state.feedback_negative || 0;\nconst feedbackPos  = state.feedback_positive || 0;\nconst opportunities = state.opportunities_created || 0;\n\nconsole.log(\n  `Shipday feedback sync: checked=${state.orders_checked || 0} ` +\n  `with_comms=${ordersWithComms} pos=${feedbackPos} neg=${feedbackNeg} ` +\n  `opportunities=${opportunities} errors=${state.errors || 0}`\n);\n\nreturn [{ json: {\n  ...result,\n  run_lifecycle: ordersWithComms > 0\n}}];"
+      },
+      "id": "log-and-route",
+      "name": "Log Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-new-comms",
+              "leftValue": "={{ $json.run_lifecycle }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "new-feedback-check",
+      "name": "New Feedback Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/lifecycle/run",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "run-lifecycle",
+      "name": "Run Lifecycle Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 200],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "no-feedback",
+      "name": "No New Feedback \u2014 Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1100, 420]
+    }
+  ],
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [
+          {
+            "node": "Sync Shipday Feedback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Shipday Feedback": {
+      "main": [
+        [
+          {
+            "node": "Log Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Results": {
+      "main": [
+        [
+          {
+            "node": "New Feedback Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "New Feedback Found?": {
+      "main": [
+        [
+          {
+            "node": "Run Lifecycle Cycle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No New Feedback \u2014 Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Evidence Collection",
+      "id": "evidence"
+    }
+  ],
+  "pinData": {}
+}
