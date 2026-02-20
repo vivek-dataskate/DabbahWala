@@ -1,6 +1,6 @@
 """
-Shipday Historical Data Fetcher + Inbound Webhook
-===================================================
+Shipday Historical Data Fetcher
+================================
 Fetches up to 1 year of Shipday delivery data and stores it in the database.
 Also provides the "top 10 people to call" analysis using the urgency scoring model.
 
@@ -9,7 +9,8 @@ Endpoints:
   GET  /api/shipday/sync-status              — How many orders synced so far
   GET  /api/shipday/top-calls                — 10 people to call with scripts
   POST /api/shipday/run-migration            — Run migration 034 (creates schema)
-  POST /api/shipday/webhook                  — Inbound status updates from Shipday (update-only)
+
+Inbound webhook: POST /api/webhooks/shipday  (handled in app/routers/webhooks.py)
 
 Authentication: Shipday API key from env: SHIPDAY_API_KEY
 """
@@ -18,7 +19,6 @@ import logging
 import os
 import time
 from datetime import datetime, timezone, timedelta
-from typing import Optional
 
 import httpx
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
@@ -416,180 +416,3 @@ def run_shipday_migration():
         raise HTTPException(status_code=500, detail=f"Migration failed: {e}")
 
 
-# ─── Shipday status map → our delivery_status_type enum ─────────────────────
-_SHIPDAY_TO_STATUS = {
-    "ACCEPTED":  "assigned",
-    "ASSIGNED":  "assigned",
-    "PICKED_UP": "picked_up",
-    "IN_TRANSIT":"in_transit",
-    "COMPLETED": "delivered",
-    "DELIVERED": "delivered",
-    "FAILED":    "failed",
-    "RETURNED":  "failed",
-}
-
-
-@router.get("/webhook")
-async def shipday_webhook_ping(request: Request):
-    """Shipday verification ping — just needs a 200 OK."""
-    logger.info(
-        "Shipday GET /webhook ping — headers: %s",
-        dict(request.headers),
-    )
-    return {"status": "ok"}
-
-
-@router.post("/webhook")
-async def shipday_webhook(request: Request):
-    """
-    Inbound Shipday webhook — receives order status change callbacks.
-
-    ONLY updates existing records (shipday_orders_raw + delivery_status).
-    Never creates new orders, contacts, or events.
-    """
-    # Log everything immediately so we can see what Shipday sends
-    try:
-        body = await request.body()
-    except Exception as e:
-        logger.error("Shipday webhook: failed to read body: %s", e)
-        raise HTTPException(status_code=400, detail="Could not read request body")
-
-    logger.info(
-        "Shipday POST /webhook — content_type=%s content_length=%s auth=%s body_bytes=%d body=%s",
-        request.headers.get("content-type", "(none)"),
-        request.headers.get("content-length", "(none)"),
-        request.headers.get("authorization", "(none)"),
-        len(body),
-        body[:500].decode("utf-8", errors="replace"),
-    )
-
-    # Empty or whitespace-only body = Shipday verification ping
-    if not body or not body.strip():
-        logger.info("Shipday webhook: empty body — verification ping, returning 200")
-        return {"status": "ok"}
-
-    # Non-empty body: verify Bearer token if configured
-    expected = os.environ.get("SHIPDAY_WEBHOOK_TOKEN", "").strip()
-    if expected:
-        auth = request.headers.get("Authorization", "")
-        token = auth.removeprefix("Bearer ").strip()
-        if token != expected:
-            logger.warning(
-                "Shipday webhook rejected — token mismatch (got=%r expected_len=%d)",
-                token[:8] + "..." if token else "(none)",
-                len(expected),
-            )
-            raise HTTPException(status_code=401, detail="Unauthorized")
-
-    try:
-        payload = json.loads(body)
-    except Exception:
-        logger.warning("Shipday webhook: non-JSON body — returning 200 (body=%s)", body[:200].decode("utf-8", errors="replace"))
-        return {"status": "ok"}
-
-    order_id    = str(payload.get("orderId") or payload.get("id") or "").strip()
-    if not order_id:
-        logger.info("Shipday webhook: no orderId in payload (likely verification) — returning 200. payload=%s", str(payload)[:300])
-        return {"status": "ok"}
-
-    raw_status  = (payload.get("orderStatus") or payload.get("status") or "UNKNOWN").upper()
-    our_status  = _SHIPDAY_TO_STATUS.get(raw_status)   # None if unknown status
-    order_number = payload.get("orderNumber") or ""
-    carrier      = payload.get("assignedCarrier") or {}
-    driver_name  = carrier.get("name")
-    driver_phone = carrier.get("phone")
-
-    # Parse actual delivery time if present
-    actual_delivery: Optional[str] = None
-    try:
-        actual_delivery = payload.get("actualDeliveryTime") or None
-    except Exception:
-        pass
-
-    logger.info(
-        "Shipday webhook: order_id=%s status=%s → %s driver=%s",
-        order_id, raw_status, our_status, driver_name
-    )
-
-    with get_cursor(commit=True) as cur:
-        # 1. Look up the existing order — reject unknown orders (no creation)
-        cur.execute(
-            """SELECT contact_id, customer_phone, customer_email, order_number
-               FROM shipday_orders_raw
-               WHERE shipday_order_id = %s""",
-            (order_id,)
-        )
-        existing = cur.fetchone()
-        if not existing:
-            logger.info(
-                "Shipday webhook: order_id=%s not found in shipday_orders_raw — ignoring",
-                order_id
-            )
-            return {"status": "ignored", "reason": "order_not_found", "order_id": order_id}
-
-        contact_id   = existing["contact_id"]
-        order_ref    = order_number or existing.get("order_number") or order_id
-
-        # 2. Update shipday_orders_raw — status + driver info
-        cur.execute(
-            """UPDATE shipday_orders_raw
-               SET shipday_status  = %s,
-                   actual_delivery = COALESCE(%s::timestamptz, actual_delivery),
-                   driver_name     = COALESCE(%s, driver_name),
-                   driver_phone    = COALESCE(%s, driver_phone),
-                   synced_at       = NOW(),
-                   raw_payload     = raw_payload || %s::jsonb
-               WHERE shipday_order_id = %s""",
-            (
-                raw_status,
-                actual_delivery,
-                driver_name,
-                driver_phone,
-                json.dumps({"webhook_updated_at": datetime.now(timezone.utc).isoformat()}),
-                order_id,
-            )
-        )
-
-        # 3. Update orders table if matched by external order ID (align delivery date)
-        if contact_id and our_status == "delivered" and order_ref:
-            cur.execute(
-                """UPDATE orders
-                   SET delivery_date = CURRENT_DATE,
-                       metadata = metadata || %s::jsonb
-                   WHERE contact_id = %s
-                     AND (order_id_external = %s OR order_id_external = %s)
-                     AND delivery_date IS NULL""",
-                (
-                    json.dumps({"shipday_status": raw_status, "shipday_order_id": order_id}),
-                    contact_id,
-                    order_ref,
-                    order_id,
-                )
-            )
-
-        # 4. Insert delivery_status row for this status change (audit trail)
-        if contact_id and our_status:
-            cur.execute(
-                """INSERT INTO delivery_status
-                     (contact_id, order_ref, status, updated_by, occurred_at, metadata)
-                   VALUES (%s, %s, %s, 'shipday_webhook', NOW(), %s)""",
-                (
-                    contact_id,
-                    order_ref,
-                    our_status,
-                    json.dumps({
-                        "shipday_order_id": order_id,
-                        "raw_status":       raw_status,
-                        "source":           "webhook",
-                        "driver_name":      driver_name,
-                    }),
-                )
-            )
-
-    return {
-        "status":        "ok",
-        "order_id":      order_id,
-        "shipday_status": raw_status,
-        "mapped_status": our_status,
-        "contact_found": contact_id is not None,
-    }
