@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Weekly Lapsed Customer Cycle",
+  "name": "DabbahWala — Lapsed Customer Daily Cycle",
   "nodes": [
     {
       "parameters": {
@@ -7,40 +7,23 @@
           "interval": [
             {
               "field": "cronExpression",
-              "expression": "0 1 * * 0"
+              "expression": "0 10 * * *"
             }
           ]
         }
       },
-      "id": "schedule-sunday",
-      "name": "Sunday 1am",
+      "id": "schedule-daily",
+      "name": "Daily 10am",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 240]
+      "position": [220, 300]
     },
     {
       "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "0 20 * * 3"
-            }
-          ]
-        }
-      },
-      "id": "schedule-wednesday",
-      "name": "Wednesday 8pm",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [220, 380]
-    },
-    {
-      "parameters": {
-        "jsCode": "// Random delay 0-90 minutes to avoid always hitting at the exact same time\n// This ensures contacts receive messages at unpredictable times across runs\nconst delayMs = Math.floor(Math.random() * 90 * 60 * 1000);\nconst delayMins = Math.round(delayMs / 60000);\nconsole.log(`Random delay: ${delayMins} minutes before lapsed cycle`);\nawait new Promise(r => setTimeout(r, delayMs));\nreturn [{ json: { delay_applied_mins: delayMins } }];"
+        "jsCode": "// Random delay 0-8 hours so the actual send time varies every day\n// Combined with the SQL cooldown, this means each contact gets touched\n// on a different day of the week each cycle — no detectable pattern.\nconst delayMs = Math.floor(Math.random() * 8 * 60 * 60 * 1000);\nconst delayHrs = (delayMs / 3600000).toFixed(1);\nconsole.log(`Lapsed cycle: random delay ${delayHrs}h — will fire around ${new Date(Date.now() + delayMs).toISOString()}`);\nawait new Promise(r => setTimeout(r, delayMs));\nreturn [{ json: { delay_applied_hrs: parseFloat(delayHrs) } }];"
       },
       "id": "random-delay",
-      "name": "Random Delay (0-90 min)",
+      "name": "Random Delay (0-8 hours)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [440, 300]
@@ -124,29 +107,18 @@
     }
   ],
   "connections": {
-    "Sunday 1am": {
+    "Daily 10am": {
       "main": [
         [
           {
-            "node": "Random Delay (0-90 min)",
+            "node": "Random Delay (0-8 hours)",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Wednesday 8pm": {
-      "main": [
-        [
-          {
-            "node": "Random Delay (0-90 min)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Random Delay (0-90 min)": {
+    "Random Delay (0-8 hours)": {
       "main": [
         [
           {
