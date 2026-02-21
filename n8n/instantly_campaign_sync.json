@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Instantly Campaign Sync",
+  "name": "[Instantly — Action] Campaign Sync",
   "nodes": [
     {
       "parameters": {
@@ -16,7 +16,10 @@
       "name": "Every 6 Hours",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -47,7 +50,10 @@
       "name": "Fetch All Instantly Campaigns",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -57,7 +63,10 @@
       "name": "Filter: tag = dabbahwala",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -74,7 +83,10 @@
       "name": "Upsert Campaigns in Render DB",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, 300]
+      "position": [
+        880,
+        300
+      ]
     },
     {
       "parameters": {},
@@ -82,7 +94,10 @@
       "name": "Done",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1100, 300]
+      "position": [
+        1100,
+        300
+      ]
     }
   ],
   "connections": {
@@ -143,6 +158,10 @@
     {
       "name": "Instantly",
       "id": "instantly"
+    },
+    {
+      "name": "Action",
+      "id": "tag-action"
     }
   ],
   "pinData": {}

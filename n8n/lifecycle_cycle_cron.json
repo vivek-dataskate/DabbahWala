@@ -1,5 +1,5 @@
 {
-  "name": "[Agent Intelligence] Lifecycle Cycle Runner",
+  "name": "[Claude — Decision] Lifecycle Cycle Runner",
   "nodes": [
     {
       "parameters": {
@@ -270,7 +270,7 @@
     {
       "parameters": {},
       "id": "no-campaigns",
-      "name": "No Campaigns \u2014 Done",
+      "name": "No Campaigns — Done",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -313,7 +313,7 @@
         ],
         [
           {
-            "node": "No Campaigns \u2014 Done",
+            "node": "No Campaigns — Done",
             "type": "main",
             "index": 0
           }
@@ -421,8 +421,18 @@
   },
   "staticData": null,
   "tags": [
-    {"name": "DabbahWala", "id": "dabbahwala"},
-    {"name": "Agent Intelligence", "id": "agent-intelligence"}
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Claude",
+      "id": "tag-claude"
+    },
+    {
+      "name": "Decision",
+      "id": "tag-decision"
+    }
   ],
   "pinData": {}
 }

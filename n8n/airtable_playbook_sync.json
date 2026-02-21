@@ -1,17 +1,25 @@
 {
-  "name": "[Evidence Collection] Airtable Playbook Sync",
+  "name": "[Airtable — Evidence] Playbook Sync",
   "nodes": [
     {
       "parameters": {
         "rule": {
-          "interval": [{"field": "minutes", "minutesInterval": 15}]
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
         }
       },
       "id": "schedule-trigger",
       "name": "Every 15 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [100, 300]
+      "position": [
+        100,
+        300
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +27,10 @@
       "name": "Manual Sync",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [100, 450]
+      "position": [
+        100,
+        450
+      ]
     },
     {
       "parameters": {
@@ -30,8 +41,14 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {"name": "view", "value": "Grid view"},
-            {"name": "filterByFormula", "value": "{Active}=TRUE()"}
+            {
+              "name": "view",
+              "value": "Grid view"
+            },
+            {
+              "name": "filterByFormula",
+              "value": "{Active}=TRUE()"
+            }
           ]
         },
         "options": {}
@@ -40,7 +57,10 @@
       "name": "Fetch Playbook Rules",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [350, 350],
+      "position": [
+        350,
+        350
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "hJpO8jdlT4Rmkjtx",
@@ -56,7 +76,10 @@
       "name": "Transform Airtable Records",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [600, 350]
+      "position": [
+        600,
+        350
+      ]
     },
     {
       "parameters": {
@@ -73,7 +96,10 @@
       "name": "Sync Rules to API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [850, 350]
+      "position": [
+        850,
+        350
+      ]
     },
     {
       "parameters": {
@@ -102,7 +128,10 @@
       "name": "Has Changes?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1100, 350]
+      "position": [
+        1100,
+        350
+      ]
     },
     {
       "parameters": {
@@ -117,7 +146,10 @@
       "name": "Notify Slack",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1350, 250]
+      "position": [
+        1350,
+        250
+      ]
     },
     {
       "parameters": {},
@@ -125,52 +157,83 @@
       "name": "No Changes — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1350, 450]
+      "position": [
+        1350,
+        450
+      ]
     }
   ],
   "connections": {
     "Every 15 Minutes": {
       "main": [
         [
-          {"node": "Fetch Playbook Rules", "type": "main", "index": 0}
+          {
+            "node": "Fetch Playbook Rules",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Manual Sync": {
       "main": [
         [
-          {"node": "Fetch Playbook Rules", "type": "main", "index": 0}
+          {
+            "node": "Fetch Playbook Rules",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Fetch Playbook Rules": {
       "main": [
         [
-          {"node": "Transform Airtable Records", "type": "main", "index": 0}
+          {
+            "node": "Transform Airtable Records",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Transform Airtable Records": {
       "main": [
         [
-          {"node": "Sync Rules to API", "type": "main", "index": 0}
+          {
+            "node": "Sync Rules to API",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Sync Rules to API": {
       "main": [
         [
-          {"node": "Has Changes?", "type": "main", "index": 0}
+          {
+            "node": "Has Changes?",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Has Changes?": {
       "main": [
         [
-          {"node": "Notify Slack", "type": "main", "index": 0}
+          {
+            "node": "Notify Slack",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          {"node": "No Changes — Skip", "type": "main", "index": 0}
+          {
+            "node": "No Changes — Skip",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
@@ -179,8 +242,18 @@
     "executionOrder": "v1"
   },
   "tags": [
-    {"name": "DabbahWala", "id": "dabbahwala"},
-    {"name": "Evidence Collection", "id": "evidence-collection"}
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Airtable",
+      "id": "tag-airtable"
+    },
+    {
+      "name": "Evidence",
+      "id": "tag-evidence"
+    }
   ],
   "pinData": {}
 }

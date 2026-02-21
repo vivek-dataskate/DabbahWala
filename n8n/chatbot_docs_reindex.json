@@ -1,5 +1,5 @@
 {
-  "name": "[System] Chatbot Docs Reindex (Weekly)",
+  "name": "[System — Maintenance] Chatbot Docs Reindex",
   "nodes": [
     {
       "parameters": {
@@ -8,7 +8,9 @@
             {
               "field": "weeks",
               "weeksInterval": 1,
-              "triggerAtDay": [1],
+              "triggerAtDay": [
+                1
+              ],
               "triggerAtHour": 2,
               "triggerAtMinute": 0
             }
@@ -19,7 +21,10 @@
       "name": "Every Monday 2 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -33,7 +38,10 @@
       "name": "Reindex Chatbot Docs",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -61,7 +69,10 @@
       "name": "Check Success",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -71,7 +82,10 @@
       "name": "Log Success",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 220]
+      "position": [
+        880,
+        220
+      ]
     },
     {
       "parameters": {
@@ -81,24 +95,51 @@
       "name": "Log Failure",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 400]
+      "position": [
+        880,
+        400
+      ]
     }
   ],
   "connections": {
     "Every Monday 2 AM": {
       "main": [
-        [{ "node": "Reindex Chatbot Docs", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Reindex Chatbot Docs",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Reindex Chatbot Docs": {
       "main": [
-        [{ "node": "Check Success", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Check Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Check Success": {
       "main": [
-        [{ "node": "Log Success", "type": "main", "index": 0 }],
-        [{ "node": "Log Failure", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Log Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -106,8 +147,18 @@
     "executionOrder": "v1"
   },
   "tags": [
-    {"name": "DabbahWala", "id": "dabbahwala"},
-    {"name": "System", "id": "system"}
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "System",
+      "id": "system"
+    },
+    {
+      "name": "Maintenance",
+      "id": "tag-maintenance"
+    }
   ],
   "pinData": {}
 }

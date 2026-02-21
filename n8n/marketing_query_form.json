@@ -1,5 +1,5 @@
 {
-  "name": "[Marketing] Marketing Query Form",
+  "name": "[Airtable — Inference] Marketing Query Form",
   "nodes": [
     {
       "parameters": {
@@ -13,17 +13,39 @@
               "requiredField": true,
               "fieldOptions": {
                 "values": [
-                  {"option": "Pipeline Snapshot — Lifecycle stage distribution"},
-                  {"option": "Who to Contact Today — Prioritized outreach list"},
-                  {"option": "Daily Summary — Today's orders and activity"},
-                  {"option": "Order Analytics — Top dishes, revenue, trends"},
-                  {"option": "Campaign Performance — Email campaign stats"},
-                  {"option": "Customer Lookup — Look up a specific customer"},
-                  {"option": "Communication History — SMS/call history for a customer"},
-                  {"option": "Ground Team Notes — Browse field team observations"},
-                  {"option": "Ad Copies — Browse social media ad copies"},
-                  {"option": "Submit New Input — Add your own observation or note"},
-                  {"option": "Ask Anything (AI) — Free-form question answered by AI"}
+                  {
+                    "option": "Pipeline Snapshot — Lifecycle stage distribution"
+                  },
+                  {
+                    "option": "Who to Contact Today — Prioritized outreach list"
+                  },
+                  {
+                    "option": "Daily Summary — Today's orders and activity"
+                  },
+                  {
+                    "option": "Order Analytics — Top dishes, revenue, trends"
+                  },
+                  {
+                    "option": "Campaign Performance — Email campaign stats"
+                  },
+                  {
+                    "option": "Customer Lookup — Look up a specific customer"
+                  },
+                  {
+                    "option": "Communication History — SMS/call history for a customer"
+                  },
+                  {
+                    "option": "Ground Team Notes — Browse field team observations"
+                  },
+                  {
+                    "option": "Ad Copies — Browse social media ad copies"
+                  },
+                  {
+                    "option": "Submit New Input — Add your own observation or note"
+                  },
+                  {
+                    "option": "Ask Anything (AI) — Free-form question answered by AI"
+                  }
                 ]
               }
             },
@@ -51,10 +73,18 @@
               "requiredField": false,
               "fieldOptions": {
                 "values": [
-                  {"option": "Ground Note — Field observation"},
-                  {"option": "Ad Copy — Social media content"},
-                  {"option": "Observation — General insight"},
-                  {"option": "Question — Something to investigate"}
+                  {
+                    "option": "Ground Note — Field observation"
+                  },
+                  {
+                    "option": "Ad Copy — Social media content"
+                  },
+                  {
+                    "option": "Observation — General insight"
+                  },
+                  {
+                    "option": "Question — Something to investigate"
+                  }
                 ]
               }
             }
@@ -69,7 +99,10 @@
       "name": "Marketing Query Form",
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.2,
-      "position": [200, 300],
+      "position": [
+        200,
+        300
+      ],
       "webhookId": "marketing-query-form"
     },
     {
@@ -80,7 +113,10 @@
       "name": "Map Category",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [450, 300]
+      "position": [
+        450,
+        300
+      ]
     },
     {
       "parameters": {
@@ -97,7 +133,10 @@
       "name": "Call Query API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [700, 300]
+      "position": [
+        700,
+        300
+      ]
     },
     {
       "parameters": {
@@ -107,7 +146,10 @@
       "name": "Format Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [950, 300]
+      "position": [
+        950,
+        300
+      ]
     },
     {
       "parameters": {
@@ -130,7 +172,10 @@
       "name": "Is Submission?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1200, 300]
+      "position": [
+        1200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -161,7 +206,10 @@
       "name": "Store in Airtable Team Inputs",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [1450, 200],
+      "position": [
+        1450,
+        200
+      ],
       "credentials": {
         "airtableTokenApi": {
           "id": "hJpO8jdlT4Rmkjtx",
@@ -198,7 +246,10 @@
       "name": "Log to Airtable",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [1450, 400],
+      "position": [
+        1450,
+        400
+      ],
       "credentials": {
         "airtableTokenApi": {
           "id": "hJpO8jdlT4Rmkjtx",
@@ -211,33 +262,75 @@
   "connections": {
     "Marketing Query Form": {
       "main": [
-        [{"node": "Map Category", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Map Category",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Map Category": {
       "main": [
-        [{"node": "Call Query API", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Call Query API",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Call Query API": {
       "main": [
-        [{"node": "Format Response", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Format Response": {
       "main": [
-        [{"node": "Is Submission?", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Is Submission?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Is Submission?": {
       "main": [
-        [{"node": "Store in Airtable Team Inputs", "type": "main", "index": 0}],
-        [{"node": "Log to Airtable", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Store in Airtable Team Inputs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Store in Airtable Team Inputs": {
       "main": [
-        [{"node": "Log to Airtable", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Log to Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -248,7 +341,17 @@
     "instanceId": "digitalworker-dataskate"
   },
   "tags": [
-    {"name": "DabbahWala", "id": "dabbahwala"},
-    {"name": "Marketing", "id": "marketing"}
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Airtable",
+      "id": "tag-airtable"
+    },
+    {
+      "name": "Inference",
+      "id": "tag-inference"
+    }
   ]
 }

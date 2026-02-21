@@ -1,5 +1,5 @@
 {
-  "name": "[Agent Intelligence] Action Queue Executor",
+  "name": "[System — Action] Action Queue Executor",
   "nodes": [
     {
       "parameters": {
@@ -154,8 +154,21 @@
             },
             {
               "conditions": {
-                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
-                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "sync_airtable_task", "operator": {"type": "string", "operation": "equals"}}],
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_type }}",
+                    "rightValue": "sync_airtable_task",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
                 "combinator": "and"
               },
               "renameOutput": true,
@@ -163,8 +176,21 @@
             },
             {
               "conditions": {
-                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
-                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "push_instantly_lead", "operator": {"type": "string", "operation": "equals"}}],
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_type }}",
+                    "rightValue": "push_instantly_lead",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
                 "combinator": "and"
               },
               "renameOutput": true,
@@ -172,8 +198,21 @@
             },
             {
               "conditions": {
-                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
-                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "push_instantly_sequences", "operator": {"type": "string", "operation": "equals"}}],
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_type }}",
+                    "rightValue": "push_instantly_sequences",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
                 "combinator": "and"
               },
               "renameOutput": true,
@@ -181,8 +220,21 @@
             },
             {
               "conditions": {
-                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
-                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "upload_google_drive", "operator": {"type": "string", "operation": "equals"}}],
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_type }}",
+                    "rightValue": "upload_google_drive",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
                 "combinator": "and"
               },
               "renameOutput": true,
@@ -190,8 +242,21 @@
             },
             {
               "conditions": {
-                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
-                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "send_email_report", "operator": {"type": "string", "operation": "equals"}}],
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict"
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action_type }}",
+                    "rightValue": "send_email_report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
                 "combinator": "and"
               },
               "renameOutput": true,
@@ -393,7 +458,7 @@
     {
       "parameters": {},
       "id": "no-actions",
-      "name": "No Actions \u2014 Skip",
+      "name": "No Actions — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -404,8 +469,16 @@
     {
       "parameters": {
         "operation": "create",
-        "base": {"__rl": true, "value": "appuy2VTIao6XVpIW", "mode": "id"},
-        "table": {"__rl": true, "value": "Field Sales Tasks", "mode": "name"},
+        "base": {
+          "__rl": true,
+          "value": "appuy2VTIao6XVpIW",
+          "mode": "id"
+        },
+        "table": {
+          "__rl": true,
+          "value": "Field Sales Tasks",
+          "mode": "name"
+        },
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -428,8 +501,16 @@
       "name": "Create Airtable Field Sales Task",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [1320, 720],
-      "credentials": {"airtableTokenApi": {"id": "hJpO8jdlT4Rmkjtx", "name": "Airtable API Key"}},
+      "position": [
+        1320,
+        720
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "id": "hJpO8jdlT4Rmkjtx",
+          "name": "Airtable API Key"
+        }
+      },
       "continueOnFail": true
     },
     {
@@ -442,7 +523,10 @@
       "name": "Mark Airtable Task Done",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 720]
+      "position": [
+        1540,
+        720
+      ]
     },
     {
       "parameters": {
@@ -459,8 +543,16 @@
       "name": "Push Lead to Instantly Campaign",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 920],
-      "credentials": {"httpHeaderAuth": {"id": "instantly-api-key", "name": "Instantly API Key"}},
+      "position": [
+        1320,
+        920
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "instantly-api-key",
+          "name": "Instantly API Key"
+        }
+      },
       "continueOnFail": true
     },
     {
@@ -473,7 +565,10 @@
       "name": "Mark Instantly Lead Done",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 920]
+      "position": [
+        1540,
+        920
+      ]
     },
     {
       "parameters": {
@@ -490,8 +585,16 @@
       "name": "Push Sequences to Instantly",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 1120],
-      "credentials": {"httpHeaderAuth": {"id": "instantly-api-key", "name": "Instantly API Key"}},
+      "position": [
+        1320,
+        1120
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "instantly-api-key",
+          "name": "Instantly API Key"
+        }
+      },
       "continueOnFail": true
     },
     {
@@ -504,35 +607,63 @@
       "name": "Mark Sequences Done",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 1120]
+      "position": [
+        1540,
+        1120
+      ]
     },
     {
       "parameters": {
         "method": "GET",
         "url": "=https://dabbahwala-latest.onrender.com{{ $json.payload.csv_download_url }}",
-        "options": {"response": {"response": {"responseFormat": "file"}}}
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
       },
       "id": "download-csv-for-drive",
       "name": "Download CSV for Drive",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 1320],
+      "position": [
+        1320,
+        1320
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "operation": "upload",
         "name": "={{ $('Split Actions').item.json.payload.filename || 'shipday_orders.csv' }}",
-        "driveId": {"__rl": true, "mode": "list", "value": "My Drive"},
-        "folderId": {"__rl": true, "mode": "id", "value": "={{ $('Split Actions').item.json.payload.folder_id }}"},
+        "driveId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $('Split Actions').item.json.payload.folder_id }}"
+        },
         "options": {}
       },
       "id": "upload-to-google-drive",
       "name": "Upload to Google Drive",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [1540, 1320],
-      "credentials": {"googleDriveOAuth2Api": {"id": "google-drive-oauth", "name": "Google Drive OAuth"}},
+      "position": [
+        1540,
+        1320
+      ],
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "google-drive-oauth",
+          "name": "Google Drive OAuth"
+        }
+      },
       "continueOnFail": true
     },
     {
@@ -545,7 +676,10 @@
       "name": "Mark Drive Upload Done",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1760, 1320]
+      "position": [
+        1760,
+        1320
+      ]
     },
     {
       "parameters": {
@@ -562,8 +696,16 @@
       "name": "Send Email Report",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [1320, 1520],
-      "credentials": {"smtp": {"id": "smtp-credential", "name": "SMTP"}},
+      "position": [
+        1320,
+        1520
+      ],
+      "credentials": {
+        "smtp": {
+          "id": "smtp-credential",
+          "name": "SMTP"
+        }
+      },
       "continueOnFail": true
     },
     {
@@ -576,7 +718,10 @@
       "name": "Mark Email Report Done",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1540, 1520]
+      "position": [
+        1540,
+        1520
+      ]
     }
   ],
   "connections": {
@@ -613,7 +758,7 @@
         ],
         [
           {
-            "node": "No Actions \u2014 Skip",
+            "node": "No Actions — Skip",
             "type": "main",
             "index": 0
           }
@@ -653,11 +798,41 @@
           "index": 0
         }
       ],
-      "sync_airtable_task": [{"node": "Create Airtable Field Sales Task", "type": "main", "index": 0}],
-      "push_instantly_lead": [{"node": "Push Lead to Instantly Campaign", "type": "main", "index": 0}],
-      "push_instantly_sequences": [{"node": "Push Sequences to Instantly", "type": "main", "index": 0}],
-      "upload_google_drive": [{"node": "Download CSV for Drive", "type": "main", "index": 0}],
-      "send_email_report": [{"node": "Send Email Report", "type": "main", "index": 0}]
+      "sync_airtable_task": [
+        {
+          "node": "Create Airtable Field Sales Task",
+          "type": "main",
+          "index": 0
+        }
+      ],
+      "push_instantly_lead": [
+        {
+          "node": "Push Lead to Instantly Campaign",
+          "type": "main",
+          "index": 0
+        }
+      ],
+      "push_instantly_sequences": [
+        {
+          "node": "Push Sequences to Instantly",
+          "type": "main",
+          "index": 0
+        }
+      ],
+      "upload_google_drive": [
+        {
+          "node": "Download CSV for Drive",
+          "type": "main",
+          "index": 0
+        }
+      ],
+      "send_email_report": [
+        {
+          "node": "Send Email Report",
+          "type": "main",
+          "index": 0
+        }
+      ]
     },
     "Send SMS via Telnyx": {
       "main": [
@@ -775,8 +950,18 @@
   },
   "staticData": null,
   "tags": [
-    {"name": "DabbahWala", "id": "dabbahwala"},
-    {"name": "Agent Intelligence", "id": "agent-intelligence"}
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "System",
+      "id": "tag-system"
+    },
+    {
+      "name": "Action",
+      "id": "tag-action"
+    }
   ],
   "pinData": {}
 }

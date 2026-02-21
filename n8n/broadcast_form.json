@@ -1,5 +1,5 @@
 {
-  "name": "[Dispatch] Broadcast Form (Delay Alert & Promo)",
+  "name": "[Telnyx — Form] Broadcast Form",
   "nodes": [
     {
       "parameters": {
@@ -13,8 +13,12 @@
               "requiredField": true,
               "fieldOptions": {
                 "values": [
-                  {"option": "Delay Alert \u2014 notify today's active orders"},
-                  {"option": "Promotional Blast \u2014 send to all opted-in customers"}
+                  {
+                    "option": "Delay Alert — notify today's active orders"
+                  },
+                  {
+                    "option": "Promotional Blast — send to all opted-in customers"
+                  }
                 ]
               }
             },
@@ -28,13 +32,13 @@
               "fieldLabel": "Email Subject",
               "fieldType": "text",
               "requiredField": true,
-              "placeholder": "Delivery update \u2014 your order is on its way"
+              "placeholder": "Delivery update — your order is on its way"
             },
             {
               "fieldLabel": "Email Body (HTML)",
               "fieldType": "textarea",
               "requiredField": true,
-              "placeholder": "<p>Hi {{first_name}},</p><p>Your order is running a bit late today. Our drivers are on the way!</p><p>\u2014 Team DabbahWala</p>"
+              "placeholder": "<p>Hi {{first_name}},</p><p>Your order is running a bit late today. Our drivers are on the way!</p><p>— Team DabbahWala</p>"
             },
             {
               "fieldLabel": "Affected Date (for Delay Alert, leave blank for today)",
@@ -46,7 +50,7 @@
               "fieldLabel": "Promo Title (for Promotional Blast only)",
               "fieldType": "text",
               "requiredField": false,
-              "placeholder": "e.g. Eid Special \u2014 20% Off"
+              "placeholder": "e.g. Eid Special — 20% Off"
             },
             {
               "fieldLabel": "Promo Channels (for Promotional Blast)",
@@ -54,9 +58,15 @@
               "requiredField": false,
               "fieldOptions": {
                 "values": [
-                  {"option": "SMS and Email"},
-                  {"option": "SMS only"},
-                  {"option": "Email only"}
+                  {
+                    "option": "SMS and Email"
+                  },
+                  {
+                    "option": "SMS only"
+                  },
+                  {
+                    "option": "Email only"
+                  }
                 ]
               }
             },
@@ -77,7 +87,10 @@
       "name": "Broadcast Form",
       "type": "n8n-nodes-base.formTrigger",
       "typeVersion": 2.2,
-      "position": [200, 300],
+      "position": [
+        200,
+        300
+      ],
       "webhookId": "broadcast-form"
     },
     {
@@ -88,18 +101,28 @@
       "name": "Parse Form Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
           "conditions": [
             {
               "id": "is-delay",
               "leftValue": "={{ $json.is_delay }}",
               "rightValue": true,
-              "operator": {"type": "boolean", "operation": "equals"}
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
             }
           ],
           "combinator": "and"
@@ -110,7 +133,10 @@
       "name": "Delay or Promo?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -119,13 +145,18 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ sms_message: $json.sms_message, email_subject: $json.email_subject, email_body: $json.email_body, target_date: $json.target_date || null, created_by: $json.created_by }) }}",
-        "options": {"timeout": 30000}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "call-delay-api",
       "name": "Create Delay Alert",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, 160],
+      "position": [
+        880,
+        160
+      ],
       "continueOnFail": true
     },
     {
@@ -135,79 +166,137 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ title: $('Parse Form Input').item.json.promo_title, broadcast_type: 'promotional', channels: $('Parse Form Input').item.json.channels, sms_message: $('Parse Form Input').item.json.sms_message, email_subject: $('Parse Form Input').item.json.email_subject, email_body: $('Parse Form Input').item.json.email_body, target_type: 'all_customers', created_by: $('Parse Form Input').item.json.created_by }) }}",
-        "options": {"timeout": 30000}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "create-promo",
       "name": "Create Promo Job",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [880, 440],
+      "position": [
+        880,
+        440
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "method": "POST",
         "url": "=https://dabbahwala-latest.onrender.com/api/broadcasts/{{ $json.job_id }}/queue",
-        "options": {"timeout": 30000}
+        "options": {
+          "timeout": 30000
+        }
       },
       "id": "queue-promo",
       "name": "Queue Promo Recipients",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, 440],
+      "position": [
+        1100,
+        440
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "// Build confirmation message for delay alert\nconst resp = $input.first().json;\nconst ok   = resp.status === 'queued';\nconst msg  = ok\n  ? `\u2705 Delay alert queued!\\n\\nJob ID: ${resp.job_id}\\nDate: ${resp.target_date}\\nRecipients: ${resp.total_recipients}\\n\\nSMS and email will be dispatched within 5 minutes.`\n  : `\u274c Error: ${JSON.stringify(resp)}`;\nreturn [{ json: { result_message: msg } }];"
+        "jsCode": "// Build confirmation message for delay alert\nconst resp = $input.first().json;\nconst ok   = resp.status === 'queued';\nconst msg  = ok\n  ? `✅ Delay alert queued!\\n\\nJob ID: ${resp.job_id}\\nDate: ${resp.target_date}\\nRecipients: ${resp.total_recipients}\\n\\nSMS and email will be dispatched within 5 minutes.`\n  : `❌ Error: ${JSON.stringify(resp)}`;\nreturn [{ json: { result_message: msg } }];"
       },
       "id": "format-delay-result",
       "name": "Format Delay Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1100, 160]
+      "position": [
+        1100,
+        160
+      ]
     },
     {
       "parameters": {
-        "jsCode": "// Build confirmation message for promo blast\nconst queueResp  = $input.first().json;\nconst createResp = $('Create Promo Job').first().json;\nconst ok = queueResp.status === 'queued';\nconst msg = ok\n  ? `\u2705 Promotional blast queued!\\n\\nJob ID: ${createResp.job_id}\\nRecipients: ${queueResp.total_recipients}\\n\\nMessages will be dispatched in batches every 5 minutes.`\n  : `\u274c Error: ${JSON.stringify(queueResp)}`;\nreturn [{ json: { result_message: msg } }];"
+        "jsCode": "// Build confirmation message for promo blast\nconst queueResp  = $input.first().json;\nconst createResp = $('Create Promo Job').first().json;\nconst ok = queueResp.status === 'queued';\nconst msg = ok\n  ? `✅ Promotional blast queued!\\n\\nJob ID: ${createResp.job_id}\\nRecipients: ${queueResp.total_recipients}\\n\\nMessages will be dispatched in batches every 5 minutes.`\n  : `❌ Error: ${JSON.stringify(queueResp)}`;\nreturn [{ json: { result_message: msg } }];"
       },
       "id": "format-promo-result",
       "name": "Format Promo Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1320, 440]
+      "position": [
+        1320,
+        440
+      ]
     }
   ],
   "connections": {
     "Broadcast Form": {
       "main": [
-        [{"node": "Parse Form Input", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Parse Form Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parse Form Input": {
       "main": [
-        [{"node": "Delay or Promo?", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Delay or Promo?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Delay or Promo?": {
       "main": [
-        [{"node": "Create Delay Alert", "type": "main", "index": 0}],
-        [{"node": "Create Promo Job",   "type": "main", "index": 0}]
+        [
+          {
+            "node": "Create Delay Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Promo Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Create Delay Alert": {
       "main": [
-        [{"node": "Format Delay Result", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Format Delay Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Create Promo Job": {
       "main": [
-        [{"node": "Queue Promo Recipients", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Queue Promo Recipients",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Queue Promo Recipients": {
       "main": [
-        [{"node": "Format Promo Result", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Format Promo Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -216,8 +305,18 @@
   },
   "staticData": null,
   "tags": [
-    {"name": "DabbahWala", "id": "dabbahwala"},
-    {"name": "Dispatch", "id": "dispatch"}
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Telnyx",
+      "id": "tag-telnyx"
+    },
+    {
+      "name": "Form",
+      "id": "tag-form"
+    }
   ],
   "pinData": {}
 }

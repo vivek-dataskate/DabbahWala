@@ -1,5 +1,5 @@
 {
-  "name": "[Agent Intelligence] Agent Orchestration Cron",
+  "name": "[Claude — Inference] Agent Orchestration",
   "nodes": [
     {
       "parameters": {
@@ -142,8 +142,18 @@
   },
   "staticData": null,
   "tags": [
-    {"name": "DabbahWala", "id": "dabbahwala"},
-    {"name": "Agent Intelligence", "id": "agent-intelligence"}
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Claude",
+      "id": "tag-claude"
+    },
+    {
+      "name": "Inference",
+      "id": "tag-inference"
+    }
   ],
   "pinData": {}
 }

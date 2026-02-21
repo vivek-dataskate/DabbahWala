@@ -1,5 +1,5 @@
 {
-  "name": "[Dispatch] SMS Dispatch via Telnyx",
+  "name": "[Telnyx — Action] SMS Dispatch",
   "nodes": [
     {
       "parameters": {
@@ -84,7 +84,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build SMS payload based on sms_level and lifecycle\nconst contact = $input.item.json;\nconst smsLevel = contact.sms_level || 1;\nconst lifecycle = contact.lifecycle || 'cold';\n\nlet messageBody = '';\n\nif (lifecycle === 'new_customer') {\n  messageBody = `Hi ${contact.contact_email.split('@')[0]}! Thanks for your recent order with DabbahWala. Reply YES for exclusive offers.`;\n} else if (smsLevel >= 3) {\n  messageBody = `We miss you! Your favorites are ready for reorder. Reply ORDER or call us \u2014 DabbahWala`;\n} else if (smsLevel >= 2) {\n  messageBody = `Special offer just for you from DabbahWala! Check your email for details. Reply STOP to opt out.`;\n} else {\n  messageBody = `DabbahWala: Fresh items available this week! Reply STOP to opt out.`;\n}\n\nreturn {\n  json: {\n    contact_id: contact.contact_id,\n    phone: contact.phone,\n    email: contact.contact_email,\n    message_body: messageBody,\n    sms_level: smsLevel\n  }\n};"
+        "jsCode": "// Build SMS payload based on sms_level and lifecycle\nconst contact = $input.item.json;\nconst smsLevel = contact.sms_level || 1;\nconst lifecycle = contact.lifecycle || 'cold';\n\nlet messageBody = '';\n\nif (lifecycle === 'new_customer') {\n  messageBody = `Hi ${contact.contact_email.split('@')[0]}! Thanks for your recent order with DabbahWala. Reply YES for exclusive offers.`;\n} else if (smsLevel >= 3) {\n  messageBody = `We miss you! Your favorites are ready for reorder. Reply ORDER or call us — DabbahWala`;\n} else if (smsLevel >= 2) {\n  messageBody = `Special offer just for you from DabbahWala! Check your email for details. Reply STOP to opt out.`;\n} else {\n  messageBody = `DabbahWala: Fresh items available this week! Reply STOP to opt out.`;\n}\n\nreturn {\n  json: {\n    contact_id: contact.contact_id,\n    phone: contact.phone,\n    email: contact.contact_email,\n    message_body: messageBody,\n    sms_level: smsLevel\n  }\n};"
       },
       "id": "build-message",
       "name": "Build SMS Message",
@@ -160,7 +160,7 @@
     {
       "parameters": {},
       "id": "no-pending",
-      "name": "No Pending \u2014 Skip",
+      "name": "No Pending — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -203,7 +203,7 @@
         ],
         [
           {
-            "node": "No Pending \u2014 Skip",
+            "node": "No Pending — Skip",
             "type": "main",
             "index": 0
           }
@@ -254,8 +254,18 @@
   },
   "staticData": null,
   "tags": [
-    {"name": "DabbahWala", "id": "dabbahwala"},
-    {"name": "Dispatch", "id": "dispatch"}
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Telnyx",
+      "id": "tag-telnyx"
+    },
+    {
+      "name": "Action",
+      "id": "tag-action"
+    }
   ],
   "pinData": {}
 }
