@@ -403,7 +403,7 @@ def _fetch_active_goal(contact_id: int) -> Optional[dict]:
         return None
 
 
-def _fetch_recent_actions(contact_id: int, hours: int = 48) -> list:
+def _fetch_recent_actions(contact_id: int, hours: int = 168) -> list:  # default 7 days
     logger.debug("Fetching recent actions for contact_id=%s last %dh", contact_id, hours)
     with get_cursor(commit=False) as cur:
         cur.execute(
@@ -792,14 +792,20 @@ def _run_channel_agent(
         "You are the Channel Selection Decision Agent for DabbahWala. "
         "Choose the best next communication channel: sms, email, call, or none. "
         "Consider recency of last contact, engagement trend, and intent. "
-        "Avoid recommending a channel if it was used in the last 24 hours. "
-        "Timing options: immediate, tomorrow, 3days, none."
+        "Timing options: immediate, tomorrow, 3days, none.\n\n"
+        "ANTI-REPETITION RULES:\n"
+        "  - If recent_actions shows move_campaign or send_sms in the last 24h: recommend 'none' — do not repeat today.\n"
+        "  - If recent_actions shows move_campaign (email) in the last 7 days AND opens_30d=0 AND clicks_30d=0: "
+        "the customer has NOT responded to email. Escalate channel to 'sms' for next contact.\n"
+        "  - If send_sms was done in the last 3 days with no response event logged: "
+        "do not send another SMS — recommend 'none' or 'email'."
         + playbook
     )
     user = (
         f"Customer: {contact.get('first_name', '')} | Engagement: {inference.get('engagement_score', 0):.2f} "
-        f"| Trend: {inference.get('engagement_trend', 'flat')} | Intent: {inference.get('intent', 'unknown')}\n\n"
-        f"Recent actions (last 48h):\n{json.dumps(recent_actions, indent=2, default=str)}"
+        f"| Trend: {inference.get('engagement_trend', 'flat')} | Intent: {inference.get('intent', 'unknown')} "
+        f"| Opens(30d): {contact.get('opens_30d', 0)} | Clicks(30d): {contact.get('clicks_30d', 0)}\n\n"
+        f"Recent actions (last 7 days):\n{json.dumps(recent_actions, indent=2, default=str)}"
     )
     tool = {
         "name": "submit_channel",
@@ -1057,6 +1063,12 @@ def _run_orchestrator(
         "  - Maximum 3 SMS per week per customer\n"
         "  - Escalation to Airtable takes priority over automated channels\n"
         "  - If intent is not_interested, action must be 'none' unless escalation is high urgency\n\n"
+        "ANTI-REPETITION (check recent_actions before deciding):\n"
+        "  - If recent_actions contains move_campaign or send_sms in the last 24h: action MUST be 'none'.\n"
+        "  - If recent_actions shows only email/campaign actions in the last 7 days AND "
+        "the customer has zero email opens (opens_30d=0): email has failed — do NOT choose move_campaign again. "
+        "Choose send_sms or none instead.\n"
+        "  - If you already escalated to Airtable in the last 48h: action must be 'none' — avoid spamming the team.\n\n"
         "GROUND TEAM OVERRIDES (check after delivery rules):\n"
         "  - If priority_override is 'do_not_contact': action must be 'none' — no exceptions.\n"
         "  - If priority_override is 'high': treat as hot-priority customer; prefer escalate_airtable "
@@ -1204,7 +1216,7 @@ def _run_full_cycle(contact_id: int) -> dict:
     events = _fetch_recent_events(contact_id, days=30)
     comms = _fetch_communications(contact_id, days=30)
     goal = _fetch_active_goal(contact_id)
-    recent_actions = _fetch_recent_actions(contact_id, hours=48)
+    recent_actions = _fetch_recent_actions(contact_id, hours=168)  # 7 days — full channel history
     outcomes = _fetch_recent_outcomes(contact_id, limit=10)   # feedback loop
     playbook = _fetch_playbook_rules()                         # dynamic config
     goal_id = goal["id"] if goal else None
@@ -1793,6 +1805,67 @@ def run_agent_cycle_all():
         len(results),
         len(errors),
         time.time() - t_batch,
+    )
+    return {"processed": len(results), "errors": errors, "results": results}
+
+
+@router.post("/cycle/run-all-lapsed")
+def run_agent_cycle_lapsed():
+    """Weekly agent cycle for lapsed one-time buyers (ordered 90+ days ago).
+
+    Intended to run once per week (Sunday night) via n8n, separate from the
+    nightly active-contact run. Limits to 300 contacts per run to control cost.
+
+    Eligibility:
+      - Has placed at least 1 order
+      - Last order was 90+ days ago (or last_order_at unknown)
+      - Not churned or opted out
+      - No agent action taken in the last 6 days (avoids re-running if the
+        weekly job fires while a previous run is still within the week)
+    """
+    logger.info("POST /cycle/run-all-lapsed — querying lapsed contacts")
+    with get_cursor(commit=False) as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT c.id FROM contacts c
+            WHERE c.lifecycle_segment NOT IN ('churned', 'optout')
+              AND c.total_orders > 0
+              AND (c.last_order_at IS NULL OR c.last_order_at < now() - interval '90 days')
+              AND NOT EXISTS (
+                  SELECT 1 FROM action_queue aq
+                  WHERE aq.contact_id = c.id
+                    AND aq.created_at > now() - interval '6 days'
+              )
+            ORDER BY c.last_order_at DESC NULLS LAST
+            LIMIT 300
+            """
+        )
+        contact_ids = [r["id"] for r in cur.fetchall()]
+
+    logger.info("run-all-lapsed: found %d lapsed contacts to process", len(contact_ids))
+    if not contact_ids:
+        logger.info("run-all-lapsed: no eligible lapsed contacts — skipping")
+        return {"processed": 0, "errors": [], "results": []}
+
+    results = []
+    errors = []
+    t_batch = time.time()
+    for i, cid in enumerate(contact_ids, 1):
+        try:
+            r = _run_full_cycle(cid)
+            results.append(r)
+            if i % 20 == 0:
+                logger.info(
+                    "run-all-lapsed progress: %d/%d processed (%d errors) elapsed=%.0fs",
+                    i, len(contact_ids), len(errors), time.time() - t_batch,
+                )
+        except Exception as e:
+            logger.error("Cycle failed for contact_id=%s in run-all-lapsed: %s", cid, e, exc_info=True)
+            errors.append({"contact_id": cid, "error": str(e)})
+
+    logger.info(
+        "run-all-lapsed complete: %d processed %d errors in %.0fs",
+        len(results), len(errors), time.time() - t_batch,
     )
     return {"processed": len(results), "errors": errors, "results": results}
 
