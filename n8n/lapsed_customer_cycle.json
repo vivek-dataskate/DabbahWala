@@ -12,11 +12,38 @@
           ]
         }
       },
-      "id": "schedule-trigger",
-      "name": "Every Sunday 1am",
+      "id": "schedule-sunday",
+      "name": "Sunday 1am",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [220, 240]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 20 * * 3"
+            }
+          ]
+        }
+      },
+      "id": "schedule-wednesday",
+      "name": "Wednesday 8pm",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 380]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Random delay 0-90 minutes to avoid always hitting at the exact same time\n// This ensures contacts receive messages at unpredictable times across runs\nconst delayMs = Math.floor(Math.random() * 90 * 60 * 1000);\nconst delayMins = Math.round(delayMs / 60000);\nconsole.log(`Random delay: ${delayMins} minutes before lapsed cycle`);\nawait new Promise(r => setTimeout(r, delayMs));\nreturn [{ json: { delay_applied_mins: delayMins } }];"
+      },
+      "id": "random-delay",
+      "name": "Random Delay (0-90 min)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
     },
     {
       "parameters": {
@@ -30,18 +57,18 @@
       "name": "Run Lapsed Customer Cycle",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300],
+      "position": [660, 300],
       "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "// Log and summarise the weekly lapsed run\nconst result = $input.item.json;\nconst processed = result.processed || 0;\nconst errors = (result.errors || []).length;\nconst results = result.results || [];\n\nconst actions = {};\nfor (const r of results) {\n  const action = r.chosen_action || 'none';\n  actions[action] = (actions[action] || 0) + 1;\n}\n\nconsole.log(\n  `Lapsed cycle: processed=${processed} errors=${errors} actions=${JSON.stringify(actions)}`\n);\n\nreturn [{ json: {\n  ...result,\n  action_summary: actions,\n  has_actions: processed > 0 && (actions['send_sms'] || 0) + (actions['move_campaign'] || 0) + (actions['escalate_airtable'] || 0) > 0\n}}];"
+        "jsCode": "// Log and summarise the lapsed run\nconst result = $input.item.json;\nconst processed = result.processed || 0;\nconst errors = (result.errors || []).length;\nconst results = result.results || [];\n\nconst actions = {};\nfor (const r of results) {\n  const action = r.chosen_action || 'none';\n  actions[action] = (actions[action] || 0) + 1;\n}\n\nconsole.log(\n  `Lapsed cycle: processed=${processed} errors=${errors} actions=${JSON.stringify(actions)}`\n);\n\nreturn [{ json: {\n  ...result,\n  action_summary: actions,\n  has_actions: processed > 0 && (actions['send_sms'] || 0) + (actions['move_campaign'] || 0) + (actions['escalate_airtable'] || 0) > 0\n}}];"
       },
       "id": "log-results",
       "name": "Log Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [880, 300]
     },
     {
       "parameters": {
@@ -70,7 +97,7 @@
       "name": "Any Actions Taken?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [880, 300]
+      "position": [1100, 300]
     },
     {
       "parameters": {
@@ -78,14 +105,14 @@
         "url": "=https://hooks.slack.com/services/placeholder",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"Weekly lapsed customer cycle complete!\\n- Processed: {{ $json.processed }}\\n- Actions: {{ JSON.stringify($json.action_summary) }}\\n- Errors: {{ ($json.errors || []).length }}\"\n}",
+        "jsonBody": "={\n  \"text\": \"Lapsed customer cycle complete!\\n- Processed: {{ $json.processed }}\\n- Actions: {{ JSON.stringify($json.action_summary) }}\\n- Errors: {{ ($json.errors || []).length }}\"\n}",
         "options": {}
       },
       "id": "notify-slack",
       "name": "Notify Slack",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, 200]
+      "position": [1320, 200]
     },
     {
       "parameters": {},
@@ -93,11 +120,33 @@
       "name": "No Actions — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1100, 420]
+      "position": [1320, 420]
     }
   ],
   "connections": {
-    "Every Sunday 1am": {
+    "Sunday 1am": {
+      "main": [
+        [
+          {
+            "node": "Random Delay (0-90 min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wednesday 8pm": {
+      "main": [
+        [
+          {
+            "node": "Random Delay (0-90 min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random Delay (0-90 min)": {
       "main": [
         [
           {

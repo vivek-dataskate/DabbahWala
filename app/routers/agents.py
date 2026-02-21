@@ -793,19 +793,30 @@ def _run_channel_agent(
         "Choose the best next communication channel: sms, email, call, or none. "
         "Consider recency of last contact, engagement trend, and intent. "
         "Timing options: immediate, tomorrow, 3days, none.\n\n"
-        "ANTI-REPETITION RULES:\n"
-        "  - If recent_actions shows move_campaign or send_sms in the last 24h: recommend 'none' — do not repeat today.\n"
-        "  - If recent_actions shows move_campaign (email) in the last 7 days AND opens_30d=0 AND clicks_30d=0: "
-        "the customer has NOT responded to email. Escalate channel to 'sms' for next contact.\n"
-        "  - If send_sms was done in the last 3 days with no response event logged: "
-        "do not send another SMS — recommend 'none' or 'email'."
+        "PERSISTENCE RULES — never give up on a customer:\n"
+        "  - Always recommend a channel. Silence is never the right long-term answer.\n"
+        "  - Rotate channels: if the last action was email/move_campaign → recommend 'sms' next. "
+        "If the last action was send_sms → recommend 'email' next. "
+        "This rotation continues indefinitely — each week a different channel with fresh copy.\n"
+        "  - The only reason to recommend 'none' is: (a) action already taken in the last 24h via this channel, "
+        "or (b) customer has lifecycle_segment='optout' or priority_override='do_not_contact'.\n"
+        "CHANNEL SELECTION LOGIC:\n"
+        "  - If no prior actions exist → start with email/move_campaign (least intrusive).\n"
+        "  - If email has been tried 1+ times with zero opens → switch to sms.\n"
+        "  - If sms was last → switch to email (different angle). "
+        "If sms was tried 3+ times with zero replies → consider 'call' to escalate human contact.\n"
+        "TIMING RANDOMIZATION:\n"
+        "  - Never always recommend 'immediate'. For lapsed contacts (total_orders > 0, low engagement), "
+        "vary timing: sometimes 'tomorrow', sometimes '3days'. This ensures messages arrive on different "
+        "days of the week and at different times — making the outreach feel less robotic and more natural."
         + playbook
     )
     user = (
         f"Customer: {contact.get('first_name', '')} | Engagement: {inference.get('engagement_score', 0):.2f} "
         f"| Trend: {inference.get('engagement_trend', 'flat')} | Intent: {inference.get('intent', 'unknown')} "
         f"| Opens(30d): {contact.get('opens_30d', 0)} | Clicks(30d): {contact.get('clicks_30d', 0)}\n\n"
-        f"Recent actions (last 7 days):\n{json.dumps(recent_actions, indent=2, default=str)}"
+        f"Full channel history (last 7 days — use to determine rotation):\n"
+        f"{json.dumps(recent_actions, indent=2, default=str)}"
     )
     tool = {
         "name": "submit_channel",
@@ -839,6 +850,7 @@ def _run_offer_agent(
     inference: dict,
     outcomes: list,
     playbook: str,
+    recent_actions: Optional[list] = None,
 ) -> dict:
     """Recommend offer type and generate ready-to-send copy.
 
@@ -852,6 +864,33 @@ def _run_offer_agent(
         inference.get("intent"),
         len(outcomes),
     )
+    # Count total outreach attempts from action history
+    actions_all = recent_actions or []
+    attempt_count = sum(
+        1 for a in actions_all
+        if a.get("action_type") in ("move_campaign", "send_sms")
+    )
+
+    # Messaging progression based on attempt count — varies copy angle each round
+    # Cycle: reminder → social_proof → discount → urgency → repeat with new creative angles
+    attempt_cycle = attempt_count % 6
+    progression_hints = [
+        "Attempt 1: warm REMINDER — 'We miss you, here's what's new on the menu this week'.",
+        "Attempt 2: SOCIAL PROOF — 'Our customers are raving about X dish. Here's what you're missing'.",
+        "Attempt 3: DISCOUNT/INCENTIVE — 'Special comeback offer just for you — X% off your next order'.",
+        "Attempt 4: URGENCY/SCARCITY — 'Limited fresh batches this week', 'Order by Friday for this week's menu'.",
+        "Attempt 5: PERSONAL/EMOTIONAL — Reference their past order, make it feel personal. 'You loved our biryani — it's back this week'.",
+        "Attempt 6+: CURIOSITY/NOVELTY — Tease a new dish, seasonal special, or behind-the-scenes. 'We have something new you've never tried'.",
+    ]
+    progression_note = (
+        f"\n\nMESSAGING PROGRESSION (attempt #{attempt_count + 1} total, cycle position {attempt_cycle + 1}/6):\n"
+        f"{progression_hints[min(attempt_cycle, 5)]}\n"
+        "CRITICAL: Generate copy that is completely different in angle from previous attempts. "
+        "Do NOT repeat the same opening line, offer, or call-to-action as before. "
+        "After 6+ attempts, keep cycling through the progression — each cycle should feel fresh, "
+        "not a copy of the previous round."
+    )
+
     # Analyse what has worked before (feedback loop)
     outcome_insight = ""
     if outcomes:
@@ -872,14 +911,16 @@ def _run_offer_agent(
         "You are the Offer Selection Decision Agent for DabbahWala food delivery. "
         "Select the right offer type for this customer: discount, reminder, social_proof, or none. "
         "Also draft a short suggested SMS/email copy (max 160 chars for SMS suitability). "
-        "Base your choice on intent, sentiment, and what has worked historically."
+        "Base your choice on intent, sentiment, and what has worked historically. "
+        "Never generate copy that sounds like a previous attempt — vary the angle every time."
+        + progression_note
         + outcome_insight
         + playbook
     )
     user = (
         f"Customer: {contact.get('first_name', '')} | Orders: {contact.get('total_orders', 0)} | "
         f"Sentiment: {inference.get('sentiment', 'neutral')} | Intent: {inference.get('intent', 'unknown')}\n"
-        f"Engagement score: {inference.get('engagement_score', 0):.2f}\n\n"
+        f"Engagement score: {inference.get('engagement_score', 0):.2f} | Total outreach attempts: {attempt_count}\n\n"
         f"Previous outcomes ({len(outcomes)} records):\n{json.dumps(outcomes, indent=2, default=str)}"
     )
     tool = {
@@ -936,27 +977,49 @@ def _run_escalation_agent(
         goal.get("goal") if goal else "none",
     )
     failed_attempts = sum(1 for o in outcomes if o.get("outcome") in ("no_answer", "not_interested"))
+    total_automated = len(outcomes)
+
+    # Count automated channel actions from action history (passed via inference summary context)
     escalation_context = ""
     if failed_attempts >= 3:
         escalation_context = (
             f"\n\nFEEDBACK: This contact has had {failed_attempts} failed automated attempts "
-            f"(no_answer or not_interested). Strong case for human escalation."
+            f"({total_automated} total). Standard automated channels are NOT working. "
+            f"Recommend human escalation with a creative new approach — NOT another email or SMS."
         )
+    elif total_automated >= 6:
+        escalation_context = (
+            f"\n\nFEEDBACK: {total_automated} automated touches with no conversion. "
+            f"It's time to escalate to a human with a completely different strategy."
+        )
+
     system = (
         "You are the Escalation Decision Agent for DabbahWala. "
         "Determine if this customer needs a human sales team member to intervene. "
         "Escalate when: sentiment is very negative, intent is ready_to_order but stalled, "
-        "goal deadline is approaching, or multiple automated attempts have failed. "
+        "goal deadline is approaching, or multiple automated attempts have failed.\n\n"
+        "CREATIVE ESCALATION — when automated channels are not working:\n"
+        "  - After 3+ failed automated outcomes OR 6+ automated touches: always escalate with high urgency.\n"
+        "  - When escalating for stuck lapsed customers, suggest a CREATIVE new approach in your notes field:\n"
+        "    Options to suggest: personal phone call from owner/manager, WhatsApp voice note, "
+        "special 'we miss you' gift/freebie offer, invitation to visit the kitchen, "
+        "referral request ('bring a friend, get a discount'), handwritten note with delivery, "
+        "or a completely different menu item they've never tried.\n"
+        "  - Your escalation notes should be actionable: tell the field team EXACTLY what to try, "
+        "not just 'contact this customer'.\n"
         "Urgency: high (act today), medium (act this week), none (no escalation)."
         + escalation_context
         + playbook
     )
     user = (
         f"Customer: {contact.get('first_name', '')} {contact.get('last_name', '')} | "
-        f"Phone: {contact.get('phone', 'N/A')}\n"
+        f"Phone: {contact.get('phone', 'N/A')} | "
+        f"Total orders ever: {contact.get('total_orders', 0)} | "
+        f"Last order: {contact.get('last_order_at', 'never')}\n"
+        f"Sales notes from ground team: {contact.get('sales_notes') or 'none'}\n"
         f"Inference: {json.dumps(inference, indent=2, default=str)}\n"
         f"Active goal: {json.dumps(goal, indent=2, default=str)}\n"
-        f"Failed attempts (from feedback): {failed_attempts}"
+        f"Failed attempts (from feedback): {failed_attempts} | Total automated touches: {total_automated}"
     )
     tool = {
         "name": "submit_escalation",
@@ -1064,11 +1127,16 @@ def _run_orchestrator(
         "  - Escalation to Airtable takes priority over automated channels\n"
         "  - If intent is not_interested, action must be 'none' unless escalation is high urgency\n\n"
         "ANTI-REPETITION (check recent_actions before deciding):\n"
-        "  - If recent_actions contains move_campaign or send_sms in the last 24h: action MUST be 'none'.\n"
+        "  - If recent_actions contains move_campaign or send_sms in the last 24h: action MUST be 'none' for today — wait until next run.\n"
         "  - If recent_actions shows only email/campaign actions in the last 7 days AND "
-        "the customer has zero email opens (opens_30d=0): email has failed — do NOT choose move_campaign again. "
-        "Choose send_sms or none instead.\n"
-        "  - If you already escalated to Airtable in the last 48h: action must be 'none' — avoid spamming the team.\n\n"
+        "the customer has zero email opens (opens_30d=0): rotate to send_sms — do NOT repeat move_campaign.\n"
+        "  - If recent_actions shows only SMS actions in the last 7 days: rotate to move_campaign (email) with a fresh angle.\n"
+        "  - If you already escalated to Airtable in the last 48h: action must be 'none' — avoid spamming the team.\n"
+        "PERSISTENCE — do NOT give up:\n"
+        "  - No-response to email or SMS is NOT a reason to stop. Rotate channels, vary the message angle, keep going.\n"
+        "  - The only reasons to choose 'none' permanently: priority_override=do_not_contact, lifecycle_segment=optout/churned, "
+        "or the customer explicitly said 'not interested' (intent=not_interested with high confidence).\n"
+        "  - For lapsed customers (total_orders > 0, no recent order): always attempt outreach — they ordered before, they can again.\n\n"
         "GROUND TEAM OVERRIDES (check after delivery rules):\n"
         "  - If priority_override is 'do_not_contact': action must be 'none' — no exceptions.\n"
         "  - If priority_override is 'high': treat as hot-priority customer; prefer escalate_airtable "
@@ -1266,7 +1334,7 @@ def _run_full_cycle(contact_id: int) -> dict:
     logger.info("--- Layer 2: Decision ---")
     stage = _run_stage_agent(client, contact, inference_summary, playbook)
     channel = _run_channel_agent(client, contact, inference_summary, recent_actions, playbook)
-    offer = _run_offer_agent(client, contact, inference_summary, outcomes, playbook)
+    offer = _run_offer_agent(client, contact, inference_summary, outcomes, playbook, recent_actions)
     escalation = _run_escalation_agent(client, contact, inference_summary, goal, outcomes, playbook)
     decision_id = _store_decision(contact_id, inference_id, stage, channel, offer, escalation)
 
@@ -1820,8 +1888,13 @@ def run_agent_cycle_lapsed():
       - Has placed at least 1 order
       - Last order was 90+ days ago (or last_order_at unknown)
       - Not churned or opted out
-      - No agent action taken in the last 6 days (avoids re-running if the
-        weekly job fires while a previous run is still within the week)
+      - Dynamic cooldown:
+          - Contacts with < 2 prior lapsed-cycle actions: 6-day cooldown (once/week)
+          - Contacts with 2+ prior actions (2+ weeks no response): 3-day cooldown (twice/week)
+            This doubles touchpoint frequency for persistent non-responders.
+
+    Designed to run twice per week (Sunday + Wednesday). New contacts are gated by
+    the 6-day cooldown; veteran non-responders (2+ weeks) get both runs.
     """
     logger.info("POST /cycle/run-all-lapsed — querying lapsed contacts")
     with get_cursor(commit=False) as cur:
@@ -1832,9 +1905,20 @@ def run_agent_cycle_lapsed():
               AND c.total_orders > 0
               AND (c.last_order_at IS NULL OR c.last_order_at < now() - interval '90 days')
               AND NOT EXISTS (
+                  -- Dynamic cooldown: 3 days if 2+ prior attempts, else 6 days
                   SELECT 1 FROM action_queue aq
                   WHERE aq.contact_id = c.id
-                    AND aq.created_at > now() - interval '6 days'
+                    AND aq.created_at > now() - (
+                        CASE
+                          WHEN (
+                              SELECT COUNT(*) FROM action_queue aq2
+                              WHERE aq2.contact_id = c.id
+                                AND aq2.action_type IN ('move_campaign', 'send_sms')
+                          ) >= 2
+                          THEN interval '3 days'
+                          ELSE interval '6 days'
+                        END
+                    )
               )
             ORDER BY c.last_order_at DESC NULLS LAST
             LIMIT 300
