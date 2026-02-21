@@ -102,6 +102,7 @@ def _fetch_contact(contact_id: int) -> dict:
             SELECT c.id, c.first_name, c.last_name, c.email, c.phone,
                    c.lifecycle_segment, c.total_orders, c.sms_level,
                    c.last_order_at, c.created_at,
+                   c.priority_override, c.sales_notes,
                    er.opens_7d, er.opens_30d, er.clicks_7d, er.clicks_30d,
                    er.sms_sent_30d, er.orders_90d
             FROM contacts c
@@ -200,7 +201,7 @@ def _fetch_recent_outcomes(contact_id: int, limit: int = 5) -> list:
         cur.execute(
             """
             SELECT action, priority, reason, suggested_message,
-                   status, outcome, created_at, dispatched_at
+                   status, outcome, outcome_notes, created_at, dispatched_at
             FROM opportunities
             WHERE contact_id = %s AND outcome IS NOT NULL
             ORDER BY created_at DESC
@@ -463,7 +464,8 @@ def _run_sentiment_agent(
         f"Lifecycle: {contact.get('lifecycle_segment', 'unknown')} | "
         f"Total orders: {contact.get('total_orders', 0)} | "
         f"Last order: {contact.get('last_order_at', 'never')}\n\n"
-        f"Recent communications ({len(comms)} records):\n{json.dumps(comms, indent=2, default=str)}\n\n"
+        + (f"Ground team sales note (treat as high-confidence): {contact['sales_notes']}\n\n" if contact.get("sales_notes") else "")
+        + f"Recent communications ({len(comms)} records):\n{json.dumps(comms, indent=2, default=str)}\n\n"
         f"Previous action outcomes (feedback loop — {len(outcomes)} records):\n"
         f"{json.dumps(outcomes, indent=2, default=str)}"
     )
@@ -563,7 +565,8 @@ def _run_intent_agent(
         f"Opens (7d/30d): {contact.get('opens_7d', 0)}/{contact.get('opens_30d', 0)} | "
         f"Clicks (7d/30d): {contact.get('clicks_7d', 0)}/{contact.get('clicks_30d', 0)}"
         f"{prefs_section}\n\n"
-        f"Recent events ({len(events)} total, showing first 25):\n"
+        + (f"Ground team sales note (treat as high-confidence): {contact['sales_notes']}\n\n" if contact.get("sales_notes") else "")
+        + f"Recent events ({len(events)} total, showing first 25):\n"
         f"{json.dumps(events[:25], indent=2, default=str)}\n\n"
         f"Recent communications ({len(comms)} total, showing first 10):\n"
         f"{json.dumps(comms[:10], indent=2, default=str)}\n\n"
@@ -1053,7 +1056,13 @@ def _run_orchestrator(
         "  - Never contact a customer more than once every 24 hours via the same channel\n"
         "  - Maximum 3 SMS per week per customer\n"
         "  - Escalation to Airtable takes priority over automated channels\n"
-        "  - If intent is not_interested, action must be 'none' unless escalation is high urgency\n"
+        "  - If intent is not_interested, action must be 'none' unless escalation is high urgency\n\n"
+        "GROUND TEAM OVERRIDES (check after delivery rules):\n"
+        "  - If priority_override is 'do_not_contact': action must be 'none' — no exceptions.\n"
+        "  - If priority_override is 'high': treat as hot-priority customer; prefer escalate_airtable "
+        "or send_sms over 'none' even when signals are weak.\n"
+        "  - sales_notes (if present) are ground team observations pinned to this customer — "
+        "treat them as high-confidence context that overrides AI inference.\n"
         "Choose ONE action: send_sms, move_campaign, escalate_airtable, or none. "
         "Explain your full chain of reasoning so it can be audited."
         + playbook
@@ -1062,6 +1071,8 @@ def _run_orchestrator(
         f"Customer: {contact.get('first_name', '')} {contact.get('last_name', '')} | "
         f"Stage: {contact.get('lifecycle_segment', 'unknown')} | "
         f"Phone: {contact.get('phone', 'N/A')} | Email: {contact.get('email', 'N/A')}\n\n"
+        f"Ground team overrides: priority_override={contact.get('priority_override', 'none')} | "
+        f"sales_notes={contact.get('sales_notes') or 'none'}\n\n"
         f"Latest delivery signal: {json.dumps(delivery_context, indent=2, default=str)}\n\n"
         f"Active goal: {json.dumps(goal, indent=2, default=str)}\n\n"
         f"Decision agent recommendations:\n{json.dumps(decision, indent=2, default=str)}\n\n"
@@ -1173,6 +1184,23 @@ def _run_full_cycle(contact_id: int) -> dict:
 
     # Gather all context
     contact = _fetch_contact(contact_id)
+
+    # Respect do_not_contact override — skip entire pipeline, no outreach
+    if contact.get("priority_override") == "do_not_contact":
+        logger.info(
+            "Skipping agent cycle for contact_id=%s — priority_override=do_not_contact", contact_id
+        )
+        return {
+            "contact_id": contact_id,
+            "contact_name": f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip(),
+            "chosen_action": "none",
+            "chosen_channel": "none",
+            "action_payload": {},
+            "reasoning": "Skipped — ground team set priority_override=do_not_contact",
+            "outcomes_used": 0,
+            "playbook_rules_active": 0,
+        }
+
     events = _fetch_recent_events(contact_id, days=30)
     comms = _fetch_communications(contact_id, days=30)
     goal = _fetch_active_goal(contact_id)
