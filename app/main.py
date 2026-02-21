@@ -6,7 +6,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, campaigns, broadcasts, chatbot, daily_orders, delivery, events, field_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, sms, team_content, telnyx, webhooks
+from app.routers import agents, agent, campaigns, broadcasts, chatbot, contacts, daily_orders, delivery, events, field_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, sms, team_content, telnyx, webhooks
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
@@ -112,8 +112,23 @@ async def startup_run_migrations():
             logger.info("startup_run_migrations — APPLIED %s", filename)
             applied += 1
         except Exception as e:
-            logger.error("startup_run_migrations — FAILED %s: %s", filename, e)
-            failed += 1
+            import psycopg2.errors as _pgerr
+            already_exists = isinstance(e, (_pgerr.DuplicateTable, _pgerr.DuplicateObject, _pgerr.UniqueViolation))
+            if already_exists:
+                # Migration ran before the schema_migrations tracker existed — mark it applied now
+                try:
+                    with get_cursor(commit=True) as cur:
+                        cur.execute(
+                            "INSERT INTO dabbahwala.schema_migrations (filename) VALUES (%s) ON CONFLICT DO NOTHING",
+                            (filename,),
+                        )
+                except Exception:
+                    pass
+                logger.info("startup_run_migrations — BACKFILLED %s (already applied)", filename)
+                skipped += 1
+            else:
+                logger.error("startup_run_migrations — FAILED %s: %s", filename, e)
+                failed += 1
 
     logger.info(
         "startup_run_migrations — done: applied=%d skipped=%d failed=%d",
@@ -167,6 +182,7 @@ app.include_router(field_agent.router, prefix="/api/field-agent", tags=["field-a
 app.include_router(chatbot.router, prefix="/api/chatbot", tags=["chatbot"])
 app.include_router(broadcasts.router, prefix="/api/broadcasts", tags=["broadcasts"])
 app.include_router(prospects.router, prefix="/api/prospects", tags=["prospects"])
+app.include_router(contacts.router, prefix="/api/contacts", tags=["contacts"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 
 

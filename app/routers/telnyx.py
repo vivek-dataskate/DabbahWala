@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 
 from fastapi import APIRouter, HTTPException
 
@@ -8,6 +9,30 @@ from app.models import FieldAgentSmsIn, IdResponse, TelnyxCallIn, TelnyxMessageI
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _fire_agent_cycle(contact_email: str, trigger: str) -> None:
+    """Look up contact_id by email and run the full agent cycle — non-blocking.
+
+    Called after every SMS, call, or field agent message so the agent stack
+    immediately reasons from the new communication evidence.
+    """
+    try:
+        from app.routers.agents import _run_full_cycle  # lazy import avoids circular deps
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT id FROM contacts WHERE email = %s LIMIT 1", (contact_email,))
+            row = cur.fetchone()
+        if not row:
+            logger.warning("Agent cycle skip: no contact found for email=%s trigger=%s", contact_email, trigger)
+            return
+        contact_id = row["id"]
+        logger.info("Agent cycle triggered by %s for contact_id=%s email=%s", trigger, contact_id, contact_email)
+        _run_full_cycle(contact_id)
+    except Exception as e:
+        logger.error(
+            "Background agent cycle failed email=%s trigger=%s: %s",
+            contact_email, trigger, e, exc_info=True,
+        )
 
 
 def _resolve_email(phone: str | None, email: str | None) -> str:
@@ -58,13 +83,22 @@ def store_message(payload: TelnyxMessageIn):
             row = cur.fetchone()
             msg_id = row["store_telnyx_message"]
             logger.info("store_message: stored id=%s email=%s", msg_id, contact_email)
-            return IdResponse(id=msg_id)
         except Exception as e:
             if "Contact not found" in str(e):
                 logger.warning("store_message: contact not found email=%s", contact_email)
                 raise HTTPException(status_code=404, detail=f"Contact not found: {contact_email}")
             logger.error("store_message: unexpected error: %s", e, exc_info=True)
             raise
+
+    # For inbound SMS only, fire agent immediately — customer replied, context is live
+    # Outbound SMS is evidence stored; nightly cycle reads it with full context
+    if payload.direction == "inbound":
+        threading.Thread(
+            target=_fire_agent_cycle,
+            args=(contact_email, "sms_inbound"),
+            daemon=True,
+        ).start()
+    return IdResponse(id=msg_id)
 
 
 @router.post("/call", response_model=IdResponse)
@@ -99,13 +133,15 @@ def store_call(payload: TelnyxCallIn):
             row = cur.fetchone()
             call_id = row["store_telnyx_call"]
             logger.info("store_call: stored id=%s email=%s", call_id, contact_email)
-            return IdResponse(id=call_id)
         except Exception as e:
             if "Contact not found" in str(e):
                 logger.warning("store_call: contact not found email=%s", contact_email)
                 raise HTTPException(status_code=404, detail=f"Contact not found: {contact_email}")
             logger.error("store_call: unexpected error: %s", e, exc_info=True)
             raise
+
+    # Call transcript stored — nightly cycle reads it with full evidence context
+    return IdResponse(id=call_id)
 
 
 @router.post("/field-agent-message", response_model=IdResponse)
@@ -137,8 +173,11 @@ def log_field_agent_sms(payload: FieldAgentSmsIn):
                 ),
             )
             row = cur.fetchone()
-            return IdResponse(id=row["store_telnyx_message"])
+            msg_id = row["store_telnyx_message"]
         except Exception as e:
             if "Contact not found" in str(e):
                 raise HTTPException(status_code=404, detail=f"Contact not found: {email}")
             raise
+
+    # Field agent SMS stored — nightly cycle reads it with full evidence context
+    return IdResponse(id=msg_id)

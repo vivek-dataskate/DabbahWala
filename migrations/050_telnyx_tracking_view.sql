@@ -6,7 +6,8 @@
 
 SET search_path TO dabbahwala;
 
-CREATE OR REPLACE VIEW telnyx_tracking AS
+DROP VIEW IF EXISTS telnyx_tracking;
+CREATE VIEW telnyx_tracking AS
 SELECT
     id,
     contact_id,

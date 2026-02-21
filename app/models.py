@@ -100,6 +100,16 @@ class OpportunityDispatched(BaseModel):
 class OpportunityOutcome(BaseModel):
     status: str
     outcome: Optional[str] = None
+    outcome_notes: Optional[str] = None
+
+
+# --- Contact ground team overrides ---
+class ContactPriority(BaseModel):
+    priority_override: str  # 'none' | 'high' | 'do_not_contact'
+
+
+class ContactNotes(BaseModel):
+    sales_notes: str
 
 
 # --- Field agent SMS ---
