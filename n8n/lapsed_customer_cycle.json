@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Lapsed Customer Daily Cycle",
+  "name": "[Claude — Decision] Lapsed Customer Daily Cycle",
   "nodes": [
     {
       "parameters": {
@@ -16,7 +16,10 @@
       "name": "Daily 10am",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -26,7 +29,10 @@
       "name": "Random Delay (0-8 hours)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -40,7 +46,10 @@
       "name": "Run Lapsed Customer Cycle",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 300],
+      "position": [
+        660,
+        300
+      ],
       "continueOnFail": true
     },
     {
@@ -51,7 +60,10 @@
       "name": "Log Results",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 300]
+      "position": [
+        880,
+        300
+      ]
     },
     {
       "parameters": {
@@ -80,7 +92,10 @@
       "name": "Any Actions Taken?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1100, 300]
+      "position": [
+        1100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -95,7 +110,10 @@
       "name": "Notify Slack",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 200]
+      "position": [
+        1320,
+        200
+      ]
     },
     {
       "parameters": {},
@@ -103,7 +121,10 @@
       "name": "No Actions — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1320, 420]
+      "position": [
+        1320,
+        420
+      ]
     }
   ],
   "connections": {
@@ -179,8 +200,12 @@
       "id": "dabbahwala"
     },
     {
-      "name": "Lapsed Customers",
-      "id": "lapsed"
+      "name": "Claude",
+      "id": "tag-claude"
+    },
+    {
+      "name": "Decision",
+      "id": "tag-decision"
     }
   ],
   "pinData": {}

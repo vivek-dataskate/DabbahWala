@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Agent Orchestration Cron",
+  "name": "[Claude — Inference] Agent Orchestration",
   "nodes": [
     {
       "parameters": {
@@ -147,8 +147,12 @@
       "id": "dabbahwala"
     },
     {
-      "name": "Agent Intelligence",
-      "id": "agents"
+      "name": "Claude",
+      "id": "tag-claude"
+    },
+    {
+      "name": "Inference",
+      "id": "tag-inference"
     }
   ],
   "pinData": {}

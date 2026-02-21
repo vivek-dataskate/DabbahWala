@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Airtable Outcome Sync",
+  "name": "[Airtable — Evidence] Outcome Sync",
   "nodes": [
     {
       "parameters": {
@@ -58,7 +58,7 @@
         "jsCode": "// Map Airtable status to API status + outcome\nconst airtableStatus = $input.item.json.fields['Status'];\nconst opportunityId = $input.item.json.fields['Postgres Opportunity ID'];\nconst outcomeNotes = $input.item.json.fields['Outcome Notes'] || '';\nconst airtableRecordId = $input.item.json.id;\n\nlet apiStatus = 'completed';\nlet outcome = null;\n\nswitch (airtableStatus?.toLowerCase()) {\n  case 'ordered':\n  case 'converted':\n    apiStatus = 'completed';\n    outcome = 'ordered';\n    break;\n  case 'not interested':\n  case 'not_interested':\n  case 'declined':\n    apiStatus = 'completed';\n    outcome = 'not_interested';\n    break;\n  case 'no answer':\n  case 'no_answer':\n  case 'unreachable':\n    apiStatus = 'completed';\n    outcome = 'no_answer';\n    break;\n  case 'in progress':\n  case 'in_progress':\n  case 'contacted':\n    apiStatus = 'dispatched';\n    outcome = null;\n    break;\n  default:\n    apiStatus = 'completed';\n    outcome = airtableStatus?.toLowerCase() || 'no_answer';\n}\n\nreturn {\n  json: {\n    opportunity_id: opportunityId,\n    airtable_record_id: airtableRecordId,\n    api_status: apiStatus,\n    outcome: outcome,\n    outcome_notes: outcomeNotes\n  }\n};"
       },
       "id": "map-status",
-      "name": "Map Airtable Status \u2192 API Status",
+      "name": "Map Airtable Status → API Status",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -129,7 +129,7 @@
           "value": "Field Sales Tasks",
           "mode": "name"
         },
-        "id": "={{ $('Map Airtable Status \u2192 API Status').item.json.airtable_record_id }}",
+        "id": "={{ $('Map Airtable Status → API Status').item.json.airtable_record_id }}",
         "columns": {
           "mappingMode": "defineBelow",
           "value": {
@@ -155,7 +155,7 @@
     {
       "parameters": {},
       "id": "skip-in-progress",
-      "name": "In Progress \u2014 Skip Sync",
+      "name": "In Progress — Skip Sync",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -180,14 +180,14 @@
       "main": [
         [
           {
-            "node": "Map Airtable Status \u2192 API Status",
+            "node": "Map Airtable Status → API Status",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Map Airtable Status \u2192 API Status": {
+    "Map Airtable Status → API Status": {
       "main": [
         [
           {
@@ -209,7 +209,7 @@
         ],
         [
           {
-            "node": "In Progress \u2014 Skip Sync",
+            "node": "In Progress — Skip Sync",
             "type": "main",
             "index": 0
           }
@@ -238,8 +238,12 @@
       "id": "dabbahwala"
     },
     {
-      "name": "Step 3 \u2014 Opportunities",
-      "id": "step3"
+      "name": "Airtable",
+      "id": "tag-airtable"
+    },
+    {
+      "name": "Evidence",
+      "id": "tag-evidence"
     }
   ],
   "pinData": {}

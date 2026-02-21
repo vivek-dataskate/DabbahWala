@@ -3,7 +3,6 @@ Daily order processing endpoint.
 n8n uploads CSV data -> this endpoint processes orders, creates contacts,
 records orders, fires events, and detects opportunities.
 """
-import asyncio
 import csv
 import io
 import json
@@ -16,8 +15,7 @@ from datetime import datetime
 from difflib import SequenceMatcher
 from pathlib import Path
 
-import httpx
-from fastapi import APIRouter, Form, HTTPException, UploadFile, File
+from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -83,129 +81,6 @@ def _parse_delivery_slot(slot: str) -> tuple:
     return '', ''
 
 
-async def _push_orders_to_shipday(orders_grouped: dict,
-                                   restaurant_name: str = "DabbahWala",
-                                   restaurant_address: str = "") -> dict:
-    """Push every unique order to the Shipday Orders API concurrently.
-
-    Returns a summary dict with per-order results and a link to the dashboard.
-    """
-    api_key = os.environ.get("SHIPDAY_API_KEY", "")
-    if not api_key:
-        logger.warning("SHIPDAY_API_KEY not set — skipping Shipday push")
-        return {"skipped": True, "reason": "SHIPDAY_API_KEY not configured"}
-
-    headers = {
-        "Authorization": f"Basic {api_key}",
-        "Content-Type": "application/json",
-    }
-
-    # Build one payload per unique order
-    items_to_push = []
-    for order_num, item_rows in orders_grouped.items():
-        first = item_rows[0]
-        customer_name = _col(first, 'Customer Name', 'Name', 'Customer', 'customer_name').strip()
-        phone = _col(first, 'Customer Phone Number', 'Phone', 'Customer Phone', 'phone').strip()
-        address = _col(first, 'Customer Address', 'Address', 'address').strip()
-        date_raw = _col(first, 'Date', 'Order Date', 'date', 'order_date').strip()
-        delivery_slot = _col(first, 'Delivery Slot Name', 'Delivery Slot', 'delivery_slot').strip()
-        delivery_instr = _col(first, 'Delivery Instructions', 'Delivery Instruction',
-                              'delivery_instructions', 'Notes', 'notes').strip()
-
-        try:
-            delivery_date = datetime.strptime(date_raw, '%d/%m/%Y').strftime('%Y-%m-%d')
-        except Exception:
-            delivery_date = datetime.now().strftime('%Y-%m-%d')
-
-        pickup_time, delivery_time = _parse_delivery_slot(delivery_slot)
-
-        order_items = []
-        for row in item_rows:
-            dish = _col(row, 'Dish Name', 'Item Name', 'Product', 'dish_name', 'item_name', 'Item').strip()
-            qty = int(_col(row, 'Quantity', 'Qty', 'qty', 'quantity') or 1)
-            price = float(_col(row, 'Unit Price', 'Price', 'unit_price', 'price') or 0)
-            if dish:
-                order_items.append({"name": dish, "quantity": qty, "unitPrice": price})
-
-        payload: dict = {
-            "orderNumber": order_num,
-            "customerName": customer_name,
-            "customerAddress": address,
-            "customerPhoneNumber": phone,
-            "restaurantName": restaurant_name,
-        }
-        if restaurant_address:
-            payload["restaurantAddress"] = restaurant_address
-        if delivery_date:
-            payload["expectedDeliveryDate"] = delivery_date
-        if pickup_time:
-            payload["expectedPickupTime"] = pickup_time
-        if delivery_time:
-            payload["expectedDeliveryTime"] = delivery_time
-        if delivery_instr:
-            payload["deliveryInstruction"] = delivery_instr
-        if order_items:
-            payload["orderItems"] = order_items
-
-        items_to_push.append((order_num, customer_name, payload))
-
-    async def _push_one(client: httpx.AsyncClient, order_num: str,
-                        customer_name: str, payload: dict) -> dict:
-        try:
-            resp = await client.post("https://api.shipday.com/orders", json=payload)
-            resp.raise_for_status()
-            resp_data = resp.json()
-            shipday_id = resp_data.get("orderId") or resp_data.get("order_id")
-            logger.info("Shipday order created: order=%s shipday_id=%s", order_num, shipday_id)
-            return {
-                "order_number": order_num,
-                "customer_name": customer_name,
-                "status": "created",
-                "shipday_order_id": shipday_id,
-            }
-        except httpx.HTTPStatusError as e:
-            body = e.response.text[:300]
-            logger.error("Shipday create failed order=%s status=%d body=%s",
-                         order_num, e.response.status_code, body)
-            return {
-                "order_number": order_num,
-                "customer_name": customer_name,
-                "status": "failed",
-                "error": f"HTTP {e.response.status_code}: {body}",
-            }
-        except Exception as e:
-            logger.error("Shipday create error order=%s: %s", order_num, e)
-            return {
-                "order_number": order_num,
-                "customer_name": customer_name,
-                "status": "failed",
-                "error": str(e),
-            }
-
-    try:
-        async with httpx.AsyncClient(headers=headers, timeout=20.0) as client:
-            results = await asyncio.gather(
-                *[_push_one(client, on, cn, pl) for on, cn, pl in items_to_push]
-            )
-    except Exception as e:
-        logger.error("Shipday batch push failed: %s", e, exc_info=True)
-        return {"skipped": True, "reason": f"Shipday push error: {e}"}
-
-    results = list(results)
-    succeeded = sum(1 for r in results if r["status"] == "created")
-    failed = sum(1 for r in results if r["status"] == "failed")
-
-    logger.info(
-        "Shipday push complete: submitted=%d succeeded=%d failed=%d",
-        len(items_to_push), succeeded, failed,
-    )
-    return {
-        "submitted": len(items_to_push),
-        "succeeded": succeeded,
-        "failed": failed,
-        "orders": results,
-        "dashboard_url": "https://dispatch.shipday.com",
-    }
 
 
 # Temp directory where generated Shipday CSVs are stored (cleaned up on server restart)
@@ -284,45 +159,6 @@ def _save_shipday_csv(orders_grouped: dict) -> str:
     return file_id
 
 
-def _upload_shipday_csv_to_drive(csv_content: str, filename: str) -> str:
-    """Thin wrapper around the shared Drive upload service."""
-    return _drive_upload_csv(csv_content, filename)
-
-
-@router.get("/test-drive")
-def test_drive_connection():
-    """Test Google Drive connectivity. Returns service account email and upload status."""
-    sa_json = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "").strip()
-    folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
-
-    if not sa_json:
-        return {"ok": False, "error": "GOOGLE_SERVICE_ACCOUNT_JSON is not set"}
-    if not folder_id:
-        return {"ok": False, "error": "GOOGLE_DRIVE_FOLDER_ID is not set"}
-
-    try:
-        sa_data = json.loads(sa_json)
-        client_email = sa_data.get("client_email", "unknown")
-    except Exception as e:
-        return {"ok": False, "error": f"Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON: {e}"}
-
-    test_content = "test,file\n1,drive_connection_ok"
-    link = _drive_upload_csv(test_content, "_dabbahwala_drive_test.csv")
-    if link:
-        return {
-            "ok": True,
-            "service_account_email": client_email,
-            "folder_id": folder_id,
-            "test_file_url": link,
-            "message": f"Drive connection OK. Service account: {client_email}",
-        }
-    return {
-        "ok": False,
-        "service_account_email": client_email,
-        "folder_id": folder_id,
-        "error": "Upload failed — check Render logs for details (look for 'Drive upload failed')",
-        "hint": f"Ensure the Drive folder is shared with Editor access for: {client_email}",
-    }
 
 
 @router.get("/download-shipday-csv/{file_id}")
@@ -421,16 +257,14 @@ class DailyOrderResult(BaseModel):
     field_opportunities: list = []
     campaign_moves: list = []
     airtable_synced: int = 0
-    shipday_result: dict = {}
     shipday_csv_download_url: str = ""
-    shipday_drive_url: str = ""
+    drive_upload_enqueued: bool = False
 
 
 @router.post("/process", response_model=DailyOrderResult)
 @router.post("/upload-csv", response_model=DailyOrderResult)
 async def process_daily_orders(
     file: UploadFile = File(...),
-    push_to_shipday: str = Form("false"),
 ):
     """
     Upload a CSV of daily orders. Columns are matched flexibly.
@@ -962,47 +796,42 @@ async def process_daily_orders(
                                    task.get('first_name'), task.get('last_name'), e)
         logger.info("Airtable sync complete: %d/%d pushed", airtable_synced, len(airtable_tasks))
 
-    # Exclude already-existing orders from Shipday API push (no duplicates), but CSV uses all orders
+    # Exclude duplicate orders from CSV generation
     orders_to_dispatch = {k: v for k, v in orders_grouped.items() if k not in existing_order_nums}
 
-    # Push orders to Shipday only when the caller explicitly opts in
-    _do_shipday = push_to_shipday.strip().lower() in ("true", "1", "yes")
-    if _do_shipday:
-        logger.info("Pushing %d orders to Shipday (opted-in)", len(orders_to_dispatch))
-        shipday_result = await _push_orders_to_shipday(
-            orders_to_dispatch,
-            restaurant_name=os.environ.get("SHIPDAY_RESTAURANT_NAME", "DabbahWala"),
-            restaurant_address=os.environ.get("SHIPDAY_RESTAURANT_ADDRESS", ""),
-        )
-    else:
-        logger.info("Shipday push skipped — push_to_shipday not set")
-        shipday_result = {}
-
-    # Always generate a Shipday CSV so the user can do a manual import if needed
+    # Generate a Shipday-format CSV locally (n8n can download via the endpoint below and
+    # push to Shipday or Google Drive via its own nodes — no direct HTTP from Python)
     shipday_csv_url = ""
-    shipday_drive_url = ""
-    if orders_grouped:
+    drive_upload_enqueued = False
+    if orders_to_dispatch:
         try:
-            csv_content = _generate_shipday_csv(orders_grouped)
-            _export_ts = datetime.now().strftime("%H%M")
-            csv_filename = f"shipday_orders_{order_date_str}_{_export_ts}.csv"
-            # Upload to Google Drive if credentials are configured
-            shipday_drive_url = _upload_shipday_csv_to_drive(csv_content, csv_filename)
-            if shipday_drive_url:
-                # Build a direct download URL from the Drive file ID so the
-                # "Download CSV" button works without relying on /tmp (which
-                # is wiped on every Render redeploy).
-                _m = re.search(r'/file/d/([^/?]+)', shipday_drive_url)
-                if _m:
-                    shipday_csv_url = (
-                        f"https://drive.google.com/uc?export=download&id={_m.group(1)}"
-                    )
-            if not shipday_csv_url:
-                # Fallback when Drive is not configured: save locally
-                _SHIPDAY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-                file_id = str(uuid.uuid4())
-                (_SHIPDAY_EXPORT_DIR / f"{file_id}.csv").write_text(csv_content, encoding="utf-8")
-                shipday_csv_url = f"/api/daily-orders/download-shipday-csv/{file_id}"
+            csv_content = _generate_shipday_csv(orders_to_dispatch)
+            _SHIPDAY_EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+            file_id = str(uuid.uuid4())
+            csv_filename = f"shipday_orders_{order_date_str}.csv"
+            (_SHIPDAY_EXPORT_DIR / f"{file_id}.csv").write_text(csv_content, encoding="utf-8")
+            shipday_csv_url = f"/api/daily-orders/download-shipday-csv/{file_id}"
+
+            # Enqueue Google Drive upload — n8n Action Queue Executor will upload
+            folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
+            if folder_id:
+                try:
+                    with get_cursor() as cur:
+                        cur.execute(
+                            """
+                            INSERT INTO action_queue (contact_id, action_type, payload)
+                            VALUES (NULL, 'upload_google_drive', %s::jsonb)
+                            """,
+                            (json.dumps({
+                                "csv_download_url": shipday_csv_url,
+                                "filename": csv_filename,
+                                "folder_id": folder_id,
+                            }),),
+                        )
+                    drive_upload_enqueued = True
+                    logger.info("Enqueued Google Drive upload for %s", csv_filename)
+                except Exception as e:
+                    logger.warning("Failed to enqueue Drive upload: %s", e)
         except Exception as e:
             logger.warning("Failed to generate Shipday CSV: %s", e)
 
@@ -1028,9 +857,8 @@ async def process_daily_orders(
         field_opportunities=field_opportunities,
         campaign_moves=campaign_moves,
         airtable_synced=airtable_synced,
-        shipday_result=shipday_result,
         shipday_csv_download_url=shipday_csv_url,
-        shipday_drive_url=shipday_drive_url,
+        drive_upload_enqueued=drive_upload_enqueued,
     )
 
 

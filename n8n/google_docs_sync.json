@@ -1,17 +1,25 @@
 {
-  "name": "DabbahWala — Google Docs Sync",
+  "name": "[Google — Evidence] Docs & Drive Sync",
   "nodes": [
     {
       "parameters": {
         "rule": {
-          "interval": [{"field": "minutes", "minutesInterval": 30}]
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
         }
       },
       "id": "schedule-trigger",
       "name": "Every 30 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [100, 300]
+      "position": [
+        100,
+        300
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +27,10 @@
       "name": "Manual Sync",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [100, 450]
+      "position": [
+        100,
+        450
+      ]
     },
     {
       "parameters": {
@@ -30,14 +41,23 @@
           "mode": "id"
         },
         "options": {
-          "fields": ["id", "name", "mimeType", "modifiedTime", "lastModifyingUser"]
+          "fields": [
+            "id",
+            "name",
+            "mimeType",
+            "modifiedTime",
+            "lastModifyingUser"
+          ]
         }
       },
       "id": "list-drive-files",
       "name": "List Drive Files",
       "type": "n8n-nodes-base.googleDrive",
       "typeVersion": 3,
-      "position": [350, 350],
+      "position": [
+        350,
+        350
+      ],
       "credentials": {
         "googleDriveOAuth2Api": {
           "id": "GOOGLE_DRIVE_CREDENTIAL_ID",
@@ -53,7 +73,10 @@
       "name": "Filter & Classify",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [600, 350]
+      "position": [
+        600,
+        350
+      ]
     },
     {
       "parameters": {
@@ -76,7 +99,10 @@
       "name": "Has Docs?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [850, 350]
+      "position": [
+        850,
+        350
+      ]
     },
     {
       "parameters": {
@@ -90,7 +116,10 @@
       "name": "Read Google Doc",
       "type": "n8n-nodes-base.googleDocs",
       "typeVersion": 2,
-      "position": [1100, 250],
+      "position": [
+        1100,
+        250
+      ],
       "credentials": {
         "googleDocsOAuth2Api": {
           "id": "GOOGLE_DOCS_CREDENTIAL_ID",
@@ -106,7 +135,10 @@
       "name": "Build Document Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1350, 250]
+      "position": [
+        1350,
+        250
+      ]
     },
     {
       "parameters": {
@@ -123,7 +155,10 @@
       "name": "Sync to API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1600, 250],
+      "position": [
+        1600,
+        250
+      ],
       "continueOnFail": true
     },
     {
@@ -132,44 +167,95 @@
       "name": "No New Docs — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1100, 450]
+      "position": [
+        1100,
+        450
+      ]
     }
   ],
   "connections": {
     "Every 30 Minutes": {
       "main": [
-        [{"node": "List Drive Files", "type": "main", "index": 0}]
+        [
+          {
+            "node": "List Drive Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Manual Sync": {
       "main": [
-        [{"node": "List Drive Files", "type": "main", "index": 0}]
+        [
+          {
+            "node": "List Drive Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "List Drive Files": {
       "main": [
-        [{"node": "Filter & Classify", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Filter & Classify",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Filter & Classify": {
       "main": [
-        [{"node": "Has Docs?", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Has Docs?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Has Docs?": {
       "main": [
-        [{"node": "Read Google Doc", "type": "main", "index": 0}],
-        [{"node": "No New Docs — Skip", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Read Google Doc",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No New Docs — Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Read Google Doc": {
       "main": [
-        [{"node": "Build Document Payload", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Build Document Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Document Payload": {
       "main": [
-        [{"node": "Sync to API", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Sync to API",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -180,8 +266,17 @@
     "instanceId": "digitalworker-dataskate"
   },
   "tags": [
-    {"name": "DabbahWala"},
-    {"name": "Google Docs"},
-    {"name": "Content Sync"}
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Google",
+      "id": "tag-google"
+    },
+    {
+      "name": "Evidence",
+      "id": "tag-evidence"
+    }
   ]
 }

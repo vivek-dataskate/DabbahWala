@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Shipday Historical Import (Manual)",
+  "name": "[Shipday — Evidence] Historical Import",
   "nodes": [
     {
       "parameters": {},
@@ -7,7 +7,10 @@
       "name": "Run Import",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -17,7 +20,10 @@
       "name": "Config",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -34,7 +40,10 @@
       "name": "Start Import Pipeline",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 300],
+      "position": [
+        660,
+        300
+      ],
       "continueOnFail": true
     },
     {
@@ -45,7 +54,10 @@
       "name": "Log Kick-off",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 300]
+      "position": [
+        880,
+        300
+      ]
     },
     {
       "parameters": {
@@ -56,31 +68,46 @@
       "name": "Wait 5 min (orders syncing)",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [1100, 300],
+      "position": [
+        1100,
+        300
+      ],
       "webhookId": "shipday-import-wait-1"
     },
     {
       "parameters": {
         "url": "https://dabbahwala-latest.onrender.com/api/shipday/import-pipeline-status",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "poll-status-1",
       "name": "Poll Status (5 min)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 300],
+      "position": [
+        1320,
+        300
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
           "conditions": [
             {
               "id": "still-running",
               "leftValue": "={{ $json.pipeline_state.running }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -91,7 +118,10 @@
       "name": "Still Running?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1540, 300]
+      "position": [
+        1540,
+        300
+      ]
     },
     {
       "parameters": {
@@ -102,31 +132,46 @@
       "name": "Wait 10 more min",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [1760, 200],
+      "position": [
+        1760,
+        200
+      ],
       "webhookId": "shipday-import-wait-2"
     },
     {
       "parameters": {
         "url": "https://dabbahwala-latest.onrender.com/api/shipday/import-pipeline-status",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "poll-status-2",
       "name": "Poll Status (15 min)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1980, 200],
+      "position": [
+        1980,
+        200
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {
         "conditions": {
-          "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "loose" },
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
           "conditions": [
             {
               "id": "still-running-15",
               "leftValue": "={{ $json.pipeline_state.running }}",
               "rightValue": true,
-              "operator": { "type": "boolean", "operation": "true" }
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
           ],
           "combinator": "and"
@@ -137,7 +182,10 @@
       "name": "Still Running? (15 min)",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [2200, 200]
+      "position": [
+        2200,
+        200
+      ]
     },
     {
       "parameters": {
@@ -148,19 +196,27 @@
       "name": "Wait 20 more min",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1.1,
-      "position": [2440, 200],
+      "position": [
+        2440,
+        200
+      ],
       "webhookId": "shipday-import-wait-3"
     },
     {
       "parameters": {
         "url": "https://dabbahwala-latest.onrender.com/api/shipday/import-pipeline-status",
-        "options": { "timeout": 15000 }
+        "options": {
+          "timeout": 15000
+        }
       },
       "id": "poll-status-final",
       "name": "Poll Status (35 min — final)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2660, 200],
+      "position": [
+        2660,
+        200
+      ],
       "continueOnFail": true
     },
     {
@@ -171,56 +227,177 @@
       "name": "Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2640, 300]
+      "position": [
+        2640,
+        300
+      ]
     }
   ],
   "connections": {
     "Run Import": {
-      "main": [[{ "node": "Config", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Config": {
-      "main": [[{ "node": "Start Import Pipeline", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Start Import Pipeline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Start Import Pipeline": {
-      "main": [[{ "node": "Log Kick-off", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Log Kick-off",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Log Kick-off": {
-      "main": [[{ "node": "Wait 5 min (orders syncing)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Wait 5 min (orders syncing)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Wait 5 min (orders syncing)": {
-      "main": [[{ "node": "Poll Status (5 min)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Poll Status (5 min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Poll Status (5 min)": {
-      "main": [[{ "node": "Still Running?", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Still Running?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Still Running?": {
       "main": [
-        [{ "node": "Wait 10 more min", "type": "main", "index": 0 }],
-        [{ "node": "Summary", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Wait 10 more min",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Wait 10 more min": {
-      "main": [[{ "node": "Poll Status (15 min)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Poll Status (15 min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Poll Status (15 min)": {
-      "main": [[{ "node": "Still Running? (15 min)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Still Running? (15 min)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Still Running? (15 min)": {
       "main": [
-        [{ "node": "Wait 20 more min", "type": "main", "index": 0 }],
-        [{ "node": "Summary", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Wait 20 more min",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Wait 20 more min": {
-      "main": [[{ "node": "Poll Status (35 min — final)", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Poll Status (35 min — final)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     },
     "Poll Status (35 min — final)": {
-      "main": [[{ "node": "Summary", "type": "main", "index": 0 }]]
+      "main": [
+        [
+          {
+            "node": "Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
     "executionOrder": "v1",
     "saveManualExecutions": true,
     "executionTimeout": 3600
-  }
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "tag-dabbahwala"
+    },
+    {
+      "name": "Shipday",
+      "id": "tag-shipday"
+    },
+    {
+      "name": "Evidence",
+      "id": "tag-evidence"
+    }
+  ]
 }

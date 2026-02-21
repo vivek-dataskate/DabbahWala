@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Instantly Setup",
+  "name": "[Instantly — Action] Campaign Setup",
   "nodes": [
     {
       "parameters": {
@@ -16,7 +16,10 @@
       "name": "Daily at Midnight",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -30,7 +33,10 @@
       "name": "POST /api/campaigns/setup-instantly",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -40,7 +46,10 @@
       "name": "Parse Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {},
@@ -48,7 +57,10 @@
       "name": "Done",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [880, 300]
+      "position": [
+        880,
+        300
+      ]
     }
   ],
   "connections": {
@@ -88,5 +100,19 @@
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "tag-dabbahwala"
+    },
+    {
+      "name": "Instantly",
+      "id": "tag-instantly"
+    },
+    {
+      "name": "Action",
+      "id": "tag-action"
+    }
+  ]
 }

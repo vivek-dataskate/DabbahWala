@@ -1,17 +1,25 @@
 {
-  "name": "DabbahWala — Hourly Intelligence Cycle",
+  "name": "[Claude — Inference] Hourly Intelligence Cycle",
   "nodes": [
     {
       "parameters": {
         "rule": {
-          "interval": [{"field": "hours", "hoursInterval": 1}]
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
         }
       },
       "id": "schedule-trigger",
       "name": "Every Hour",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [100, 300]
+      "position": [
+        100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -22,8 +30,14 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {"name": "limit", "value": "100"},
-            {"name": "since", "value": "={{ $now.minus(2, 'hours').toISO() }}"}
+            {
+              "name": "limit",
+              "value": "100"
+            },
+            {
+              "name": "since",
+              "value": "={{ $now.minus(2, 'hours').toISO() }}"
+            }
           ]
         },
         "options": {}
@@ -32,7 +46,10 @@
       "name": "Poll Instantly Events",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [300, 300]
+      "position": [
+        300,
+        300
+      ]
     },
     {
       "parameters": {
@@ -47,7 +64,10 @@
       "name": "Ingest Events to DB",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [520, 300]
+      "position": [
+        520,
+        300
+      ]
     },
     {
       "parameters": {
@@ -61,7 +81,10 @@
       "name": "Run Intelligence Cycle",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [740, 300]
+      "position": [
+        740,
+        300
+      ]
     },
     {
       "parameters": {
@@ -73,7 +96,10 @@
       "name": "Get Pending Actions",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [960, 300]
+      "position": [
+        960,
+        300
+      ]
     },
     {
       "parameters": {
@@ -102,7 +128,10 @@
       "name": "Has Pending Actions?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1180, 300]
+      "position": [
+        1180,
+        300
+      ]
     },
     {
       "parameters": {
@@ -112,7 +141,10 @@
       "name": "Split Into Individual Actions",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1400, 240]
+      "position": [
+        1400,
+        240
+      ]
     },
     {
       "parameters": {
@@ -160,7 +192,10 @@
       "name": "Route by Action Type",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [1620, 240]
+      "position": [
+        1620,
+        240
+      ]
     },
     {
       "parameters": {
@@ -177,7 +212,10 @@
       "name": "Send SMS via Telnyx",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1860, 100],
+      "position": [
+        1860,
+        100
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "XnntvX8AXpdR97oQ",
@@ -198,7 +236,10 @@
       "name": "Mark SMS Dispatched",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2080, 100]
+      "position": [
+        2080,
+        100
+      ]
     },
     {
       "parameters": {
@@ -215,7 +256,10 @@
       "name": "Create Airtable Sales Task",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1860, 300],
+      "position": [
+        1860,
+        300
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "hJpO8jdlT4Rmkjtx",
@@ -236,7 +280,10 @@
       "name": "Mark Call Dispatched",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2080, 300]
+      "position": [
+        2080,
+        300
+      ]
     },
     {
       "parameters": {},
@@ -244,7 +291,10 @@
       "name": "No Pending — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1400, 450]
+      "position": [
+        1400,
+        450
+      ]
     },
     {
       "parameters": {},
@@ -252,91 +302,161 @@
       "name": "Other Actions — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [1860, 450]
+      "position": [
+        1860,
+        450
+      ]
     }
   ],
   "connections": {
     "Every Hour": {
       "main": [
         [
-          {"node": "Poll Instantly Events", "type": "main", "index": 0}
+          {
+            "node": "Poll Instantly Events",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Poll Instantly Events": {
       "main": [
         [
-          {"node": "Ingest Events to DB", "type": "main", "index": 0}
+          {
+            "node": "Ingest Events to DB",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Ingest Events to DB": {
       "main": [
         [
-          {"node": "Run Intelligence Cycle", "type": "main", "index": 0}
+          {
+            "node": "Run Intelligence Cycle",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Run Intelligence Cycle": {
       "main": [
         [
-          {"node": "Get Pending Actions", "type": "main", "index": 0}
+          {
+            "node": "Get Pending Actions",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Get Pending Actions": {
       "main": [
         [
-          {"node": "Has Pending Actions?", "type": "main", "index": 0}
+          {
+            "node": "Has Pending Actions?",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Has Pending Actions?": {
       "main": [
         [
-          {"node": "Split Into Individual Actions", "type": "main", "index": 0}
+          {
+            "node": "Split Into Individual Actions",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          {"node": "No Pending — Skip", "type": "main", "index": 0}
+          {
+            "node": "No Pending — Skip",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Split Into Individual Actions": {
       "main": [
         [
-          {"node": "Route by Action Type", "type": "main", "index": 0}
+          {
+            "node": "Route by Action Type",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Route by Action Type": {
       "main": [
         [
-          {"node": "Send SMS via Telnyx", "type": "main", "index": 0}
+          {
+            "node": "Send SMS via Telnyx",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          {"node": "Create Airtable Sales Task", "type": "main", "index": 0}
+          {
+            "node": "Create Airtable Sales Task",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          {"node": "Other Actions — Skip", "type": "main", "index": 0}
+          {
+            "node": "Other Actions — Skip",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Send SMS via Telnyx": {
       "main": [
         [
-          {"node": "Mark SMS Dispatched", "type": "main", "index": 0}
+          {
+            "node": "Mark SMS Dispatched",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Create Airtable Sales Task": {
       "main": [
         [
-          {"node": "Mark Call Dispatched", "type": "main", "index": 0}
+          {
+            "node": "Mark Call Dispatched",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Claude",
+      "id": "tag-claude"
+    },
+    {
+      "name": "Inference",
+      "id": "tag-inference"
+    }
+  ],
+  "pinData": {}
 }
