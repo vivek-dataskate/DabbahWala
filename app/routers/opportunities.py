@@ -112,8 +112,8 @@ def mark_dispatched(opportunity_id: int, payload: OpportunityDispatched):
 def update_outcome(opportunity_id: int, payload: OpportunityOutcome):
     with get_cursor() as cur:
         cur.execute(
-            "SELECT update_opportunity_outcome(%s, %s::opportunity_status, %s)",
-            (opportunity_id, payload.status, payload.outcome),
+            "SELECT update_opportunity_outcome(%s, %s::opportunity_status, %s, %s)",
+            (opportunity_id, payload.status, payload.outcome, payload.outcome_notes),
         )
         found = cur.fetchone()["update_opportunity_outcome"]
         if not found:

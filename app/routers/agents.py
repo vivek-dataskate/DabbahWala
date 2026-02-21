@@ -102,6 +102,7 @@ def _fetch_contact(contact_id: int) -> dict:
             SELECT c.id, c.first_name, c.last_name, c.email, c.phone,
                    c.lifecycle_segment, c.total_orders, c.sms_level,
                    c.last_order_at, c.created_at,
+                   c.priority_override, c.sales_notes,
                    er.opens_7d, er.opens_30d, er.clicks_7d, er.clicks_30d,
                    er.sms_sent_30d, er.orders_90d
             FROM contacts c
@@ -200,7 +201,7 @@ def _fetch_recent_outcomes(contact_id: int, limit: int = 5) -> list:
         cur.execute(
             """
             SELECT action, priority, reason, suggested_message,
-                   status, outcome, created_at, dispatched_at
+                   status, outcome, outcome_notes, created_at, dispatched_at
             FROM opportunities
             WHERE contact_id = %s AND outcome IS NOT NULL
             ORDER BY created_at DESC
@@ -402,7 +403,7 @@ def _fetch_active_goal(contact_id: int) -> Optional[dict]:
         return None
 
 
-def _fetch_recent_actions(contact_id: int, hours: int = 48) -> list:
+def _fetch_recent_actions(contact_id: int, hours: int = 168) -> list:  # default 7 days
     logger.debug("Fetching recent actions for contact_id=%s last %dh", contact_id, hours)
     with get_cursor(commit=False) as cur:
         cur.execute(
@@ -463,7 +464,8 @@ def _run_sentiment_agent(
         f"Lifecycle: {contact.get('lifecycle_segment', 'unknown')} | "
         f"Total orders: {contact.get('total_orders', 0)} | "
         f"Last order: {contact.get('last_order_at', 'never')}\n\n"
-        f"Recent communications ({len(comms)} records):\n{json.dumps(comms, indent=2, default=str)}\n\n"
+        + (f"Ground team sales note (treat as high-confidence): {contact['sales_notes']}\n\n" if contact.get("sales_notes") else "")
+        + f"Recent communications ({len(comms)} records):\n{json.dumps(comms, indent=2, default=str)}\n\n"
         f"Previous action outcomes (feedback loop — {len(outcomes)} records):\n"
         f"{json.dumps(outcomes, indent=2, default=str)}"
     )
@@ -563,7 +565,8 @@ def _run_intent_agent(
         f"Opens (7d/30d): {contact.get('opens_7d', 0)}/{contact.get('opens_30d', 0)} | "
         f"Clicks (7d/30d): {contact.get('clicks_7d', 0)}/{contact.get('clicks_30d', 0)}"
         f"{prefs_section}\n\n"
-        f"Recent events ({len(events)} total, showing first 25):\n"
+        + (f"Ground team sales note (treat as high-confidence): {contact['sales_notes']}\n\n" if contact.get("sales_notes") else "")
+        + f"Recent events ({len(events)} total, showing first 25):\n"
         f"{json.dumps(events[:25], indent=2, default=str)}\n\n"
         f"Recent communications ({len(comms)} total, showing first 10):\n"
         f"{json.dumps(comms[:10], indent=2, default=str)}\n\n"
@@ -789,14 +792,31 @@ def _run_channel_agent(
         "You are the Channel Selection Decision Agent for DabbahWala. "
         "Choose the best next communication channel: sms, email, call, or none. "
         "Consider recency of last contact, engagement trend, and intent. "
-        "Avoid recommending a channel if it was used in the last 24 hours. "
-        "Timing options: immediate, tomorrow, 3days, none."
+        "Timing options: immediate, tomorrow, 3days, none.\n\n"
+        "PERSISTENCE RULES — never give up on a customer:\n"
+        "  - Always recommend a channel. Silence is never the right long-term answer.\n"
+        "  - Rotate channels: if the last action was email/move_campaign → recommend 'sms' next. "
+        "If the last action was send_sms → recommend 'email' next. "
+        "This rotation continues indefinitely — each week a different channel with fresh copy.\n"
+        "  - The only reason to recommend 'none' is: (a) action already taken in the last 24h via this channel, "
+        "or (b) customer has lifecycle_segment='optout' or priority_override='do_not_contact'.\n"
+        "CHANNEL SELECTION LOGIC:\n"
+        "  - If no prior actions exist → start with email/move_campaign (least intrusive).\n"
+        "  - If email has been tried 1+ times with zero opens → switch to sms.\n"
+        "  - If sms was last → switch to email (different angle). "
+        "If sms was tried 3+ times with zero replies → consider 'call' to escalate human contact.\n"
+        "TIMING RANDOMIZATION:\n"
+        "  - Never always recommend 'immediate'. For lapsed contacts (total_orders > 0, low engagement), "
+        "vary timing: sometimes 'tomorrow', sometimes '3days'. This ensures messages arrive on different "
+        "days of the week and at different times — making the outreach feel less robotic and more natural."
         + playbook
     )
     user = (
         f"Customer: {contact.get('first_name', '')} | Engagement: {inference.get('engagement_score', 0):.2f} "
-        f"| Trend: {inference.get('engagement_trend', 'flat')} | Intent: {inference.get('intent', 'unknown')}\n\n"
-        f"Recent actions (last 48h):\n{json.dumps(recent_actions, indent=2, default=str)}"
+        f"| Trend: {inference.get('engagement_trend', 'flat')} | Intent: {inference.get('intent', 'unknown')} "
+        f"| Opens(30d): {contact.get('opens_30d', 0)} | Clicks(30d): {contact.get('clicks_30d', 0)}\n\n"
+        f"Full channel history (last 7 days — use to determine rotation):\n"
+        f"{json.dumps(recent_actions, indent=2, default=str)}"
     )
     tool = {
         "name": "submit_channel",
@@ -830,6 +850,7 @@ def _run_offer_agent(
     inference: dict,
     outcomes: list,
     playbook: str,
+    recent_actions: Optional[list] = None,
 ) -> dict:
     """Recommend offer type and generate ready-to-send copy.
 
@@ -843,6 +864,33 @@ def _run_offer_agent(
         inference.get("intent"),
         len(outcomes),
     )
+    # Count total outreach attempts from action history
+    actions_all = recent_actions or []
+    attempt_count = sum(
+        1 for a in actions_all
+        if a.get("action_type") in ("move_campaign", "send_sms")
+    )
+
+    # Messaging progression based on attempt count — varies copy angle each round
+    # Cycle: reminder → social_proof → discount → urgency → repeat with new creative angles
+    attempt_cycle = attempt_count % 6
+    progression_hints = [
+        "Attempt 1: warm REMINDER — 'We miss you, here's what's new on the menu this week'.",
+        "Attempt 2: SOCIAL PROOF — 'Our customers are raving about X dish. Here's what you're missing'.",
+        "Attempt 3: DISCOUNT/INCENTIVE — 'Special comeback offer just for you — X% off your next order'.",
+        "Attempt 4: URGENCY/SCARCITY — 'Limited fresh batches this week', 'Order by Friday for this week's menu'.",
+        "Attempt 5: PERSONAL/EMOTIONAL — Reference their past order, make it feel personal. 'You loved our biryani — it's back this week'.",
+        "Attempt 6+: CURIOSITY/NOVELTY — Tease a new dish, seasonal special, or behind-the-scenes. 'We have something new you've never tried'.",
+    ]
+    progression_note = (
+        f"\n\nMESSAGING PROGRESSION (attempt #{attempt_count + 1} total, cycle position {attempt_cycle + 1}/6):\n"
+        f"{progression_hints[min(attempt_cycle, 5)]}\n"
+        "CRITICAL: Generate copy that is completely different in angle from previous attempts. "
+        "Do NOT repeat the same opening line, offer, or call-to-action as before. "
+        "After 6+ attempts, keep cycling through the progression — each cycle should feel fresh, "
+        "not a copy of the previous round."
+    )
+
     # Analyse what has worked before (feedback loop)
     outcome_insight = ""
     if outcomes:
@@ -863,14 +911,16 @@ def _run_offer_agent(
         "You are the Offer Selection Decision Agent for DabbahWala food delivery. "
         "Select the right offer type for this customer: discount, reminder, social_proof, or none. "
         "Also draft a short suggested SMS/email copy (max 160 chars for SMS suitability). "
-        "Base your choice on intent, sentiment, and what has worked historically."
+        "Base your choice on intent, sentiment, and what has worked historically. "
+        "Never generate copy that sounds like a previous attempt — vary the angle every time."
+        + progression_note
         + outcome_insight
         + playbook
     )
     user = (
         f"Customer: {contact.get('first_name', '')} | Orders: {contact.get('total_orders', 0)} | "
         f"Sentiment: {inference.get('sentiment', 'neutral')} | Intent: {inference.get('intent', 'unknown')}\n"
-        f"Engagement score: {inference.get('engagement_score', 0):.2f}\n\n"
+        f"Engagement score: {inference.get('engagement_score', 0):.2f} | Total outreach attempts: {attempt_count}\n\n"
         f"Previous outcomes ({len(outcomes)} records):\n{json.dumps(outcomes, indent=2, default=str)}"
     )
     tool = {
@@ -927,27 +977,49 @@ def _run_escalation_agent(
         goal.get("goal") if goal else "none",
     )
     failed_attempts = sum(1 for o in outcomes if o.get("outcome") in ("no_answer", "not_interested"))
+    total_automated = len(outcomes)
+
+    # Count automated channel actions from action history (passed via inference summary context)
     escalation_context = ""
     if failed_attempts >= 3:
         escalation_context = (
             f"\n\nFEEDBACK: This contact has had {failed_attempts} failed automated attempts "
-            f"(no_answer or not_interested). Strong case for human escalation."
+            f"({total_automated} total). Standard automated channels are NOT working. "
+            f"Recommend human escalation with a creative new approach — NOT another email or SMS."
         )
+    elif total_automated >= 6:
+        escalation_context = (
+            f"\n\nFEEDBACK: {total_automated} automated touches with no conversion. "
+            f"It's time to escalate to a human with a completely different strategy."
+        )
+
     system = (
         "You are the Escalation Decision Agent for DabbahWala. "
         "Determine if this customer needs a human sales team member to intervene. "
         "Escalate when: sentiment is very negative, intent is ready_to_order but stalled, "
-        "goal deadline is approaching, or multiple automated attempts have failed. "
+        "goal deadline is approaching, or multiple automated attempts have failed.\n\n"
+        "CREATIVE ESCALATION — when automated channels are not working:\n"
+        "  - After 3+ failed automated outcomes OR 6+ automated touches: always escalate with high urgency.\n"
+        "  - When escalating for stuck lapsed customers, suggest a CREATIVE new approach in your notes field:\n"
+        "    Options to suggest: personal phone call from owner/manager, WhatsApp voice note, "
+        "special 'we miss you' gift/freebie offer, invitation to visit the kitchen, "
+        "referral request ('bring a friend, get a discount'), handwritten note with delivery, "
+        "or a completely different menu item they've never tried.\n"
+        "  - Your escalation notes should be actionable: tell the field team EXACTLY what to try, "
+        "not just 'contact this customer'.\n"
         "Urgency: high (act today), medium (act this week), none (no escalation)."
         + escalation_context
         + playbook
     )
     user = (
         f"Customer: {contact.get('first_name', '')} {contact.get('last_name', '')} | "
-        f"Phone: {contact.get('phone', 'N/A')}\n"
+        f"Phone: {contact.get('phone', 'N/A')} | "
+        f"Total orders ever: {contact.get('total_orders', 0)} | "
+        f"Last order: {contact.get('last_order_at', 'never')}\n"
+        f"Sales notes from ground team: {contact.get('sales_notes') or 'none'}\n"
         f"Inference: {json.dumps(inference, indent=2, default=str)}\n"
         f"Active goal: {json.dumps(goal, indent=2, default=str)}\n"
-        f"Failed attempts (from feedback): {failed_attempts}"
+        f"Failed attempts (from feedback): {failed_attempts} | Total automated touches: {total_automated}"
     )
     tool = {
         "name": "submit_escalation",
@@ -1053,7 +1125,24 @@ def _run_orchestrator(
         "  - Never contact a customer more than once every 24 hours via the same channel\n"
         "  - Maximum 3 SMS per week per customer\n"
         "  - Escalation to Airtable takes priority over automated channels\n"
-        "  - If intent is not_interested, action must be 'none' unless escalation is high urgency\n"
+        "  - If intent is not_interested, action must be 'none' unless escalation is high urgency\n\n"
+        "ANTI-REPETITION (check recent_actions before deciding):\n"
+        "  - If recent_actions contains move_campaign or send_sms in the last 24h: action MUST be 'none' for today — wait until next run.\n"
+        "  - If recent_actions shows only email/campaign actions in the last 7 days AND "
+        "the customer has zero email opens (opens_30d=0): rotate to send_sms — do NOT repeat move_campaign.\n"
+        "  - If recent_actions shows only SMS actions in the last 7 days: rotate to move_campaign (email) with a fresh angle.\n"
+        "  - If you already escalated to Airtable in the last 48h: action must be 'none' — avoid spamming the team.\n"
+        "PERSISTENCE — do NOT give up:\n"
+        "  - No-response to email or SMS is NOT a reason to stop. Rotate channels, vary the message angle, keep going.\n"
+        "  - The only reasons to choose 'none' permanently: priority_override=do_not_contact, lifecycle_segment=optout/churned, "
+        "or the customer explicitly said 'not interested' (intent=not_interested with high confidence).\n"
+        "  - For lapsed customers (total_orders > 0, no recent order): always attempt outreach — they ordered before, they can again.\n\n"
+        "GROUND TEAM OVERRIDES (check after delivery rules):\n"
+        "  - If priority_override is 'do_not_contact': action must be 'none' — no exceptions.\n"
+        "  - If priority_override is 'high': treat as hot-priority customer; prefer escalate_airtable "
+        "or send_sms over 'none' even when signals are weak.\n"
+        "  - sales_notes (if present) are ground team observations pinned to this customer — "
+        "treat them as high-confidence context that overrides AI inference.\n"
         "Choose ONE action: send_sms, move_campaign, escalate_airtable, or none. "
         "Explain your full chain of reasoning so it can be audited."
         + playbook
@@ -1062,6 +1151,8 @@ def _run_orchestrator(
         f"Customer: {contact.get('first_name', '')} {contact.get('last_name', '')} | "
         f"Stage: {contact.get('lifecycle_segment', 'unknown')} | "
         f"Phone: {contact.get('phone', 'N/A')} | Email: {contact.get('email', 'N/A')}\n\n"
+        f"Ground team overrides: priority_override={contact.get('priority_override', 'none')} | "
+        f"sales_notes={contact.get('sales_notes') or 'none'}\n\n"
         f"Latest delivery signal: {json.dumps(delivery_context, indent=2, default=str)}\n\n"
         f"Active goal: {json.dumps(goal, indent=2, default=str)}\n\n"
         f"Decision agent recommendations:\n{json.dumps(decision, indent=2, default=str)}\n\n"
@@ -1173,10 +1264,27 @@ def _run_full_cycle(contact_id: int) -> dict:
 
     # Gather all context
     contact = _fetch_contact(contact_id)
+
+    # Respect do_not_contact override — skip entire pipeline, no outreach
+    if contact.get("priority_override") == "do_not_contact":
+        logger.info(
+            "Skipping agent cycle for contact_id=%s — priority_override=do_not_contact", contact_id
+        )
+        return {
+            "contact_id": contact_id,
+            "contact_name": f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip(),
+            "chosen_action": "none",
+            "chosen_channel": "none",
+            "action_payload": {},
+            "reasoning": "Skipped — ground team set priority_override=do_not_contact",
+            "outcomes_used": 0,
+            "playbook_rules_active": 0,
+        }
+
     events = _fetch_recent_events(contact_id, days=30)
     comms = _fetch_communications(contact_id, days=30)
     goal = _fetch_active_goal(contact_id)
-    recent_actions = _fetch_recent_actions(contact_id, hours=48)
+    recent_actions = _fetch_recent_actions(contact_id, hours=168)  # 7 days — full channel history
     outcomes = _fetch_recent_outcomes(contact_id, limit=10)   # feedback loop
     playbook = _fetch_playbook_rules()                         # dynamic config
     goal_id = goal["id"] if goal else None
@@ -1226,7 +1334,7 @@ def _run_full_cycle(contact_id: int) -> dict:
     logger.info("--- Layer 2: Decision ---")
     stage = _run_stage_agent(client, contact, inference_summary, playbook)
     channel = _run_channel_agent(client, contact, inference_summary, recent_actions, playbook)
-    offer = _run_offer_agent(client, contact, inference_summary, outcomes, playbook)
+    offer = _run_offer_agent(client, contact, inference_summary, outcomes, playbook, recent_actions)
     escalation = _run_escalation_agent(client, contact, inference_summary, goal, outcomes, playbook)
     decision_id = _store_decision(contact_id, inference_id, stage, channel, offer, escalation)
 
@@ -1701,16 +1809,36 @@ def run_cycle_for_contact(req: ContactEventRequest):
 
 @router.post("/cycle/run-all")
 def run_agent_cycle_all():
-    """Run full agent cycle for all contacts with an active goal or high engagement."""
+    """Run full agent cycle for all contacts eligible for nightly processing.
+
+    Eligibility (any one condition, excluding churned/optout):
+      - Has an active sales goal
+      - Opened or clicked an email in the last 30 days
+      - Had any event (delivery, order, SMS click) in the last 30 days
+      - Placed an order in the last 60 days
+    """
     logger.info("POST /cycle/run-all — querying eligible contacts")
     with get_cursor(commit=False) as cur:
         cur.execute(
             """
             SELECT DISTINCT c.id FROM contacts c
-            LEFT JOIN customer_goals g ON g.contact_id = c.id AND g.status = 'active'
-            LEFT JOIN engagement_rollups er ON er.contact_id = c.id
-            WHERE g.id IS NOT NULL
-               OR (er.opens_30d > 0 AND c.lifecycle_segment != 'churned')
+            LEFT JOIN customer_goals g
+                   ON g.contact_id = c.id AND g.status = 'active'
+            LEFT JOIN engagement_rollups er
+                   ON er.contact_id = c.id
+            LEFT JOIN events ev
+                   ON ev.contact_id = c.id
+                  AND ev.occurred_at > now() - interval '30 days'
+            LEFT JOIN orders o
+                   ON o.contact_id = c.id
+                  AND o.order_date > CURRENT_DATE - 60
+            WHERE c.lifecycle_segment NOT IN ('churned', 'optout')
+              AND (
+                  g.id IS NOT NULL      -- active sales goal
+                  OR er.opens_30d > 0  -- email engaged in last 30 days
+                  OR ev.id IS NOT NULL  -- any event in last 30 days (delivery, order, etc.)
+                  OR o.id IS NOT NULL   -- ordered in last 60 days
+              )
             LIMIT 500
             """
         )
@@ -1745,6 +1873,83 @@ def run_agent_cycle_all():
         len(results),
         len(errors),
         time.time() - t_batch,
+    )
+    return {"processed": len(results), "errors": errors, "results": results}
+
+
+@router.post("/cycle/run-all-lapsed")
+def run_agent_cycle_lapsed():
+    """Weekly agent cycle for lapsed one-time buyers (ordered 90+ days ago).
+
+    Intended to run once per week (Sunday night) via n8n, separate from the
+    nightly active-contact run. Limits to 300 contacts per run to control cost.
+
+    Eligibility:
+      - Has placed at least 1 order
+      - Last order was 90+ days ago (or last_order_at unknown)
+      - Not churned or opted out
+      - Dynamic cooldown:
+          - Contacts with < 2 prior lapsed-cycle actions: 6-day cooldown (once/week)
+          - Contacts with 2+ prior actions (2+ weeks no response): 3-day cooldown (twice/week)
+            This doubles touchpoint frequency for persistent non-responders.
+
+    Designed to run twice per week (Sunday + Wednesday). New contacts are gated by
+    the 6-day cooldown; veteran non-responders (2+ weeks) get both runs.
+    """
+    logger.info("POST /cycle/run-all-lapsed — querying lapsed contacts")
+    with get_cursor(commit=False) as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT c.id FROM contacts c
+            WHERE c.lifecycle_segment NOT IN ('churned', 'optout')
+              AND c.total_orders > 0
+              AND (c.last_order_at IS NULL OR c.last_order_at < now() - interval '90 days')
+              AND NOT EXISTS (
+                  -- Dynamic cooldown: 3 days if 2+ prior attempts, else 6 days
+                  SELECT 1 FROM action_queue aq
+                  WHERE aq.contact_id = c.id
+                    AND aq.created_at > now() - (
+                        CASE
+                          WHEN (
+                              SELECT COUNT(*) FROM action_queue aq2
+                              WHERE aq2.contact_id = c.id
+                                AND aq2.action_type IN ('move_campaign', 'send_sms')
+                          ) >= 2
+                          THEN interval '3 days'
+                          ELSE interval '6 days'
+                        END
+                    )
+              )
+            ORDER BY c.last_order_at DESC NULLS LAST
+            LIMIT 300
+            """
+        )
+        contact_ids = [r["id"] for r in cur.fetchall()]
+
+    logger.info("run-all-lapsed: found %d lapsed contacts to process", len(contact_ids))
+    if not contact_ids:
+        logger.info("run-all-lapsed: no eligible lapsed contacts — skipping")
+        return {"processed": 0, "errors": [], "results": []}
+
+    results = []
+    errors = []
+    t_batch = time.time()
+    for i, cid in enumerate(contact_ids, 1):
+        try:
+            r = _run_full_cycle(cid)
+            results.append(r)
+            if i % 20 == 0:
+                logger.info(
+                    "run-all-lapsed progress: %d/%d processed (%d errors) elapsed=%.0fs",
+                    i, len(contact_ids), len(errors), time.time() - t_batch,
+                )
+        except Exception as e:
+            logger.error("Cycle failed for contact_id=%s in run-all-lapsed: %s", cid, e, exc_info=True)
+            errors.append({"contact_id": cid, "error": str(e)})
+
+    logger.info(
+        "run-all-lapsed complete: %d processed %d errors in %.0fs",
+        len(results), len(errors), time.time() - t_batch,
     )
     return {"processed": len(results), "errors": errors, "results": results}
 

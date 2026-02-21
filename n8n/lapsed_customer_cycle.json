@@ -1,0 +1,187 @@
+{
+  "name": "DabbahWala — Lapsed Customer Daily Cycle",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 10 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-daily",
+      "name": "Daily 10am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [220, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Random delay 0-8 hours so the actual send time varies every day\n// Combined with the SQL cooldown, this means each contact gets touched\n// on a different day of the week each cycle — no detectable pattern.\nconst delayMs = Math.floor(Math.random() * 8 * 60 * 60 * 1000);\nconst delayHrs = (delayMs / 3600000).toFixed(1);\nconsole.log(`Lapsed cycle: random delay ${delayHrs}h — will fire around ${new Date(Date.now() + delayMs).toISOString()}`);\nawait new Promise(r => setTimeout(r, delayMs));\nreturn [{ json: { delay_applied_hrs: parseFloat(delayHrs) } }];"
+      },
+      "id": "random-delay",
+      "name": "Random Delay (0-8 hours)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/agents/cycle/run-all-lapsed",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "run-lapsed-cycle",
+      "name": "Run Lapsed Customer Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log and summarise the lapsed run\nconst result = $input.item.json;\nconst processed = result.processed || 0;\nconst errors = (result.errors || []).length;\nconst results = result.results || [];\n\nconst actions = {};\nfor (const r of results) {\n  const action = r.chosen_action || 'none';\n  actions[action] = (actions[action] || 0) + 1;\n}\n\nconsole.log(\n  `Lapsed cycle: processed=${processed} errors=${errors} actions=${JSON.stringify(actions)}`\n);\n\nreturn [{ json: {\n  ...result,\n  action_summary: actions,\n  has_actions: processed > 0 && (actions['send_sms'] || 0) + (actions['move_campaign'] || 0) + (actions['escalate_airtable'] || 0) > 0\n}}];"
+      },
+      "id": "log-results",
+      "name": "Log Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-actions",
+              "leftValue": "={{ $json.has_actions }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "has-actions-check",
+      "name": "Any Actions Taken?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://hooks.slack.com/services/placeholder",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"Lapsed customer cycle complete!\\n- Processed: {{ $json.processed }}\\n- Actions: {{ JSON.stringify($json.action_summary) }}\\n- Errors: {{ ($json.errors || []).length }}\"\n}",
+        "options": {}
+      },
+      "id": "notify-slack",
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {},
+      "id": "no-actions",
+      "name": "No Actions — Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [1320, 420]
+    }
+  ],
+  "connections": {
+    "Daily 10am": {
+      "main": [
+        [
+          {
+            "node": "Random Delay (0-8 hours)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Random Delay (0-8 hours)": {
+      "main": [
+        [
+          {
+            "node": "Run Lapsed Customer Cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Lapsed Customer Cycle": {
+      "main": [
+        [
+          {
+            "node": "Log Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Results": {
+      "main": [
+        [
+          {
+            "node": "Any Actions Taken?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Any Actions Taken?": {
+      "main": [
+        [
+          {
+            "node": "Notify Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Actions — Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Lapsed Customers",
+      "id": "lapsed"
+    }
+  ],
+  "pinData": {}
+}

@@ -104,7 +104,7 @@
         "url": "https://dabbahwala-latest.onrender.com/api/opportunities/{{ $json.opportunity_id }}/outcome",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"status\": \"{{ $json.api_status }}\",\n  \"outcome\": \"{{ $json.outcome }}\"\n}",
+        "jsonBody": "={\n  \"status\": \"{{ $json.api_status }}\",\n  \"outcome\": \"{{ $json.outcome }}\",\n  \"outcome_notes\": \"{{ $json.outcome_notes }}\"\n}",
         "options": {}
       },
       "id": "post-outcome",
