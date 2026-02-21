@@ -2121,7 +2121,7 @@ def get_pending_actions():
             SELECT aq.id, aq.contact_id, aq.action_type, aq.payload,
                    aq.created_at, c.email, c.phone, c.first_name, c.last_name
             FROM action_queue aq
-            JOIN contacts c ON c.id = aq.contact_id
+            LEFT JOIN contacts c ON c.id = aq.contact_id
             WHERE aq.status = 'pending'
             ORDER BY aq.created_at ASC
             LIMIT 100

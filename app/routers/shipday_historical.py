@@ -116,6 +116,7 @@ def sync_status():
 
     return {
         "sync_mode": "n8n_push",
+        "note": "Shipday data is fetched by n8n ([Shipday: Evidence] Delivery Collector) and pushed to POST /api/shipday/ingest-orders",
         "db_stats": db_stats,
     }
 
