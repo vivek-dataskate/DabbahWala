@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Airtable Playbook Sync",
+  "name": "[Evidence Collection] Airtable Playbook Sync",
   "nodes": [
     {
       "parameters": {
@@ -177,5 +177,10 @@
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "tags": [
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Evidence Collection", "id": "evidence-collection"}
+  ],
+  "pinData": {}
 }

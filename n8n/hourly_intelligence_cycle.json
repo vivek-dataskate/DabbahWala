@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Hourly Intelligence Cycle",
+  "name": "[Agent Intelligence] Hourly Intelligence Cycle",
   "nodes": [
     {
       "parameters": {
@@ -338,5 +338,10 @@
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "tags": [
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Agent Intelligence", "id": "agent-intelligence"}
+  ],
+  "pinData": {}
 }

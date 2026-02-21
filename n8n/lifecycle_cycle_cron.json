@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Lifecycle Cycle Runner",
+  "name": "[Agent Intelligence] Lifecycle Cycle Runner",
   "nodes": [
     {
       "parameters": {
@@ -421,14 +421,8 @@
   },
   "staticData": null,
   "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Step 3 \u2014 Lifecycle",
-      "id": "step3-lifecycle"
-    }
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Agent Intelligence", "id": "agent-intelligence"}
   ],
   "pinData": {}
 }

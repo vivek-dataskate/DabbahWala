@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Daily Field Brief",
+  "name": "[Reporting] Daily Field Brief",
   "nodes": [
     {
       "parameters": {
@@ -104,7 +104,10 @@
     "executionOrder": "v1"
   },
   "staticData": null,
-  "tags": ["field-agent", "daily-brief"],
+  "tags": [
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Reporting", "id": "reporting"}
+  ],
   "triggerCount": 1,
   "updatedAt": "2026-02-19T00:00:00.000Z",
   "versionId": "1"

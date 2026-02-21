@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Daily Order Upload",
+  "name": "[Orders] Daily Order Upload",
   "nodes": [
     {
       "parameters": {
@@ -158,5 +158,10 @@
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "tags": [
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Orders", "id": "orders"}
+  ],
+  "pinData": {}
 }

@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Agent Orchestration Cron",
+  "name": "[Agent Intelligence] Agent Orchestration Cron",
   "nodes": [
     {
       "parameters": {
@@ -142,14 +142,8 @@
   },
   "staticData": null,
   "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Agent Intelligence",
-      "id": "agents"
-    }
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Agent Intelligence", "id": "agent-intelligence"}
   ],
   "pinData": {}
 }

@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Telnyx Inbound Collector",
+  "name": "[Evidence Collection] Telnyx Inbound Collector",
   "nodes": [
     {
       "parameters": {
@@ -511,14 +511,8 @@
   },
   "staticData": null,
   "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Evidence Collection",
-      "id": "evidence"
-    }
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Evidence Collection", "id": "evidence-collection"}
   ],
   "pinData": {}
 }

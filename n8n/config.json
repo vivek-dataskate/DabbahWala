@@ -30,108 +30,91 @@
   "workflows": {
     "agent_orchestration_cron": {
       "id": "pYZ1ApMThTL3noTa",
-      "name": "DabbahWala — Agent Orchestration Cron",
+      "name": "[Agent Intelligence] Agent Orchestration Cron",
+      "category": "Agent Intelligence",
       "schedule": "Every 3 hours",
       "file": "agent_orchestration_cron.json"
     },
     "action_queue_executor": {
       "id": "D9Brq0t2VCXMrFDA",
-      "name": "DabbahWala — Action Queue Executor",
+      "name": "[Agent Intelligence] Action Queue Executor",
+      "category": "Agent Intelligence",
       "schedule": "Every 30 minutes",
-      "file": "action_queue_executor.json"
+      "file": "action_queue_executor.json",
+      "note": "Handles action types: send_sms, move_campaign, escalate_airtable, sync_airtable_task, push_instantly_lead, push_instantly_sequences, upload_google_drive, send_email_report"
     },
     "lifecycle_cycle_cron": {
       "id": "Wp3g7LJJ7Ts530cD",
-      "name": "DabbahWala — Lifecycle Cycle Runner",
+      "name": "[Agent Intelligence] Lifecycle Cycle Runner",
+      "category": "Agent Intelligence",
       "schedule": "Every hour",
       "file": "lifecycle_cycle_cron.json"
     },
+    "hourly_intelligence_cycle": {
+      "id": "TOBTV4lcSx7sUNXX",
+      "name": "[Agent Intelligence] Hourly Intelligence Cycle",
+      "category": "Agent Intelligence",
+      "schedule": "Every hour",
+      "active": true,
+      "file": "hourly_intelligence_cycle.json"
+    },
     "sms_dispatch": {
       "id": "GNvg3xSKVlf8JEsA",
-      "name": "DabbahWala — SMS Dispatch via Telnyx",
+      "name": "[Dispatch] SMS Dispatch via Telnyx",
+      "category": "Dispatch",
       "schedule": "Every 10 minutes",
       "file": "sms_dispatch.json"
     },
+    "broadcast_dispatch": {
+      "name": "[Dispatch] Broadcast Dispatch (SMS + Email)",
+      "category": "Dispatch",
+      "schedule": "Every 5 minutes",
+      "file": "broadcast_dispatch.json"
+    },
+    "broadcast_form": {
+      "name": "[Dispatch] Broadcast Form (Delay Alert & Promo)",
+      "category": "Dispatch",
+      "schedule": "On form submission",
+      "file": "broadcast_form.json"
+    },
     "airtable_outcome_sync": {
       "id": "EpbdsHnMZAApxl19",
-      "name": "DabbahWala — Airtable Outcome Sync",
+      "name": "[Evidence Collection] Airtable Outcome Sync",
+      "category": "Evidence Collection",
       "schedule": "Every 15 minutes",
       "file": "airtable_outcome_sync.json"
     },
+    "airtable_playbook_sync": {
+      "id": "EVwS9TSfk7c8avtZ",
+      "name": "[Evidence Collection] Airtable Playbook Sync",
+      "category": "Evidence Collection",
+      "schedule": "Every 15 minutes",
+      "active": true,
+      "file": "airtable_playbook_sync.json"
+    },
     "telnyx_inbound_collector": {
       "id": "rDrQwnxh1qqUKtrt",
-      "name": "DabbahWala — Telnyx Inbound Collector",
+      "name": "[Evidence Collection] Telnyx Inbound Collector",
+      "category": "Evidence Collection",
       "schedule": "Every 30 minutes",
       "file": "telnyx_inbound_collector.json"
     },
     "shipday_delivery_collector": {
       "id": "FfSOdphMYFykwIPo",
-      "name": "DabbahWala — Shipday Delivery Collector",
+      "name": "[Evidence Collection] Shipday Delivery Collector",
+      "category": "Evidence Collection",
       "schedule": "Every 30 minutes",
-      "file": "shipday_delivery_collector.json"
-    },
-    "daily_order_upload": {
-      "id": "REQyXIbCNULavLht",
-      "name": "DabbahWala — Daily Order Upload",
-      "schedule": "Daily at 1 PM EST (Mon–Sat)",
-      "file": "daily_order_upload.json",
-      "note": "Calls POST /api/daily-orders/process per order, then POST /api/agents/cycle/run-all"
-    },
-    "daily_activity_report": {
-      "id": "63MrMRK9YCIDwY9m",
-      "name": "DabbahWala — Daily Activity Report",
-      "schedule": "Daily at 8 AM",
-      "file": "daily_activity_report.json"
-    },
-    "daily_outcome_report": {
-      "id": "xufFQct91kP2Ddf0",
-      "name": "DabbahWala — Daily Outcome Report",
-      "schedule": "Daily at 8:30 AM",
-      "file": "daily_outcome_report.json"
-    },
-    "marketing_query_form": {
-      "id": "d2MkjsDhUkpXJbFx",
-      "name": "DabbahWala — Marketing Query Form",
-      "schedule": "On form submission",
-      "file": "marketing_query_form.json",
-      "note": "Routes query to POST /api/agents/cycle/run-for-contact, stores in Airtable Team Inputs"
-    },
-    "daily_report_generator": {
-      "id": "apR06lXjkNIuweAx",
-      "name": "DabbahWala — Daily Report Generator",
-      "schedule": "Daily at 11 PM"
-    },
-    "airtable_playbook_sync": {
-      "id": "EVwS9TSfk7c8avtZ",
-      "name": "DabbahWala — Airtable Playbook Sync",
-      "schedule": "Every 15 minutes",
-      "active": true
-    },
-    "daily_order_upload": {
-      "id": "8F4wigbdVaAE8WsV",
-      "name": "DabbahWala — Daily Order Upload",
-      "schedule": "Daily at 1 PM EST",
-      "active": true
-    },
-    "hourly_intelligence_cycle": {
-      "id": "TOBTV4lcSx7sUNXX",
-      "name": "DabbahWala — Hourly Intelligence Cycle",
-      "schedule": "Every hour",
-      "active": true
-    },
-    "marketing_query_form": {
-      "id": "gwJPYPHlhHmPxeRu",
-      "name": "DabbahWala — Marketing Query Form",
-      "schedule": "On-demand (form submission)",
-      "active": true,
-      "form_url": "https://digitalworker.dataskate.io/form/marketing-query-form"
+      "file": "shipday_delivery_collector.json",
+      "note": "Fetches Shipday orders and POSTs to POST /api/shipday/ingest-orders"
     },
     "google_docs_sync": {
       "id": "KMTKHGoHbhI4C2WS",
-      "name": "DabbahWala — Google Docs Sync",
+      "name": "[Evidence Collection] Google Docs Sync",
+      "category": "Evidence Collection",
       "schedule": "Every 30 minutes",
       "active": false,
-      "note": "Inactive until Google Drive + Google Docs OAuth2 credentials are configured in n8n. Folder ID is hardcoded in workflow."
+      "file": "google_docs_sync.json",
+      "note": "Inactive until Google Drive + Google Docs OAuth2 credentials are configured in n8n."
     },
     "campaign_performance_tracker": {
       "id": "yFEia5W04D8vFZEi",
@@ -172,6 +155,51 @@
       "active": true,
       "file": "instantly_setup.json",
       "note": "Calls POST /api/campaigns/setup-instantly daily. No-op if all 6 campaigns already exist in Instantly. Runs full setup (create missing, configure sequences, tag) only if campaigns are missing or duplicates are detected."
+    },
+    "daily_order_upload": {
+      "id": "REQyXIbCNULavLht",
+      "name": "[Orders] Daily Order Upload",
+      "category": "Orders",
+      "schedule": "Daily at 1 PM EST (Mon–Sat)",
+      "file": "daily_order_upload.json",
+      "note": "Uploads CSV to POST /api/daily-orders/process. Response includes shipday_csv_download_url for Shipday import."
+    },
+    "daily_activity_report": {
+      "id": "63MrMRK9YCIDwY9m",
+      "name": "[Reporting] Daily Activity Report",
+      "category": "Reporting",
+      "schedule": "Daily at 8 AM",
+      "file": "daily_activity_report.json",
+      "note": "Calls POST /api/agents/report/activity which returns html_body + csv_content. n8n sends email."
+    },
+    "daily_outcome_report": {
+      "id": "xufFQct91kP2Ddf0",
+      "name": "[Reporting] Daily Outcome Report",
+      "category": "Reporting",
+      "schedule": "Daily at 8:30 AM",
+      "file": "daily_outcome_report.json",
+      "note": "Calls POST /api/agents/report/outcome which returns html_body + csv_content. n8n sends email."
+    },
+    "daily_field_brief": {
+      "name": "[Reporting] Daily Field Brief",
+      "category": "Reporting",
+      "schedule": "Daily at 7:30 AM",
+      "file": "daily_field_brief.json"
+    },
+    "marketing_query_form": {
+      "id": "gwJPYPHlhHmPxeRu",
+      "name": "[Marketing] Marketing Query Form",
+      "category": "Marketing",
+      "schedule": "On-demand (form submission)",
+      "active": true,
+      "file": "marketing_query_form.json",
+      "form_url": "https://digitalworker.dataskate.io/form/marketing-query-form"
+    },
+    "chatbot_docs_reindex": {
+      "name": "[System] Chatbot Docs Reindex (Weekly)",
+      "category": "System",
+      "schedule": "Every Monday at 2 AM",
+      "file": "chatbot_docs_reindex.json"
     }
   },
 

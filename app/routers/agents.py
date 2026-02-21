@@ -9,12 +9,7 @@ import io
 import json
 import logging
 import os
-import smtplib
 import time
-from email import encoders
-from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -1390,45 +1385,17 @@ def _run_full_cycle(contact_id: int) -> dict:
 # LAYER 4 — Report Agents
 # ---------------------------------------------------------------------------
 
-def _send_email_via_smtp(to: str, subject: str, html_body: str, csv_filename: str, csv_content: str) -> None:
-    """Send report email with CSV attachment using SMTP.
-    Works with Gmail (App Password), Outlook, or any SMTP relay.
-    Required env vars: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, REPORT_EMAIL_FROM.
+def _build_email_payload(to: str, subject: str, html_body: str, csv_filename: str, csv_content: str) -> dict:
+    """Return a dict ready for n8n to send as an email with CSV attachment.
+    n8n's reporting workflows read html_body + csv_content and send via their own email node.
     """
-    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_password = os.environ.get("SMTP_PASSWORD", "")
-    from_email = os.environ.get("REPORT_EMAIL_FROM", "reports@dabbahwala.com")
-
-    if not smtp_user or not smtp_password:
-        logger.error("SMTP credentials not configured — cannot send report email to %s", to)
-        raise HTTPException(status_code=500, detail="SMTP_USER and SMTP_PASSWORD not configured")
-
-    logger.info("Sending report email to=%s subject='%s' via %s:%d", to, subject, smtp_host, smtp_port)
-    msg = MIMEMultipart()
-    msg["From"] = f"DabbahWala Reports <{from_email}>"
-    msg["To"] = to
-    msg["Subject"] = subject
-
-    msg.attach(MIMEText(html_body, "html"))
-
-    attachment = MIMEBase("text", "csv")
-    attachment.set_payload(csv_content.encode("utf-8"))
-    encoders.encode_base64(attachment)
-    attachment.add_header("Content-Disposition", f'attachment; filename="{csv_filename}"')
-    msg.attach(attachment)
-
-    try:
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, smtp_password)
-            server.sendmail(from_email, to, msg.as_string())
-        logger.info("Report email sent to=%s attachment=%s", to, csv_filename)
-    except smtplib.SMTPException as e:
-        logger.error("SMTP error sending report email to %s: %s", to, e, exc_info=True)
-        raise
+    return {
+        "to": to,
+        "subject": subject,
+        "html_body": html_body,
+        "csv_filename": csv_filename,
+        "csv_content": csv_content,
+    }
 
 
 def _run_activity_report_agent(client: anthropic.Anthropic, report_date: str, raw: dict) -> str:
@@ -2005,6 +1972,7 @@ def run_agent_cycle_all_contacts(limit: int = 1000):
                             last_name=contact.get("last_name", ""),
                             phone=payload.get("phone") or contact.get("phone", "") or "",
                             campaign_name=to_campaign,
+                            contact_id=cid,
                         )
                         if pushed:
                             campaigns_pushed += 1
@@ -2100,7 +2068,7 @@ def get_outcome_data(report_date: Optional[str] = None):
 
 @router.post("/report/activity")
 def send_activity_report(req: ReportRequest):
-    """Generate and email the daily activity report."""
+    """Generate the daily activity report and return content for n8n to email."""
     report_date = req.report_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     to_email = os.environ.get("REPORT_EMAIL_TO", "core@dabbahwala.com")
 
@@ -2110,20 +2078,19 @@ def send_activity_report(req: ReportRequest):
     csv_filename = f"dabbahwala_activity_{report_date}.csv"
     csv_content = _rows_to_csv(detail_rows)
 
-    _send_email_via_smtp(
+    email_payload = _build_email_payload(
         to=to_email,
         subject=f"DabbahWala Activity Report — {report_date}",
         html_body=html_body,
         csv_filename=csv_filename,
         csv_content=csv_content,
     )
-    drive_url = _drive_upload_csv(csv_content, csv_filename)
-    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary, "drive_url": drive_url or None}
+    return {"status": "ready", "report_date": report_date, "summary": summary, **email_payload}
 
 
 @router.post("/report/outcome")
 def send_outcome_report(req: ReportRequest):
-    """Generate and email the daily outcome report."""
+    """Generate the daily outcome report and return content for n8n to email."""
     report_date = req.report_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     to_email = os.environ.get("REPORT_EMAIL_TO", "core@dabbahwala.com")
 
@@ -2133,15 +2100,14 @@ def send_outcome_report(req: ReportRequest):
     csv_filename = f"dabbahwala_outcomes_{report_date}.csv"
     csv_content = _rows_to_csv(detail_rows)
 
-    _send_email_via_smtp(
+    email_payload = _build_email_payload(
         to=to_email,
         subject=f"DabbahWala Results Report — {report_date}",
         html_body=html_body,
         csv_filename=csv_filename,
         csv_content=csv_content,
     )
-    drive_url = _drive_upload_csv(csv_content, csv_filename)
-    return {"status": "sent", "report_date": report_date, "to": to_email, "summary": summary, "drive_url": drive_url or None}
+    return {"status": "ready", "report_date": report_date, "summary": summary, **email_payload}
 
 
 # --- Action queue management ---

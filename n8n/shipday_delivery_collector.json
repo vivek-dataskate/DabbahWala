@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Shipday Delivery Collector",
+  "name": "[Evidence Collection] Shipday Delivery Collector",
   "nodes": [
     {
       "parameters": {
@@ -377,14 +377,8 @@
   },
   "staticData": null,
   "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Evidence Collection",
-      "id": "evidence"
-    }
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Evidence Collection", "id": "evidence-collection"}
   ],
   "pinData": {}
 }

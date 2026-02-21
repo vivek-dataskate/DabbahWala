@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Google Docs Sync",
+  "name": "[Evidence Collection] Google Docs Sync",
   "nodes": [
     {
       "parameters": {
@@ -180,8 +180,7 @@
     "instanceId": "digitalworker-dataskate"
   },
   "tags": [
-    {"name": "DabbahWala"},
-    {"name": "Google Docs"},
-    {"name": "Content Sync"}
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Evidence Collection", "id": "evidence-collection"}
   ]
 }

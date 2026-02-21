@@ -138,26 +138,38 @@ def push_lead_to_instantly(
     last_name: str,
     phone: str,
     campaign_name: str,
+    contact_id: int | None = None,
 ) -> bool:
     """
-    Add a lead directly to an Instantly campaign. Returns True on success.
-    Silently returns False if the campaign is unknown or API key is missing.
+    Enqueue a lead push to an Instantly campaign via the action_queue.
+    n8n's Action Queue Executor will pick this up and call Instantly directly.
+    Returns True if enqueued, False if campaign is unknown.
     """
     meta = _CAMPAIGN_META.get(campaign_name)
-    if not meta or not INSTANTLY_API_KEY:
+    if not meta:
         return False
-    campaign_id = meta["instantly_id"]
-    lead = {"email": email, "first_name": first_name, "last_name": last_name}
-    if phone:
-        lead["phone"] = phone
-    response = httpx.post(
-        f"https://api.instantly.ai/api/v2/campaigns/{campaign_id}/leads",
-        headers={"Authorization": f"Bearer {INSTANTLY_API_KEY}", "Content-Type": "application/json"},
-        json={"leads": [lead]},
-        timeout=10,
-    )
-    response.raise_for_status()
-    return True
+    payload = {
+        "instantly_campaign_id": meta["instantly_id"],
+        "campaign_name": campaign_name,
+        "email": email,
+        "first_name": first_name,
+        "last_name": last_name,
+        "phone": phone,
+    }
+    try:
+        with get_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO action_queue (contact_id, action_type, payload)
+                VALUES (%s, 'push_instantly_lead', %s::jsonb)
+                """,
+                (contact_id, json.dumps(payload)),
+            )
+        return True
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Failed to enqueue push_instantly_lead: %s", e)
+        return False
 
 
 def _load_campaign_json(campaign_name: str) -> tuple[dict, dict]:
@@ -315,39 +327,34 @@ def update_campaign_template(campaign_name: str, payload: TemplateUpdate):
     path = _DATA_DIR / meta["json_file"]
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
-    # Push to Instantly — deep-copy seqs and wrap each email step body
-    # with the branded HTML template before sending (local JSON stays as raw inner HTML)
-    instantly_status = "skipped"
+    # Enqueue a sequences push to n8n — deep-copy seqs and wrap each email step body
+    # with the branded HTML template before enqueueing (local JSON stays as raw inner HTML)
+    instantly_status = "enqueued"
     instantly_error = None
-    if INSTANTLY_API_KEY:
-        try:
-            seqs_to_push = copy.deepcopy(seqs)
-            for seq in seqs_to_push:
-                for step in seq.get("steps", []):
-                    if step.get("type") == "email":
-                        for variant in step.get("variants", []):
-                            if "body" in variant:
-                                variant["body"] = _wrap_body(variant["body"])
-            resp = httpx.patch(
-                f"https://api.instantly.ai/api/v2/campaigns/{meta['instantly_id']}",
-                headers={
-                    "Authorization": f"Bearer {INSTANTLY_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={"sequences": seqs_to_push},
-                timeout=15,
+    try:
+        seqs_to_push = copy.deepcopy(seqs)
+        for seq in seqs_to_push:
+            for step in seq.get("steps", []):
+                if step.get("type") == "email":
+                    for variant in step.get("variants", []):
+                        if "body" in variant:
+                            variant["body"] = _wrap_body(variant["body"])
+        action_payload = {
+            "instantly_campaign_id": meta["instantly_id"],
+            "campaign_name": campaign_name,
+            "sequences": seqs_to_push,
+        }
+        with get_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO action_queue (contact_id, action_type, payload)
+                VALUES (NULL, 'push_instantly_sequences', %s::jsonb)
+                """,
+                (json.dumps(action_payload),),
             )
-            if resp.status_code < 300:
-                instantly_status = "pushed"
-            else:
-                instantly_status = "failed"
-                instantly_error = resp.text[:400]
-        except Exception as e:
-            instantly_status = "failed"
-            instantly_error = str(e)[:400]
-    else:
-        instantly_status = "no_key"
-        instantly_error = "INSTANTLY_API_KEY not configured — saved locally only"
+    except Exception as e:
+        instantly_status = "enqueue_failed"
+        instantly_error = str(e)[:400]
 
     return {
         "status": "saved",

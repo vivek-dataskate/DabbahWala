@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Airtable Outcome Sync",
+  "name": "[Evidence Collection] Airtable Outcome Sync",
   "nodes": [
     {
       "parameters": {
@@ -233,14 +233,8 @@
   },
   "staticData": null,
   "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Step 3 \u2014 Opportunities",
-      "id": "step3"
-    }
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Evidence Collection", "id": "evidence-collection"}
   ],
   "pinData": {}
 }

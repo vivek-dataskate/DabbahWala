@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Action Queue Executor",
+  "name": "[Agent Intelligence] Action Queue Executor",
   "nodes": [
     {
       "parameters": {
@@ -151,6 +151,51 @@
               },
               "renameOutput": true,
               "outputKey": "escalate_airtable"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "sync_airtable_task", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "sync_airtable_task"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "push_instantly_lead", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "push_instantly_lead"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "push_instantly_sequences", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "push_instantly_sequences"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "upload_google_drive", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "upload_google_drive"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": false, "leftValue": "", "typeValidation": "strict"},
+                "conditions": [{"leftValue": "={{ $json.action_type }}", "rightValue": "send_email_report", "operator": {"type": "string", "operation": "equals"}}],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "send_email_report"
             }
           ]
         },
@@ -355,6 +400,183 @@
         880,
         400
       ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "base": {"__rl": true, "value": "appuy2VTIao6XVpIW", "mode": "id"},
+        "table": {"__rl": true, "value": "Field Sales Tasks", "mode": "name"},
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Customer Name": "={{ $json.payload.customer_name || '' }}",
+            "Phone": "={{ $json.payload.phone || '' }}",
+            "Email": "={{ $json.payload.email || '' }}",
+            "Priority": "={{ $json.payload.priority || 'Warm' }}",
+            "Reason": "={{ $json.payload.reason || '' }}",
+            "Suggested Action": "={{ $json.payload.suggested_action || '' }}",
+            "Action Type": "={{ $json.payload.action_type || '' }}",
+            "Lifecycle Stage": "={{ $json.payload.lifecycle_stage || '' }}",
+            "Total Orders": "={{ $json.payload.total_orders || 0 }}",
+            "Last Order": "={{ $json.payload.last_order || '' }}",
+            "Postgres Opportunity ID": "={{ $json.payload.postgres_opportunity_id || '' }}",
+            "Status": "New"
+          }
+        }
+      },
+      "id": "create-airtable-task",
+      "name": "Create Airtable Field Sales Task",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [1320, 720],
+      "credentials": {"airtableTokenApi": {"id": "hJpO8jdlT4Rmkjtx", "name": "Airtable API Key"}},
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "options": {}
+      },
+      "id": "mark-airtable-task-done",
+      "name": "Mark Airtable Task Done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 720]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.instantly.ai/api/v2/campaigns/{{ $json.payload.instantly_campaign_id }}/leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"leads\": [{\"email\": \"{{ $json.payload.email }}\", \"first_name\": \"{{ $json.payload.first_name }}\", \"last_name\": \"{{ $json.payload.last_name }}\", \"phone\": \"{{ $json.payload.phone }}\"}]}",
+        "options": {}
+      },
+      "id": "push-instantly-lead",
+      "name": "Push Lead to Instantly Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 920],
+      "credentials": {"httpHeaderAuth": {"id": "instantly-api-key", "name": "Instantly API Key"}},
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "options": {}
+      },
+      "id": "mark-instantly-lead-done",
+      "name": "Mark Instantly Lead Done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 920]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.instantly.ai/api/v2/campaigns/{{ $json.payload.instantly_campaign_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"sequences\": {{ JSON.stringify($json.payload.sequences) }}}",
+        "options": {}
+      },
+      "id": "push-instantly-sequences",
+      "name": "Push Sequences to Instantly",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 1120],
+      "credentials": {"httpHeaderAuth": {"id": "instantly-api-key", "name": "Instantly API Key"}},
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "options": {}
+      },
+      "id": "mark-sequences-done",
+      "name": "Mark Sequences Done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 1120]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dabbahwala-latest.onrender.com{{ $json.payload.csv_download_url }}",
+        "options": {"response": {"response": {"responseFormat": "file"}}}
+      },
+      "id": "download-csv-for-drive",
+      "name": "Download CSV for Drive",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1320, 1320],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "name": "={{ $('Split Actions').item.json.payload.filename || 'shipday_orders.csv' }}",
+        "driveId": {"__rl": true, "mode": "list", "value": "My Drive"},
+        "folderId": {"__rl": true, "mode": "id", "value": "={{ $('Split Actions').item.json.payload.folder_id }}"},
+        "options": {}
+      },
+      "id": "upload-to-google-drive",
+      "name": "Upload to Google Drive",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [1540, 1320],
+      "credentials": {"googleDriveOAuth2Api": {"id": "google-drive-oauth", "name": "Google Drive OAuth"}},
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "options": {}
+      },
+      "id": "mark-drive-upload-done",
+      "name": "Mark Drive Upload Done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 1320]
+    },
+    {
+      "parameters": {
+        "fromEmail": "reports@dabbahwala.com",
+        "toEmail": "={{ $json.payload.to }}",
+        "subject": "={{ $json.payload.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.payload.html_body }}",
+        "options": {
+          "attachments": "={{ [{\"name\": $json.payload.csv_filename, \"data\": $json.payload.csv_content}] }}"
+        }
+      },
+      "id": "send-email-report",
+      "name": "Send Email Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1320, 1520],
+      "credentials": {"smtp": {"id": "smtp-credential", "name": "SMTP"}},
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "options": {}
+      },
+      "id": "mark-email-report-done",
+      "name": "Mark Email Report Done",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 1520]
     }
   ],
   "connections": {
@@ -430,7 +652,12 @@
           "type": "main",
           "index": 0
         }
-      ]
+      ],
+      "sync_airtable_task": [{"node": "Create Airtable Field Sales Task", "type": "main", "index": 0}],
+      "push_instantly_lead": [{"node": "Push Lead to Instantly Campaign", "type": "main", "index": 0}],
+      "push_instantly_sequences": [{"node": "Push Sequences to Instantly", "type": "main", "index": 0}],
+      "upload_google_drive": [{"node": "Download CSV for Drive", "type": "main", "index": 0}],
+      "send_email_report": [{"node": "Send Email Report", "type": "main", "index": 0}]
     },
     "Send SMS via Telnyx": {
       "main": [
@@ -475,6 +702,72 @@
           }
         ]
       ]
+    },
+    "Create Airtable Field Sales Task": {
+      "main": [
+        [
+          {
+            "node": "Mark Airtable Task Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Lead to Instantly Campaign": {
+      "main": [
+        [
+          {
+            "node": "Mark Instantly Lead Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Sequences to Instantly": {
+      "main": [
+        [
+          {
+            "node": "Mark Sequences Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download CSV for Drive": {
+      "main": [
+        [
+          {
+            "node": "Upload to Google Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload to Google Drive": {
+      "main": [
+        [
+          {
+            "node": "Mark Drive Upload Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email Report": {
+      "main": [
+        [
+          {
+            "node": "Mark Email Report Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "settings": {
@@ -482,14 +775,8 @@
   },
   "staticData": null,
   "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Agent Intelligence",
-      "id": "agents"
-    }
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Agent Intelligence", "id": "agent-intelligence"}
   ],
   "pinData": {}
 }

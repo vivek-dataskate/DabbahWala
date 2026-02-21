@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 SMS Dispatch via Telnyx",
+  "name": "[Dispatch] SMS Dispatch via Telnyx",
   "nodes": [
     {
       "parameters": {
@@ -254,14 +254,8 @@
   },
   "staticData": null,
   "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Step 3 \u2014 SMS",
-      "id": "step3-sms"
-    }
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Dispatch", "id": "dispatch"}
   ],
   "pinData": {}
 }

@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Marketing Query Form",
+  "name": "[Marketing] Marketing Query Form",
   "nodes": [
     {
       "parameters": {
@@ -248,8 +248,7 @@
     "instanceId": "digitalworker-dataskate"
   },
   "tags": [
-    {"name": "DabbahWala"},
-    {"name": "Marketing"},
-    {"name": "Query Form"}
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Marketing", "id": "marketing"}
   ]
 }

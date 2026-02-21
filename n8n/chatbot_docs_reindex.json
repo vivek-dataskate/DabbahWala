@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Chatbot Docs Reindex (Weekly)",
+  "name": "[System] Chatbot Docs Reindex (Weekly)",
   "nodes": [
     {
       "parameters": {
@@ -104,5 +104,10 @@
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "tags": [
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "System", "id": "system"}
+  ],
+  "pinData": {}
 }

@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Broadcast Dispatch (SMS + Email)",
+  "name": "[Dispatch] Broadcast Dispatch (SMS + Email)",
   "nodes": [
     {
       "parameters": {
@@ -323,14 +323,8 @@
   },
   "staticData": null,
   "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Broadcasts",
-      "id": "broadcasts"
-    }
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Dispatch", "id": "dispatch"}
   ],
   "pinData": {}
 }
