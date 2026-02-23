@@ -56,7 +56,7 @@
 
     "_group_shipday": "── Shipday ─────────────────────────────────────────────",
     "shipday_delivery_collector": {
-      "id": "FfSOdphMYFykwIPo",
+      "id": "AePBXRdPKkUQpHIT",
       "name": "[Shipday — Evidence] Delivery Collector",
       "tags": ["DabbahWala", "Shipday", "Evidence"],
       "schedule": "Every 30 minutes",
@@ -65,7 +65,7 @@
     },
 
     "shipday_feedback_sync": {
-      "id": "HTi0M05Qc0QO3WMT",
+      "id": "0pQY0otcvnGj8WBH",
       "name": "[Shipday — Evidence] Feedback Sync",
       "tags": ["DabbahWala", "Shipday", "Evidence"],
       "schedule": "Every hour",
@@ -74,7 +74,7 @@
       "note": "Polls Shipday API for customer feedback, delivery instructions, proof-of-delivery. Stores in shipday_communications, fires delivery_update events."
     },
     "shipday_historical_import": {
-      "id": "ZiT41FnhkCFYyHHJ",
+      "id": "apAefjZE2Uy6F17n",
       "name": "[Shipday — Evidence] Historical Import",
       "tags": ["DabbahWala", "Shipday", "Evidence"],
       "schedule": "Manual trigger only",
@@ -85,14 +85,14 @@
 
     "_group_telnyx": "── Telnyx (SMS) ─────────────────────────────────────────",
     "telnyx_inbound_collector": {
-      "id": "rDrQwnxh1qqUKtrt",
+      "id": "xcNObK3qdU1wdf3f",
       "name": "[Telnyx — Evidence] Inbound SMS Collector",
       "tags": ["DabbahWala", "Telnyx", "Evidence"],
       "schedule": "Every 30 minutes",
       "file": "telnyx_inbound_collector.json"
     },
     "sms_dispatch": {
-      "id": "GNvg3xSKVlf8JEsA",
+      "id": "BUEteMwkGwR3hhkQ",
       "name": "[Telnyx — Action] SMS Dispatch",
       "tags": ["DabbahWala", "Telnyx", "Action"],
       "schedule": "Every 10 minutes",
@@ -100,6 +100,7 @@
       "note": "Polls action_queue for send_sms actions and dispatches via Telnyx API"
     },
     "broadcast_dispatch": {
+      "id": "oDEse7EvWHj6UVM4",
       "name": "[Telnyx — Action] Broadcast Dispatch",
       "tags": ["DabbahWala", "Telnyx", "Action"],
       "schedule": "Every 5 minutes",
@@ -107,6 +108,7 @@
       "note": "Polls broadcast_recipients table and dispatches SMS (Telnyx) + email (SMTP)"
     },
     "broadcast_form": {
+      "id": "mUptDrymXZrtlrp8",
       "name": "[Telnyx — Form] Broadcast Form",
       "tags": ["DabbahWala", "Telnyx", "Form"],
       "schedule": "On form submission",
@@ -116,7 +118,7 @@
 
     "_group_airtable": "── Airtable ──────────────────────────────────────────────",
     "airtable_playbook_sync": {
-      "id": "EVwS9TSfk7c8avtZ",
+      "id": "FXuYcwQeBQ72Xxyu",
       "name": "[Airtable — Evidence] Playbook Sync",
       "tags": ["DabbahWala", "Airtable", "Evidence"],
       "schedule": "Every 15 minutes",
@@ -124,7 +126,7 @@
       "file": "airtable_playbook_sync.json"
     },
     "airtable_outcome_sync": {
-      "id": "EpbdsHnMZAApxl19",
+      "id": "chfGgYIjyTw6QP5m",
       "name": "[Airtable — Evidence] Outcome Sync",
       "tags": ["DabbahWala", "Airtable", "Evidence"],
       "schedule": "Every 15 minutes",
@@ -132,7 +134,7 @@
       "note": "Pulls call outcomes from Airtable Field Sales Tasks and writes back to contacts"
     },
     "marketing_query_form": {
-      "id": "gwJPYPHlhHmPxeRu",
+      "id": "gm3qFxu22akrTV3Z",
       "name": "[Airtable — Inference] Marketing Query Form",
       "tags": ["DabbahWala", "Airtable", "Inference"],
       "schedule": "On-demand (form submission)",
@@ -144,7 +146,7 @@
 
     "_group_instantly": "── Instantly (Email Campaigns) ───────────────────────────",
     "campaign_performance_tracker": {
-      "id": "yFEia5W04D8vFZEi",
+      "id": "ctCLyHDQc1VckMqL",
       "name": "[Instantly — Evidence] Campaign Performance",
       "tags": ["DabbahWala", "Instantly", "Evidence"],
       "schedule": "Every hour",
@@ -153,7 +155,7 @@
       "note": "Fetches analytics per campaign from Instantly API, stores stats in DB"
     },
     "instantly_campaign_sync": {
-      "id": "C4nF1cOKAScWFwKN",
+      "id": "nCcBt9USIYxlOaJT",
       "name": "[Instantly — Action] Campaign Sync",
       "tags": ["DabbahWala", "Instantly", "Action"],
       "schedule": "Every 6 hours",
@@ -162,7 +164,7 @@
       "note": "Fetches Instantly campaigns tagged 'dabbahwala' and POSTs to POST /api/webhooks/sync-campaigns"
     },
     "instantly_setup": {
-      "id": "EwMU7tgQ3MX8wkvs",
+      "id": "NbnkM3nTFKSgtcfb",
       "name": "[Instantly — Action] Campaign Setup",
       "tags": ["DabbahWala", "Instantly", "Action"],
       "schedule": "Daily at midnight",
@@ -173,7 +175,7 @@
 
     "_group_google": "── Google ────────────────────────────────────────────────",
     "google_docs_sync": {
-      "id": "KMTKHGoHbhI4C2WS",
+      "id": "oHtGvkCLTWYkxNZ0",
       "name": "[Google — Evidence] Docs & Drive Sync",
       "tags": ["DabbahWala", "Google", "Evidence"],
       "schedule": "Every 30 minutes",
@@ -184,7 +186,7 @@
 
     "_group_orders": "── Orders ────────────────────────────────────────────────",
     "daily_order_upload": {
-      "id": "REQyXIbCNULavLht",
+      "id": "6ZYQwdkmS5Nni05u",
       "name": "[Orders — Action] Daily CSV Upload",
       "tags": ["DabbahWala", "Orders", "Action"],
       "schedule": "Daily at 1 PM EST (Mon–Sat)",
@@ -194,7 +196,7 @@
 
     "_group_reporting": "── Reporting ─────────────────────────────────────────────",
     "daily_activity_report": {
-      "id": "63MrMRK9YCIDwY9m",
+      "id": "91bMjrZxiCPTglEI",
       "name": "[Reporting — Inference] Daily Activity Report",
       "tags": ["DabbahWala", "Reporting", "Inference"],
       "schedule": "Daily at 8 AM",
@@ -202,7 +204,7 @@
       "note": "Calls POST /api/agents/report/activity → Claude writes HTML + CSV → n8n emails to REPORT_EMAIL_TO"
     },
     "daily_outcome_report": {
-      "id": "xufFQct91kP2Ddf0",
+      "id": "fONTnqi4l9DT3aCo",
       "name": "[Reporting — Inference] Daily Outcome Report",
       "tags": ["DabbahWala", "Reporting", "Inference"],
       "schedule": "Daily at 8:30 AM",
@@ -210,6 +212,7 @@
       "note": "Calls POST /api/agents/report/outcome → Claude writes HTML + CSV → n8n emails to REPORT_EMAIL_TO"
     },
     "daily_field_brief": {
+      "id": "kOI33cFH4bM8OCaf",
       "name": "[Reporting — Inference] Daily Field Brief",
       "tags": ["DabbahWala", "Reporting", "Inference"],
       "schedule": "Daily at 7:30 AM",
@@ -218,7 +221,7 @@
 
     "_group_claude": "── Claude (AI Intelligence) ──────────────────────────────",
     "agent_orchestration_cron": {
-      "id": "pYZ1ApMThTL3noTa",
+      "id": "VreWonSUTk4VCXPF",
       "name": "[Claude — Inference] Agent Orchestration",
       "tags": ["DabbahWala", "Claude", "Inference"],
       "schedule": "Every 3 hours",
@@ -226,7 +229,7 @@
       "note": "Calls POST /api/agents/cycle → 4-layer Claude pipeline (inference→decision→orchestrator→action_queue)"
     },
     "hourly_intelligence_cycle": {
-      "id": "TOBTV4lcSx7sUNXX",
+      "id": "FcbBt0AIlkYoa01X",
       "name": "[Claude — Inference] Hourly Intelligence Cycle",
       "tags": ["DabbahWala", "Claude", "Inference"],
       "schedule": "Every hour",
@@ -234,7 +237,7 @@
       "file": "hourly_intelligence_cycle.json"
     },
     "lifecycle_cycle_cron": {
-      "id": "Wp3g7LJJ7Ts530cD",
+      "id": "h80nX24myWwsbxuB",
       "name": "[Claude — Decision] Lifecycle Cycle Runner",
       "tags": ["DabbahWala", "Claude", "Decision"],
       "schedule": "Every hour",
@@ -242,6 +245,7 @@
       "note": "Calls POST /api/lifecycle/run — pure rules-based lifecycle routing, no Claude call"
     },
     "lapsed_customer_cycle": {
+      "id": "S3jSnWb3UTv9HmJL",
       "name": "[Claude — Decision] Lapsed Customer Daily Cycle",
       "tags": ["DabbahWala", "Claude", "Decision"],
       "schedule": "Daily with random 0–8 hour offset",
@@ -252,7 +256,7 @@
 
     "_group_system": "── System ────────────────────────────────────────────────",
     "action_queue_executor": {
-      "id": "D9Brq0t2VCXMrFDA",
+      "id": "RzR3ZNYlty7cuTDY",
       "name": "[System — Action] Action Queue Executor",
       "tags": ["DabbahWala", "System", "Action"],
       "schedule": "Every 30 minutes",
@@ -260,6 +264,7 @@
       "note": "Central action hub. Routes pending action_queue rows to external APIs: Airtable (sync_airtable_task, log_query_to_airtable), Instantly (push_instantly_lead, push_instantly_sequences), Google Drive (upload_google_drive), SMTP (send_email_report), Telnyx (send_sms)"
     },
     "chatbot_docs_reindex": {
+      "id": "7mn3Ys0xMmZnZQIC",
       "name": "[System — Maintenance] Chatbot Docs Reindex",
       "tags": ["DabbahWala", "System", "Maintenance"],
       "schedule": "Every Monday at 2 AM",
