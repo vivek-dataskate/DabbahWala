@@ -9,7 +9,7 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 | **Backend** | FastAPI (Python 3.11) on Render |
 | **Database** | PostgreSQL 16, `dabbahwala` schema, pgvector for semantic search |
 | **AI** | Claude Sonnet 4.5 — 4-layer agent pipeline (inference, decision, orchestrator, reporting) |
-| **Automation** | n8n (15 workflows) on `digitalworker.dataskate.io` |
+| **Automation** | n8n (22 workflows, all active) on `digitalworker.dataskate.io` |
 | **SMS/Voice** | Telnyx — outbound SMS, inbound message/call ingestion, field agent logging |
 | **Email** | Instantly — 5 lifecycle-mapped campaigns |
 | **CRM** | Airtable — field sales tasks, playbook rules, outcome tracking |
@@ -45,10 +45,11 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
                                │ polls action_queue
                                ▼
   ┌──────────────────────────────────────────────────────────┐
-  │  n8n  (digitalworker.dataskate.io)                        │
-  │  SMS Dispatch ──→ Telnyx                                  │
-  │  Action Queue Executor ──→ Instantly / Airtable           │
-  │  Reports ──→ Email (HTML + CSV)                           │
+  │  n8n  (digitalworker.dataskate.io) — 22 workflows          │
+  │  Broadcast Dispatch ──→ Telnyx (SMS) / Gmail-SMTP (email) │
+  │  Action Queue Executor ──→ Instantly / Airtable / Drive   │
+  │  Action Queue Executor ──→ Gmail-SMTP (report emails)     │
+  │  Google Docs Sync ──→ chatbot index                       │
   └──────────────────────────────────────────────────────────┘
 ```
 
@@ -184,25 +185,35 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 | 032 | `agent_tables` | `inference_results`, `decision_recommendations`, `orchestrator_log`, `action_queue`, `customer_goals` |
 | 033 | `field_agent_sms` | `source` + `agent_name` columns on `telnyx_messages` |
 
-## n8n Workflows (15 total)
+## n8n Workflows (22 active)
+
+All workflows follow `[ExternalApp — FlowType] Name` taxonomy. Credential IDs are in `n8n/config.json`.
 
 | Workflow | Schedule | Purpose |
 |----------|----------|---------|
-| Agent Orchestration Cron | Every 3 h | Batch agent cycle for all active contacts |
-| Action Queue Executor | Every 30 min | Execute queued actions (campaign moves, escalations) |
-| SMS Dispatch | Every 10 min | Pull action_queue SMS, send via Telnyx |
-| Lifecycle Cycle Runner | Hourly | SQL rule engine — stage transitions, campaign queuing |
-| Hourly Intelligence Cycle | Hourly | 5-phase: INTAKE -> EVIDENCE -> INFERENCE -> DECISION -> EXECUTION |
-| Airtable Outcome Sync | Every 15 min | Pull opportunity outcomes from Airtable |
-| Airtable Playbook Sync | Every 15 min | Sync user-configured rules from Airtable |
-| Telnyx Inbound Collector | Every 30 min | Ingest inbound SMS/calls, trigger real-time agent cycle |
-| Shipday Delivery Collector | Every 30 min | Poll Shipday for delivery status updates |
-| Daily Order Upload | Daily 1 PM EST | Fetch CSV, process orders via API |
-| Daily Activity Report | Daily 8:00 AM | Operational summary (runs, actions, escalations) — HTML email |
-| Daily Outcome Report | Daily 8:30 AM | Results summary (orders, conversions) — HTML email |
-| Marketing Query Form | On-demand | Self-service query interface for marketing team |
-| Google Docs Sync | Every 30 min | Sync ground notes + ad copies from Google Drive |
-| Daily Report Generator | Daily 11 PM | Legacy aggregate metrics |
+| [Claude] Agent Orchestration | Every 3 h | Batch agent cycle for all active contacts |
+| [Claude] Hourly Intelligence Cycle | Hourly | 5-phase: INTAKE → EVIDENCE → INFERENCE → DECISION → EXECUTION |
+| [Claude] Lifecycle Cycle Runner | Hourly | SQL rule engine — stage transitions, campaign queuing |
+| [Claude] Lapsed Customer Cycle | Daily (random offset) | Persistent re-engagement for lapsed customers |
+| [System] Action Queue Executor | Every 30 min | Routes action_queue: Telnyx / Instantly / Airtable / Google Drive / Gmail-SMTP |
+| [System] Chatbot Docs Reindex | Every Monday 2 AM | Housekeeping — refreshes chatbot document index |
+| [Airtable] Outcome Sync | Every 15 min | Pull opportunity outcomes from Airtable |
+| [Airtable] Playbook Sync | Every 15 min | Sync user-configured rules from Airtable |
+| [Airtable] Marketing Query Form | On-demand | Self-service query form → Claude inference |
+| [Telnyx] Inbound SMS Collector | Every 30 min | Ingest inbound SMS/calls, trigger real-time agent cycle |
+| [Telnyx] Broadcast Dispatch | Every 5 min | Dispatch broadcasts: SMS via Telnyx, email via server |
+| [Telnyx] Broadcast Form | On form submit | n8n form UI for delay alerts + promo broadcasts |
+| [Shipday] Delivery Collector | Every 30 min | Poll Shipday for delivery status updates |
+| [Shipday] Feedback Sync | Hourly | Poll feedback, delivery instructions, proof-of-delivery |
+| [Shipday] Historical Import | Manual only | One-shot backfill of up to 1 year of order history |
+| [Instantly] Campaign Performance | Hourly | Fetch Instantly analytics per campaign |
+| [Instantly] Campaign Sync | Every 6 h | Sync Instantly campaigns to DB |
+| [Instantly] Campaign Setup | Daily midnight | Create missing Instantly campaigns |
+| [Google] Docs & Drive Sync | Every 30 min | Read Google Docs, push content to chatbot index |
+| [Orders] Daily CSV Upload | Daily 1 PM EST | Process daily order CSV via API |
+| [Reporting] Daily Field Brief | Daily 7:30 AM | Generate field sales call list |
+| [Reporting] Daily Activity Report | Daily 8:00 AM | Claude-written HTML + CSV activity summary → Gmail |
+| [Reporting] Daily Outcome Report | Daily 8:30 AM | Claude-written HTML + CSV outcome summary → Gmail |
 
 ## Lifecycle Segments
 
@@ -285,7 +296,8 @@ See `.env.example` for full list. Key variables:
 | `TELNYX_API_KEY` | SMS/voice |
 | `AIRTABLE_API_KEY` + `AIRTABLE_BASE_ID` | CRM + playbook |
 | `SHIPDAY_API_KEY` | Delivery tracking |
-| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | Report emails |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASSWORD` | Report emails (n8n also uses Gmail-SMTP credential) |
+| `REPORT_EMAIL_TO` | Report email recipient (default: `core@dabbahwala.com`) |
 | `ADMIN_SECRET` | Admin endpoint protection |
 | `N8N_API_KEY` | Workflow automation |
 

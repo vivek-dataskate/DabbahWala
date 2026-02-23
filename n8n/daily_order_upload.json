@@ -1,17 +1,25 @@
 {
-  "name": "DabbahWala — Daily Order Upload",
+  "name": "[Orders — Action] Daily CSV Upload",
   "nodes": [
     {
       "parameters": {
         "rule": {
-          "interval": [{"field": "cronExpression", "expression": "0 13 * * *"}]
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 13 * * *"
+            }
+          ]
         }
       },
       "id": "schedule-trigger",
       "name": "Daily at 1PM EST",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [100, 300]
+      "position": [
+        100,
+        300
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +27,10 @@
       "name": "Manual Upload",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [100, 450]
+      "position": [
+        100,
+        450
+      ]
     },
     {
       "parameters": {
@@ -29,7 +40,11 @@
         "contentType": "multipart-form-data",
         "bodyParameters": {
           "parameters": [
-            {"name": "file", "parameterType": "formBinaryData", "inputDataFieldName": "data"}
+            {
+              "name": "file",
+              "parameterType": "formBinaryData",
+              "inputDataFieldName": "data"
+            }
           ]
         },
         "options": {
@@ -40,7 +55,10 @@
       "name": "Upload CSV to API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [500, 300]
+      "position": [
+        500,
+        300
+      ]
     },
     {
       "parameters": {
@@ -69,7 +87,10 @@
       "name": "Has Orders?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [700, 300]
+      "position": [
+        700,
+        300
+      ]
     },
     {
       "parameters": {
@@ -83,7 +104,10 @@
       "name": "Run Intelligence Cycle",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 250]
+      "position": [
+        900,
+        250
+      ]
     },
     {
       "parameters": {
@@ -98,7 +122,10 @@
       "name": "Notify Success",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1100, 250]
+      "position": [
+        1100,
+        250
+      ]
     },
     {
       "parameters": {
@@ -113,50 +140,92 @@
       "name": "Notify Failure",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [900, 400]
+      "position": [
+        900,
+        400
+      ]
     }
   ],
   "connections": {
     "Daily at 1PM EST": {
       "main": [
         [
-          {"node": "Upload CSV to API", "type": "main", "index": 0}
+          {
+            "node": "Upload CSV to API",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Manual Upload": {
       "main": [
         [
-          {"node": "Upload CSV to API", "type": "main", "index": 0}
+          {
+            "node": "Upload CSV to API",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Upload CSV to API": {
       "main": [
         [
-          {"node": "Has Orders?", "type": "main", "index": 0}
+          {
+            "node": "Has Orders?",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Has Orders?": {
       "main": [
         [
-          {"node": "Run Intelligence Cycle", "type": "main", "index": 0}
+          {
+            "node": "Run Intelligence Cycle",
+            "type": "main",
+            "index": 0
+          }
         ],
         [
-          {"node": "Notify Failure", "type": "main", "index": 0}
+          {
+            "node": "Notify Failure",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     },
     "Run Intelligence Cycle": {
       "main": [
         [
-          {"node": "Notify Success", "type": "main", "index": 0}
+          {
+            "node": "Notify Success",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  }
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Orders",
+      "id": "orders"
+    },
+    {
+      "name": "Action",
+      "id": "tag-action"
+    }
+  ],
+  "pinData": {}
 }

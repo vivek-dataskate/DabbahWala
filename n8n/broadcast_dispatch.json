@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Broadcast Dispatch (SMS + Email)",
+  "name": "[Telnyx — Action] Broadcast Dispatch",
   "nodes": [
     {
       "parameters": {
@@ -16,7 +16,10 @@
       "name": "Every 5 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -28,7 +31,10 @@
       "name": "Fetch Pending Recipients",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -57,7 +63,10 @@
       "name": "Has Pending Recipients?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -68,7 +77,10 @@
       "name": "Split Recipients",
       "type": "n8n-nodes-base.splitOut",
       "typeVersion": 1,
-      "position": [880, 220]
+      "position": [
+        880,
+        220
+      ]
     },
     {
       "parameters": {
@@ -126,7 +138,10 @@
       "name": "Route by Channel",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [1100, 220]
+      "position": [
+        1100,
+        220
+      ]
     },
     {
       "parameters": {
@@ -143,7 +158,10 @@
       "name": "Send SMS via Telnyx",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 100],
+      "position": [
+        1320,
+        100
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "TELNYX_CREDENTIAL_ID",
@@ -160,7 +178,10 @@
       "name": "Check SMS Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1540, 100]
+      "position": [
+        1540,
+        100
+      ]
     },
     {
       "parameters": {
@@ -175,7 +196,10 @@
       "name": "Mark SMS Sent/Failed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1760, 100],
+      "position": [
+        1760,
+        100
+      ],
       "continueOnFail": true
     },
     {
@@ -191,7 +215,10 @@
       "name": "Store SMS in Telnyx Log",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1980, 100],
+      "position": [
+        1980,
+        100
+      ],
       "continueOnFail": true
     },
     {
@@ -204,16 +231,22 @@
       "name": "Send Email via Server SMTP",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1320, 360],
+      "position": [
+        1320,
+        360
+      ],
       "continueOnFail": true
     },
     {
       "parameters": {},
       "id": "no-pending",
-      "name": "No Pending \u2014 Skip",
+      "name": "No Pending — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [880, 400]
+      "position": [
+        880,
+        400
+      ]
     }
   ],
   "connections": {
@@ -250,7 +283,7 @@
         ],
         [
           {
-            "node": "No Pending \u2014 Skip",
+            "node": "No Pending — Skip",
             "type": "main",
             "index": 0
           }
@@ -328,8 +361,12 @@
       "id": "dabbahwala"
     },
     {
-      "name": "Broadcasts",
-      "id": "broadcasts"
+      "name": "Telnyx",
+      "id": "tag-telnyx"
+    },
+    {
+      "name": "Action",
+      "id": "tag-action"
     }
   ],
   "pinData": {}

@@ -19,11 +19,7 @@ Flow
 """
 
 import logging
-import os
-import smtplib
 from datetime import date
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -429,76 +425,6 @@ def mark_recipient_failed(recipient_id: int, payload: RecipientFailure = Recipie
         _maybe_complete_job(cur, row["job_id"])
 
     return {"status": "ok"}
-
-
-@router.post("/recipients/{recipient_id}/send-email")
-def send_broadcast_email(recipient_id: int):
-    """
-    Send the broadcast email for a single recipient via SMTP and mark it sent/failed.
-
-    Called by n8n for each email-channel recipient.  SMTP credentials are read
-    from environment variables so they never leave the server.
-    """
-    with get_cursor(commit=False) as cur:
-        cur.execute(
-            """
-            SELECT
-                br.id AS recipient_id, br.job_id, br.channel, br.status,
-                c.first_name, c.email,
-                bj.email_subject, bj.email_body, bj.title AS job_title
-            FROM broadcast_recipients br
-            JOIN contacts c   ON c.id  = br.contact_id
-            JOIN broadcast_jobs bj ON bj.id = br.job_id
-            WHERE br.id = %s
-            """,
-            (recipient_id,),
-        )
-        row = cur.fetchone()
-
-    if not row:
-        raise HTTPException(404, f"Recipient {recipient_id} not found")
-    if row["status"] not in ("pending", "sending"):
-        return {"status": "skipped", "reason": f"already in status '{row['status']}'"}
-    if not row["email"]:
-        return {"status": "skipped", "reason": "no email address"}
-    if not row["email_subject"] or not row["email_body"]:
-        return {"status": "skipped", "reason": "no email content configured on job"}
-
-    smtp_host = os.environ.get("SMTP_HOST", "")
-    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
-    smtp_user = os.environ.get("SMTP_USER", "")
-    smtp_pass = os.environ.get("SMTP_PASSWORD", "")
-    from_addr  = os.environ.get("REPORT_EMAIL_FROM", smtp_user)
-
-    if not smtp_host or not smtp_user:
-        raise HTTPException(500, "SMTP not configured — set SMTP_HOST, SMTP_USER, SMTP_PASSWORD")
-
-    # Personalise subject / body with first name
-    name = row["first_name"] or "there"
-    subject = row["email_subject"].replace("{{first_name}}", name)
-    body_html = row["email_body"].replace("{{first_name}}", name)
-
-    try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
-        msg["From"]    = from_addr
-        msg["To"]      = row["email"]
-        msg.attach(MIMEText(body_html, "html"))
-
-        with smtplib.SMTP(smtp_host, smtp_port) as server:
-            server.ehlo()
-            server.starttls()
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(from_addr, [row["email"]], msg.as_string())
-
-        logger.info("Broadcast email sent recipient_id=%d to=%s", recipient_id, row["email"])
-        mark_recipient_sent(recipient_id)
-        return {"status": "sent", "to": row["email"]}
-
-    except Exception as exc:
-        logger.error("Broadcast email failed recipient_id=%d: %s", recipient_id, exc)
-        mark_recipient_failed(recipient_id, RecipientFailure(error_message=str(exc)))
-        return {"status": "failed", "error": str(exc)}
 
 
 @router.get("/{job_id}")

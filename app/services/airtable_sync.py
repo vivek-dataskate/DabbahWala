@@ -1,85 +1,88 @@
 """
-Airtable sync service — creates and updates records in Airtable for field sales tasks.
-Uses the Airtable REST API via httpx.
+Airtable sync service — enqueues Airtable write actions to the action_queue table.
+n8n's Action Queue Executor picks them up and calls the Airtable API directly,
+keeping all external HTTP calls out of Python.
 """
 
-import httpx
+import json
+import logging
 
-from app.config import AIRTABLE_API_KEY, AIRTABLE_BASE_ID, AIRTABLE_FIELD_SALES_TABLE, AIRTABLE_QUERY_LOG_TABLE
+from app.db import get_cursor
 
-AIRTABLE_URL = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_FIELD_SALES_TABLE}"
-AIRTABLE_QUERY_LOG_URL = f"https://api.airtable.com/v0/{AIRTABLE_BASE_ID}/{AIRTABLE_QUERY_LOG_TABLE}"
+logger = logging.getLogger(__name__)
 
 
-def _headers() -> dict:
-    return {
-        "Authorization": f"Bearer {AIRTABLE_API_KEY}",
-        "Content-Type": "application/json",
+def create_field_sales_task(opportunity: dict) -> None:
+    """Enqueue an Airtable field sales task creation to the action_queue.
+
+    n8n will pick this up via the Action Queue Executor and create the record.
+    """
+    contact_id = opportunity.get("id")
+    if not contact_id:
+        logger.warning("create_field_sales_task called with no opportunity id — skipped")
+        return
+
+    payload = {
+        "customer_name": f"{opportunity.get('first_name', '')} {opportunity.get('last_name', '')}".strip(),
+        "phone": opportunity.get("phone", ""),
+        "email": opportunity.get("email", ""),
+        "priority": opportunity.get("priority", "warm").capitalize(),
+        "reason": opportunity.get("reason", ""),
+        "suggested_action": opportunity.get("suggested_message", ""),
+        "action_type": opportunity.get("action_type", ""),
+        "lifecycle_stage": opportunity.get("lifecycle_segment", ""),
+        "total_orders": opportunity.get("total_orders", 0),
+        "last_order": str(opportunity["last_order_at"])[:10] if opportunity.get("last_order_at") else "",
+        "postgres_opportunity_id": contact_id,
+        "status": "New",
     }
 
-
-def create_field_sales_task(opportunity: dict) -> str:
-    """Create an Airtable record for a field sales task. Returns the Airtable record ID."""
-    if not AIRTABLE_API_KEY or not AIRTABLE_BASE_ID:
-        return ""
-    fields = {
-        "Customer Name": f"{opportunity.get('first_name', '')} {opportunity.get('last_name', '')}".strip(),
-        "Phone": opportunity.get("phone", ""),
-        "Email": opportunity.get("email", ""),
-        "Priority": opportunity.get("priority", "warm").capitalize(),
-        "Reason": opportunity.get("reason", ""),
-        "Suggested Action": opportunity.get("suggested_message", ""),
-        "Action Type": opportunity.get("action_type", ""),
-        "Lifecycle Stage": opportunity.get("lifecycle_segment", ""),
-        "Total Orders": opportunity.get("total_orders", 0),
-        "Postgres Opportunity ID": opportunity.get("id"),
-        "Status": "New",
-    }
-
-    if opportunity.get("last_order_at"):
-        fields["Last Order"] = str(opportunity["last_order_at"])[:10]
-
-    response = httpx.post(
-        AIRTABLE_URL,
-        headers=_headers(),
-        json={"fields": fields},
-        timeout=10,
-    )
-    response.raise_for_status()
-    return response.json()["id"]
+    try:
+        with get_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO action_queue (contact_id, action_type, payload)
+                VALUES (%s, 'sync_airtable_task', %s::jsonb)
+                """,
+                (contact_id, json.dumps(payload)),
+            )
+        logger.debug("Enqueued sync_airtable_task for contact_id=%s", contact_id)
+    except Exception as e:
+        logger.warning("Failed to enqueue Airtable task for contact_id=%s: %s", contact_id, e)
 
 
 def log_query_to_airtable(category: str, question: str, answer: str, contact_email: str | None = None) -> None:
+    """Enqueue a query log entry to the action_queue for Airtable ingestion.
+
+    Silently no-ops on any error so it never blocks the query response.
     """
-    Persist a marketing query (category, question, answer) to the Airtable Query Log table.
-    Silently no-ops if Airtable is not configured, so it never breaks the query response.
-    """
-    if not AIRTABLE_API_KEY or not AIRTABLE_BASE_ID:
-        return
-    fields = {
-        "Category":      category,
-        "Question":      question[:100000],   # Airtable long-text limit
-        "Answer":        answer[:100000],
+    payload = {
+        "category": category,
+        "question": question[:100000],
+        "answer": answer[:100000],
     }
     if contact_email:
-        fields["Customer Email"] = contact_email
+        payload["customer_email"] = contact_email
+
     try:
-        httpx.post(
-            AIRTABLE_QUERY_LOG_URL,
-            headers=_headers(),
-            json={"fields": fields},
-            timeout=8,
-        )
+        with get_cursor() as cur:
+            # Use contact_id=0 as a sentinel for system-level actions with no contact
+            cur.execute(
+                """
+                INSERT INTO action_queue (contact_id, action_type, payload)
+                SELECT c.id, 'log_query_to_airtable', %s::jsonb
+                FROM contacts c
+                WHERE c.email = %s
+                LIMIT 1
+                """,
+                (json.dumps(payload), contact_email or ""),
+            )
+            if cur.rowcount == 0:
+                # No contact found — log to application log only
+                logger.info(
+                    "Query log (no contact match): category=%s question=%s",
+                    category,
+                    question[:120],
+                )
     except Exception:
-        pass  # never let Airtable failure affect the user response
-
-
-def get_updated_tasks(since_formula: str | None = None) -> list[dict]:
-    """Fetch tasks from Airtable that have been updated (for bidirectional sync)."""
-    params = {}
-    if since_formula:
-        params["filterByFormula"] = since_formula
-
-    response = httpx.get(AIRTABLE_URL, headers=_headers(), params=params)
-    response.raise_for_status()
-    return response.json().get("records", [])
+        pass  # never let logging failure affect the user response

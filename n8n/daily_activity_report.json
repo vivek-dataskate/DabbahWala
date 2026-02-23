@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala \u2014 Daily Activity Report",
+  "name": "[Reporting — Inference] Daily Activity Report",
   "nodes": [
     {
       "parameters": {
@@ -100,7 +100,7 @@
     {
       "parameters": {},
       "id": "report-failed",
-      "name": "Failed \u2014 Check Logs",
+      "name": "Failed — Check Logs",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -154,7 +154,7 @@
         ],
         [
           {
-            "node": "Failed \u2014 Check Logs",
+            "node": "Failed — Check Logs",
             "type": "main",
             "index": 0
           }
@@ -174,6 +174,10 @@
     {
       "name": "Reporting",
       "id": "reporting"
+    },
+    {
+      "name": "Inference",
+      "id": "tag-inference"
     }
   ],
   "pinData": {}

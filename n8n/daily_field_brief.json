@@ -1,5 +1,5 @@
 {
-  "name": "DabbahWala — Daily Field Brief",
+  "name": "[Reporting — Inference] Daily Field Brief",
   "nodes": [
     {
       "parameters": {
@@ -16,7 +16,10 @@
       "name": "Daily at 7:30 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [220, 300]
+      "position": [
+        220,
+        300
+      ]
     },
     {
       "parameters": {
@@ -30,7 +33,10 @@
       "name": "Generate Daily Call List",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -59,7 +65,10 @@
       "name": "Any Opportunities Created?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -69,7 +78,10 @@
       "name": "Format Brief Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 220]
+      "position": [
+        880,
+        220
+      ]
     },
     {
       "parameters": {
@@ -79,24 +91,51 @@
       "name": "Log No Contacts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 400]
+      "position": [
+        880,
+        400
+      ]
     }
   ],
   "connections": {
     "Daily at 7:30 AM": {
       "main": [
-        [{"node": "Generate Daily Call List", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Generate Daily Call List",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Generate Daily Call List": {
       "main": [
-        [{"node": "Any Opportunities Created?", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Any Opportunities Created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Any Opportunities Created?": {
       "main": [
-        [{"node": "Format Brief Summary", "type": "main", "index": 0}],
-        [{"node": "Log No Contacts", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Format Brief Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log No Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -104,7 +143,20 @@
     "executionOrder": "v1"
   },
   "staticData": null,
-  "tags": ["field-agent", "daily-brief"],
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Reporting",
+      "id": "reporting"
+    },
+    {
+      "name": "Inference",
+      "id": "tag-inference"
+    }
+  ],
   "triggerCount": 1,
   "updatedAt": "2026-02-19T00:00:00.000Z",
   "versionId": "1"
