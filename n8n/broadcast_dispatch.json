@@ -164,7 +164,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "TELNYX_CREDENTIAL_ID",
+          "id": "XnntvX8AXpdR97oQ",
           "name": "Telnyx API Key"
         }
       },
@@ -303,18 +303,22 @@
     },
     "Route by Channel": {
       "sms": [
-        {
-          "node": "Send SMS via Telnyx",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Send SMS via Telnyx",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ],
       "email": [
-        {
-          "node": "Send Email via Server SMTP",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Send Email via Server SMTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Send SMS via Telnyx": {

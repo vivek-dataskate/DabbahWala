@@ -6,7 +6,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, campaigns, broadcasts, chatbot, contacts, daily_orders, delivery, events, field_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, sms, team_content, telnyx, webhooks
+from app.routers import agents, agent, campaigns, broadcasts, chatbot, contacts, daily_orders, delivery, events, field_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, webhooks
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
@@ -164,7 +164,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(lifecycle.router, prefix="/api/lifecycle", tags=["lifecycle"])
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["campaigns"])
-app.include_router(sms.router, prefix="/api/sms", tags=["sms"])
 app.include_router(telnyx.router, prefix="/api/telnyx", tags=["telnyx"])
 app.include_router(delivery.router, prefix="/api/delivery", tags=["delivery"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])

@@ -296,7 +296,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "TELNYX_CREDENTIAL_ID",
+          "id": "XnntvX8AXpdR97oQ",
           "name": "Telnyx API Key"
         }
       },
@@ -434,7 +434,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "instantly-api-key",
+          "id": "FKw9At5AkLdEmHHi",
           "name": "Instantly API Key"
         }
       },
@@ -549,7 +549,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "instantly-api-key",
+          "id": "FKw9At5AkLdEmHHi",
           "name": "Instantly API Key"
         }
       },
@@ -591,7 +591,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "instantly-api-key",
+          "id": "FKw9At5AkLdEmHHi",
           "name": "Instantly API Key"
         }
       },
@@ -778,60 +778,76 @@
     },
     "Route by Action Type": {
       "send_sms": [
-        {
-          "node": "Send SMS via Telnyx",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Send SMS via Telnyx",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ],
       "escalate_airtable": [
-        {
-          "node": "Create Airtable Escalation",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Create Airtable Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ],
       "move_campaign": [
-        {
-          "node": "Move to Campaign (Instantly)",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Move to Campaign (Instantly)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ],
       "sync_airtable_task": [
-        {
-          "node": "Create Airtable Field Sales Task",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Create Airtable Field Sales Task",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ],
       "push_instantly_lead": [
-        {
-          "node": "Push Lead to Instantly Campaign",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Push Lead to Instantly Campaign",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ],
       "push_instantly_sequences": [
-        {
-          "node": "Push Sequences to Instantly",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Push Sequences to Instantly",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ],
       "upload_google_drive": [
-        {
-          "node": "Download CSV for Drive",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Download CSV for Drive",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ],
       "send_email_report": [
-        {
-          "node": "Send Email Report",
-          "type": "main",
-          "index": 0
-        }
+        [
+          {
+            "node": "Send Email Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Send SMS via Telnyx": {
