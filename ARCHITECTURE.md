@@ -106,9 +106,14 @@ INTAKE  ──→  EVIDENCE  ──→  INFERENCE  ──→  DECISION  ──�
 
 3. n8n executor polls action_queue
    └─→ GET /api/agents/action-queue/pending
-       ├─ send_sms          ──→  Telnyx API
-       ├─ move_campaign     ──→  Instantly API
-       └─ escalate_airtable ──→  Airtable API
+       ├─ send_sms              ──→  Telnyx API
+       ├─ move_campaign         ──→  Instantly API
+       ├─ escalate_airtable     ──→  Airtable API
+       ├─ sync_airtable_task    ──→  Airtable API
+       ├─ push_instantly_lead   ──→  Instantly API
+       ├─ push_instantly_sequences ──→ Instantly API
+       ├─ upload_google_drive   ──→  Google Drive API (OAuth2)
+       └─ send_email_report     ──→  Gmail-SMTP (n8n credential Sk6XzPNPnJTXHEbr)
    └─→ POST /api/agents/action-queue/{id}/done
 ```
 
@@ -116,25 +121,35 @@ INTAKE  ──→  EVIDENCE  ──→  INFERENCE  ──→  DECISION  ──�
 
 ## n8n Workflow Layer
 
-15 workflows on `digitalworker.dataskate.io`. 13 are version-controlled in `n8n/`.
+22 workflows on `digitalworker.dataskate.io`, all version-controlled in `n8n/`. All are active except `[Shipday — Evidence] Historical Import` (manual one-shot trigger).
 
-| Workflow | Schedule | Purpose |
-|----------|----------|---------|
-| **Agent Orchestration Cron** | Every 3 h | Batch-runs agent cycle for all active contacts |
-| **Action Queue Executor** | Every 30 min | Executes non-SMS queued actions (campaign moves, escalations) |
-| **SMS Dispatch** | Every 10 min | Polls action_queue, dispatches SMS via Telnyx |
-| **Lifecycle Cycle Runner** | Hourly | Runs `run_lifecycle_cycle()` SP — SQL rule-based stage transitions |
-| **Hourly Intelligence Cycle** | Hourly | Full 5-phase cycle: INTAKE -> EVIDENCE -> INFERENCE -> DECISION -> EXECUTION |
-| **Airtable Outcome Sync** | Every 15 min | Pulls opportunity outcomes back from Airtable |
-| **Airtable Playbook Sync** | Every 15 min | Syncs user-configured rules from Airtable |
-| **Telnyx Inbound Collector** | Every 30 min | Ingests inbound SMS/calls, triggers real-time agent cycle |
-| **Shipday Delivery Collector** | Every 30 min | Ingests delivery status updates from Shipday API |
-| **Daily Order Upload** | Daily 1 PM EST | Fetch CSV from Airtable, process orders via API |
-| **Daily Activity Report** | Daily 8:00 AM | Triggers `POST /api/agents/report/activity` |
-| **Daily Outcome Report** | Daily 8:30 AM | Triggers `POST /api/agents/report/outcome` |
-| **Marketing Query Form** | On-demand | Self-service query interface for marketing team |
-| **Google Docs Sync** | Every 30 min | Sync ground notes + ad copies from Google Drive |
-| **Daily Report Generator** | Daily 11 PM | Legacy aggregate metrics |
+Workflows follow the `[ExternalApp — FlowType] Name` taxonomy. All credential IDs are tracked in `n8n/config.json`.
+
+| Group | Workflow | Schedule | Purpose |
+|-------|----------|----------|---------|
+| **Shipday** | Delivery Collector | Every 30 min | Fetches orders from Shipday, POSTs to `/api/shipday/ingest-orders` |
+| **Shipday** | Feedback Sync | Hourly | Polls feedback, delivery instructions, proof-of-delivery |
+| **Shipday** | Historical Import | Manual only | One-shot backfill of up to 1 year of order history |
+| **Telnyx** | Inbound SMS Collector | Every 30 min | Ingests inbound SMS/calls, triggers real-time agent cycle |
+| **Telnyx** | Broadcast Dispatch | Every 5 min | Dispatches queued broadcasts (SMS via Telnyx, email via server SMTP) |
+| **Telnyx** | Broadcast Form | On form submit | n8n form UI for delay alerts and promo broadcasts |
+| **Airtable** | Playbook Sync | Every 15 min | Syncs user-configured rules from Airtable |
+| **Airtable** | Outcome Sync | Every 15 min | Pulls opportunity outcomes back from Airtable CRM |
+| **Airtable** | Marketing Query Form | On-demand | Self-service query form → Claude inference → logs to Airtable |
+| **Instantly** | Campaign Performance | Hourly | Fetches Instantly analytics per campaign, stores in DB |
+| **Instantly** | Campaign Sync | Every 6 h | Fetches campaigns tagged `dabbahwala`, POSTs to `/api/webhooks/sync-campaigns` |
+| **Instantly** | Campaign Setup | Daily midnight | Creates missing Instantly campaigns (no-op if all exist) |
+| **Google** | Docs & Drive Sync | Every 30 min | Lists Drive folder, reads Google Docs, pushes to chatbot index via `/api/team-content/sync` |
+| **Orders** | Daily CSV Upload | Daily 1 PM EST | Uploads daily CSV to `/api/daily-orders/process` |
+| **Reporting** | Daily Field Brief | Daily 7:30 AM | Generates field sales call list via `/api/field-agent/daily-brief` |
+| **Reporting** | Daily Activity Report | Daily 8:00 AM | Calls `/api/agents/report/activity` → Claude writes HTML + CSV → emails to `REPORT_EMAIL_TO` |
+| **Reporting** | Daily Outcome Report | Daily 8:30 AM | Calls `/api/agents/report/outcome` → Claude writes HTML + CSV → emails to `REPORT_EMAIL_TO` |
+| **Claude** | Agent Orchestration | Every 3 h | Batch agent cycle for all active contacts |
+| **Claude** | Hourly Intelligence Cycle | Hourly | Full 5-phase: INTAKE → EVIDENCE → INFERENCE → DECISION → EXECUTION |
+| **Claude** | Lifecycle Cycle Runner | Hourly | Runs `run_lifecycle_cycle()` SP — SQL rule-based stage transitions |
+| **Claude** | Lapsed Customer Daily Cycle | Daily (random offset) | Persistent re-engagement for lapsed customers |
+| **System** | Action Queue Executor | Every 30 min | Routes `action_queue` rows to: Telnyx (SMS), Instantly (leads/sequences), Airtable (tasks/escalations), Google Drive (CSV upload), Gmail-SMTP (email reports) |
+| **System** | Chatbot Docs Reindex | Every Monday 2 AM | Housekeeping — refreshes chatbot document index |
 
 ---
 
@@ -267,14 +282,15 @@ All routes served by the FastAPI app on Render.
 ┌───────────────────────────────────────────────────────────────────┐
 │  n8n  (digitalworker.dataskate.io)                                │
 │                                                                   │
-│  SMS Dispatch  ──→  Telnyx                                        │
-│  Action Queue Executor  ──→  Instantly / Airtable                 │
+│  Action Queue Executor  ──→  Telnyx / Instantly / Airtable        │
+│  Action Queue Executor  ──→  Google Drive / Gmail-SMTP            │
+│  Broadcast Dispatch     ──→  Telnyx (SMS) + server (email)        │
 │  Airtable Outcome Sync  ──→  CRM feedback loop                   │
-│  Lifecycle Cycle Runner  ──→  SQL rule engine                     │
+│  Lifecycle Cycle Runner ──→  SQL rule engine                      │
 │  Report triggers  ──→  /report/activity · /report/outcome         │
 │  Telnyx Collector  ──→  inbound SMS/calls                         │
 │  Shipday Collector  ──→  delivery status                          │
-│  Google Docs Sync  ──→  team content                              │
+│  Google Docs Sync  ──→  team content index                        │
 └───────────────────────────────────────────────────────────────────┘
 ```
 
@@ -289,9 +305,10 @@ All routes served by the FastAPI app on Render.
 | **Instantly** | Email campaigns (5 lifecycle-mapped campaigns) | `INSTANTLY_API_KEY` |
 | **Airtable** | CRM, field sales tasks, playbook rules, outcome tracking | `AIRTABLE_API_KEY` |
 | **Shipday** | Delivery tracking (order status, driver location) | `SHIPDAY_API_KEY` |
-| **Google Docs** | Ground team notes, ad copies | Google OAuth (n8n) |
-| **SMTP** | Report email delivery (Gmail / Outlook relay) | `SMTP_USER` / `SMTP_PASSWORD` |
-| **n8n** | 15 automation workflows | `N8N_API_KEY` |
+| **Google Drive** | CSV upload, chatbot doc sync | Google Drive OAuth2 (n8n cred `LUu1v42BgnEflv6f`) |
+| **Google Docs** | Ground team notes, ad copies | Google Docs OAuth2 (n8n cred `FcNSuTgdmTt3M4D5`) |
+| **Gmail / SMTP** | Daily report emails + broadcast emails | n8n cred `Sk6XzPNPnJTXHEbr` (`Gmail-SMTP`), reports to `REPORT_EMAIL_TO` |
+| **n8n** | 22 automation workflows (all active) | `N8N_API_KEY` |
 
 ---
 
