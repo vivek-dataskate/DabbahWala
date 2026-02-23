@@ -60,8 +60,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "GOOGLE_DRIVE_CREDENTIAL_ID",
-          "name": "Google Drive"
+          "id": "LUu1v42BgnEflv6f",
+          "name": "Google Drive OAuth2"
         }
       }
     },
@@ -122,8 +122,8 @@
       ],
       "credentials": {
         "googleDocsOAuth2Api": {
-          "id": "GOOGLE_DOCS_CREDENTIAL_ID",
-          "name": "Google Docs"
+          "id": "FcNSuTgdmTt3M4D5",
+          "name": "Google Docs OAuth2"
         }
       }
     },

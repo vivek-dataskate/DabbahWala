@@ -47,6 +47,24 @@
     "google": {
       "note": "Google OAuth credentials stored in n8n credential store (Google Drive + Google Docs)"
     },
+    "smtp": {
+      "n8n_credential_id": "Sk6XzPNPnJTXHEbr",
+      "n8n_credential_name": "Gmail-SMTP",
+      "note": "Gmail SMTP credential. Used by action_queue_executor for send_email_report and by broadcast_dispatch for email channel.",
+      "type": "smtp",
+      "host": "smtp.gmail.com",
+      "port": 465
+    },
+    "google_drive": {
+      "n8n_credential_id": "LUu1v42BgnEflv6f",
+      "n8n_credential_name": "Google Drive OAuth2",
+      "note": "Google Drive OAuth2. Used by action_queue_executor (upload_google_drive action) and google_docs_sync."
+    },
+    "google_docs": {
+      "n8n_credential_id": "FcNSuTgdmTt3M4D5",
+      "n8n_credential_name": "Google Docs OAuth2",
+      "note": "Google Docs OAuth2. Used by google_docs_sync to read document content."
+    },
     "n8n": {
       "note": "API key stored in .env as N8N_API_KEY"
     }
@@ -177,9 +195,9 @@
       "name": "[Google — Evidence] Docs & Drive Sync",
       "tags": ["DabbahWala", "Google", "Evidence"],
       "schedule": "Every 30 minutes",
-      "active": false,
+      "active": true,
       "file": "google_docs_sync.json",
-      "note": "Inactive until Google Drive + Google Docs OAuth2 credentials are configured in n8n. Reads Google Docs and pushes content to chatbot index."
+      "note": "Reads Google Docs from Drive folder and pushes content to chatbot index. Uses Google Drive OAuth2 and Google Docs OAuth2 credentials."
     },
 
     "_group_orders": "── Orders ────────────────────────────────────────────────",
