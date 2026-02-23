@@ -98,6 +98,17 @@
         1100,
         300
       ]
+    },
+    {
+      "id": "510f61db-c265-4591-af1d-933412715074",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -139,6 +150,17 @@
         [
           {
             "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Instantly Campaigns",
             "type": "main",
             "index": 0
           }

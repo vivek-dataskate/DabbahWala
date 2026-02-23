@@ -107,6 +107,17 @@
         1100,
         380
       ]
+    },
+    {
+      "id": "6ea105aa-1469-4b99-b5aa-823ed04d0c0f",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -155,6 +166,17 @@
         [
           {
             "node": "Failed — Check Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Today's Date",
             "type": "main",
             "index": 0
           }

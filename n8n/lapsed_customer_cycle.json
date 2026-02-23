@@ -125,6 +125,17 @@
         1320,
         420
       ]
+    },
+    {
+      "id": "b4a64826-dacd-4199-9065-b204feb544b4",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -184,6 +195,17 @@
         [
           {
             "node": "No Actions — Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Random Delay (0-8 hours)",
             "type": "main",
             "index": 0
           }

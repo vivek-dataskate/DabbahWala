@@ -99,6 +99,17 @@
         880,
         400
       ]
+    },
+    {
+      "id": "d3d22b1d-6fac-4d0c-98cb-53d0705e4a2a",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -136,6 +147,17 @@
         [
           {
             "node": "Log Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Reindex Chatbot Docs",
             "type": "main",
             "index": 0
           }

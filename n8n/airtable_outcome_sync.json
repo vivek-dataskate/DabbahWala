@@ -162,6 +162,17 @@
         1100,
         380
       ]
+    },
+    {
+      "id": "8ee10d2e-ee16-4e28-8a93-9c831348ffe5",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -221,6 +232,17 @@
         [
           {
             "node": "Mark Synced in Airtable",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Updated Airtable Records",
             "type": "main",
             "index": 0
           }

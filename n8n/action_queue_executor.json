@@ -722,6 +722,17 @@
         1540,
         1520
       ]
+    },
+    {
+      "id": "c940e903-e032-48d7-9b2f-5e4678c86d76",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -954,6 +965,17 @@
         [
           {
             "node": "Mark Email Report Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Actions",
             "type": "main",
             "index": 0
           }
