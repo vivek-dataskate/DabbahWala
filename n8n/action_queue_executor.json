@@ -660,8 +660,8 @@
       ],
       "credentials": {
         "googleDriveOAuth2Api": {
-          "id": "google-drive-oauth",
-          "name": "Google Drive OAuth"
+          "id": "LUu1v42BgnEflv6f",
+          "name": "Google Drive OAuth2"
         }
       },
       "continueOnFail": true
@@ -702,8 +702,8 @@
       ],
       "credentials": {
         "smtp": {
-          "id": "smtp-credential",
-          "name": "SMTP"
+          "id": "Sk6XzPNPnJTXHEbr",
+          "name": "Gmail-SMTP"
         }
       },
       "continueOnFail": true
