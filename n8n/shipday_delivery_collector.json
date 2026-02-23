@@ -67,7 +67,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "SHIPDAY_CREDENTIAL_ID",
+          "id": "shipday-api-key",
           "name": "Shipday API Key"
         }
       },

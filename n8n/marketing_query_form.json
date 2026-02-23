@@ -179,9 +179,8 @@
     },
     {
       "parameters": {
-        "resource": "record",
         "operation": "create",
-        "application": {
+        "base": {
           "__rl": true,
           "value": "appuy2VTIao6XVpIW",
           "mode": "id"
@@ -220,9 +219,8 @@
     },
     {
       "parameters": {
-        "resource": "record",
         "operation": "create",
-        "application": {
+        "base": {
           "__rl": true,
           "value": "appuy2VTIao6XVpIW",
           "mode": "id"
