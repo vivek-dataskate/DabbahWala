@@ -137,6 +137,59 @@ async def startup_run_migrations():
 
 
 @app.on_event("startup")
+async def startup_install_playwright():
+    """
+    Ensure Playwright Chromium headless shell is present at runtime.
+
+    The build script installs browsers to PLAYWRIGHT_BROWSERS_PATH during the
+    Render build phase.  However, if playwright was just updated (its browser
+    path format changed from chromium-XXXX to chromium_headless_shell-XXXX) or
+    if Render served a cached build, the browser may be absent.  This guard
+    re-runs the install when the binary is missing so the first scrape request
+    doesn't fail with a cryptic "Executable doesn't exist" error.
+    """
+    import glob as _glob
+    import subprocess
+
+    browsers_path = os.environ.get(
+        "PLAYWRIGHT_BROWSERS_PATH",
+        "/opt/render/project/src/.playwright-browsers",
+    )
+    # Ensure the env var is set for the current process so Playwright finds it
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
+
+    pattern = os.path.join(
+        browsers_path, "chromium_headless_shell-*", "chrome-linux", "headless_shell"
+    )
+    if _glob.glob(pattern):
+        logger.info("startup_install_playwright — Chromium headless shell present, skipping install")
+        return
+
+    logger.warning(
+        "startup_install_playwright — Chromium not found at %s, installing now…",
+        browsers_path,
+    )
+    try:
+        result = subprocess.run(
+            ["python", "-m", "playwright", "install", "chromium"],
+            env={**os.environ, "PLAYWRIGHT_BROWSERS_PATH": browsers_path},
+            capture_output=True,
+            text=True,
+            timeout=300,  # 5 min — generous for Render's bandwidth
+        )
+        if result.returncode == 0:
+            logger.info("startup_install_playwright — Chromium installed successfully")
+        else:
+            logger.error(
+                "startup_install_playwright — playwright install failed (rc=%d): %s",
+                result.returncode,
+                result.stderr[-2000:],
+            )
+    except Exception as exc:
+        logger.error("startup_install_playwright — unexpected error: %s", exc)
+
+
+@app.on_event("startup")
 async def startup_sync_chatbot_docs():
     """Kick off chatbot doc reindex in a background thread so port binds immediately."""
     import threading
