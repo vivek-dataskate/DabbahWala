@@ -154,8 +154,78 @@ async def scrape_menu_items() -> list[dict]:
         try:
             logger.info("Navigating to %s", MENU_URL)
             await page.goto(MENU_URL, wait_until="networkidle", timeout=60_000)
+            # Give the SvelteKit hydration a moment to settle beyond networkidle
+            await asyncio.sleep(3)
             await page.screenshot(path="/tmp/dw_step1.png")
             logger.info("Page loaded — screenshot saved to /tmp/dw_step1.png")
+
+            # ── Diagnostic: log every input visible on the page ───────────────
+            all_inputs = await page.evaluate("""
+                () => [...document.querySelectorAll('input')].map(el => ({
+                    type: el.type,
+                    name: el.name,
+                    id: el.id,
+                    placeholder: el.placeholder,
+                    cls: el.className.slice(0, 60),
+                    visible: el.offsetParent !== null,
+                }))
+            """)
+            logger.info("Inputs found on landing page: %s", all_inputs)
+
+            # ── Dismiss any cookie / consent overlays ─────────────────────────
+            for dismiss_sel in [
+                'button:has-text("Accept")',
+                'button:has-text("Accept All")',
+                'button:has-text("Got it")',
+                'button:has-text("OK")',
+                '[aria-label*="close" i]',
+                '[class*="cookie"] button',
+            ]:
+                try:
+                    el = page.locator(dismiss_sel).first
+                    if await el.is_visible():
+                        await el.click()
+                        logger.info("Dismissed overlay: %s", dismiss_sel)
+                        await asyncio.sleep(1)
+                        break
+                except Exception:
+                    pass
+
+            # ── Click through any intro / CTA step before the phone form ──────
+            # The subscription page may start with a landing/hero that requires
+            # a button press before the auth phone form appears.
+            cta_texts = [
+                "Get Started",
+                "Start",
+                "Subscribe",
+                "Begin",
+                "Sign In",
+                "Login",
+                "Log In",
+                "Continue",
+                "Next",
+                "Build Your Box",
+                "Order Now",
+                "Proceed",
+            ]
+            for text in cta_texts:
+                try:
+                    locator = page.locator(
+                        f'button:has-text("{text}"), a:has-text("{text}")'
+                    )
+                    if await locator.count() > 0 and await locator.first.is_visible():
+                        await locator.first.click()
+                        logger.info("Clicked CTA button: '%s'", text)
+                        await page.wait_for_load_state("networkidle", timeout=15_000)
+                        await asyncio.sleep(2)
+                        await page.screenshot(path="/tmp/dw_after_cta.png")
+                        break
+                except Exception as e:
+                    logger.debug("CTA '%s' not clickable: %s", text, e)
+
+            # Scroll down slightly in case the form is below the fold
+            await page.evaluate("window.scrollBy(0, 300)")
+            await asyncio.sleep(1)
 
             # ── Step 1: find and fill the phone number input ─────────────────
             phone_selectors = [
@@ -165,6 +235,9 @@ async def scrape_menu_items() -> list[dict]:
                 'input[name*="phone" i]',
                 'input[id*="phone" i]',
                 'input[placeholder*="number" i]',
+                'input[autocomplete*="tel" i]',
+                'input[inputmode="numeric"]',
+                'input[inputmode="tel"]',
             ]
             phone_input = None
             for sel in phone_selectors:
@@ -176,10 +249,33 @@ async def scrape_menu_items() -> list[dict]:
                 except PwTimeout:
                     continue
 
+            # Last resort: if exactly one input is visible, assume it's the phone field
+            if not phone_input:
+                all_visible = await page.query_selector_all("input")
+                visible_inputs = [
+                    el for el in all_visible
+                    if await el.is_visible()
+                ]
+                if len(visible_inputs) == 1:
+                    phone_input = visible_inputs[0]
+                    logger.info("Falling back to the only visible input on page")
+                elif visible_inputs:
+                    # Use first visible that looks like it could be a phone/text field
+                    for el in visible_inputs:
+                        t = (await el.get_attribute("type") or "text").lower()
+                        if t in ("tel", "text", "number", ""):
+                            phone_input = el
+                            logger.info("Falling back to first visible text/tel input")
+                            break
+
             if not phone_input:
                 # Dump page source for debugging
                 html = await page.content()
-                logger.error("Could not find phone input. Page HTML (first 3000 chars): %s", html[:3000])
+                logger.error(
+                    "Could not find phone input. Inputs on page: %s\nHTML (first 3000 chars): %s",
+                    all_inputs,
+                    html[:3000],
+                )
                 raise RuntimeError("Phone number input not found on page")
 
             otp_request_time = time.time()
