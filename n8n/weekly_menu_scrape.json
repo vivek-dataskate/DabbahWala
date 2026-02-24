@@ -75,7 +75,7 @@
     },
     {
       "parameters": {
-        "operation": "create",
+        "operation": "upsert",
         "base": {
           "__rl": true,
           "value": "appuy2VTIao6XVpIW",
@@ -88,6 +88,7 @@
         },
         "columns": {
           "mappingMode": "defineBelow",
+          "matchingColumns": ["Week Start"],
           "value": {
             "Week Start": "={{ $('Fetch Current Menu').item.json.week_start }}",
             "Item Count": "={{ $('Fetch Current Menu').item.json.count }}",
