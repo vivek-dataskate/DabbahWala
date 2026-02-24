@@ -292,6 +292,8 @@ One-click deploy via `render.yaml` blueprint. Auto-runs migrations on deploy.
 - **n8n:** Self-hosted at `digitalworker.dataskate.io`
 - **API URL:** `https://dabbahwala-latest.onrender.com`
 
+**Playwright on Render:** `scripts/render_build.sh` installs the Chromium headless shell into `/opt/render/project/src/.playwright-browsers` at build time (`install-deps` then `install`, with `set -euo pipefail` so failures abort the deploy).  A FastAPI startup event (`startup_install_playwright`) checks for the binary on every boot and self-heals by running `playwright install chromium` if it is missing — guarding against cached builds after a playwright version bump.
+
 ### Local Development
 
 ```bash
