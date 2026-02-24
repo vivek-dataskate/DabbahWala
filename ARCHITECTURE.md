@@ -335,3 +335,12 @@ All routes served by the FastAPI app on Render.
 | GitHub Actions | GitHub (auto-sync n8n on push) | — |
 
 **Model:** All agent calls use `claude-sonnet-4-5-20250929`.
+
+### Build & Runtime — Playwright
+
+`scripts/render_build.sh` installs the Playwright Chromium headless shell at build time into `/opt/render/project/src/.playwright-browsers` (project-relative, persisted to the runtime container).  The script now uses `set -euo pipefail` so any install failure aborts the deploy visibly.  The browser install is split into two steps:
+
+1. `python -m playwright install-deps chromium` — system-level apt packages
+2. `python -m playwright install chromium` — browser binary
+
+As a self-healing fallback, the `startup_install_playwright` FastAPI startup event checks for the `chromium_headless_shell-*` binary at startup and re-runs the install if it is absent (e.g. after a playwright version bump that changes the browser path format).  On healthy deploys this check completes in milliseconds.
