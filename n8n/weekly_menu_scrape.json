@@ -75,7 +75,7 @@
     },
     {
       "parameters": {
-        "operation": "appendOrUpdate",
+        "operation": "create",
         "base": {
           "__rl": true,
           "value": "appuy2VTIao6XVpIW",

@@ -100,3 +100,14 @@ if [ $FAILED -gt 0 ]; then
 fi
 
 echo "=== All migrations applied successfully ==="
+
+echo ""
+echo "=== Running test suite ==="
+# Run unit/integration tests. Tests are DB-mocked so they don't require a live DB.
+# Failures abort the deploy so broken code never reaches production.
+if python -m pytest tests/ -v --tb=short -q 2>&1; then
+    echo "=== All tests passed ==="
+else
+    echo "ERROR: Tests failed — aborting deploy"
+    exit 1
+fi
