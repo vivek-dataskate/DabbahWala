@@ -75,6 +75,44 @@
     },
     {
       "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "field-week-start",
+              "name": "Week Start",
+              "value": "={{ $json.week_start }}",
+              "type": "string"
+            },
+            {
+              "id": "field-item-count",
+              "name": "Item Count",
+              "value": "={{ $json.count }}",
+              "type": "number"
+            },
+            {
+              "id": "field-items-json",
+              "name": "Items JSON",
+              "value": "={{ JSON.stringify($json.items) }}",
+              "type": "string"
+            },
+            {
+              "id": "field-scraped-at",
+              "name": "Scraped At",
+              "value": "={{ new Date().toISOString() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "format-for-airtable",
+      "name": "Format for Airtable",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
         "operation": "upsert",
         "base": {
           "__rl": true,
@@ -87,14 +125,9 @@
           "mode": "name"
         },
         "columns": {
-          "mappingMode": "defineBelow",
+          "mappingMode": "autoMapInputData",
           "matchingColumns": ["Week Start"],
-          "value": {
-            "Week Start": "={{ $('Fetch Current Menu').item.json.week_start }}",
-            "Item Count": "={{ $('Fetch Current Menu').item.json.count }}",
-            "Items JSON": "={{ JSON.stringify($('Fetch Current Menu').item.json.items) }}",
-            "Scraped At": "={{ new Date().toISOString() }}"
-          }
+          "options": {}
         },
         "options": {}
       },
@@ -102,7 +135,7 @@
       "name": "Log to Airtable",
       "type": "n8n-nodes-base.airtable",
       "typeVersion": 2.1,
-      "position": [1100, 200],
+      "position": [1320, 200],
       "credentials": {
         "airtableTokenApi": {
           "id": "hJpO8jdlT4Rmkjtx",
@@ -169,9 +202,14 @@
     "Fetch Current Menu": {
       "main": [
         [
-          {"node": "Log to Airtable", "type": "main", "index": 0},
+          {"node": "Format for Airtable", "type": "main", "index": 0},
           {"node": "Email Success Notification", "type": "main", "index": 0}
         ]
+      ]
+    },
+    "Format for Airtable": {
+      "main": [
+        [{"node": "Log to Airtable", "type": "main", "index": 0}]
       ]
     }
   },
