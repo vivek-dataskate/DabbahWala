@@ -262,7 +262,7 @@ async def _handle_login(page, PwTimeout):
     else:
         await page.keyboard.press("Enter")
 
-    await page.wait_for_load_state("networkidle", timeout=30_000)
+    await page.wait_for_load_state("load", timeout=30_000)
     await asyncio.sleep(2)
     await page.screenshot(path="/tmp/dw_after_otp.png")
     logger.info("Login complete — current URL: %s", page.url)
@@ -409,7 +409,7 @@ async def scrape_menu_items() -> list[dict]:
         try:
             # ── Step 1: load the subscription landing page ────────────────────
             logger.info("Step 1 — Navigating to %s", MENU_URL)
-            await page.goto(MENU_URL, wait_until="networkidle", timeout=60_000)
+            await page.goto(MENU_URL, wait_until="load", timeout=90_000)
             await asyncio.sleep(2)
             await page.screenshot(path="/tmp/dw_step1.png")
             logger.info("Landing page loaded — URL: %s", page.url)
@@ -417,7 +417,7 @@ async def scrape_menu_items() -> list[dict]:
             # ── Step 2: click "One Time Purchase" ─────────────────────────────
             logger.info("Step 2 — Clicking '%s'", ONE_TIME_PURCHASE_TEXT)
             await _click_one_time_purchase(page, PwTimeout)
-            await page.wait_for_load_state("networkidle", timeout=30_000)
+            await page.wait_for_load_state("load", timeout=30_000)
             await asyncio.sleep(2)
             await page.screenshot(path="/tmp/dw_step2.png")
             logger.info("After button click — URL: %s", page.url)
@@ -434,7 +434,7 @@ async def scrape_menu_items() -> list[dict]:
                 # ── Step 4 (post-login): click "One Time Purchase" again ───────
                 logger.info("Step 4 — Clicking '%s' again after login", ONE_TIME_PURCHASE_TEXT)
                 await _click_one_time_purchase(page, PwTimeout)
-                await page.wait_for_load_state("networkidle", timeout=30_000)
+                await page.wait_for_load_state("load", timeout=30_000)
                 await asyncio.sleep(2)
                 await page.screenshot(path="/tmp/dw_step4.png")
                 logger.info("Menu page — URL: %s", page.url)
