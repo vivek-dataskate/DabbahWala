@@ -29,7 +29,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $env.DABBAHWALA_API_URL }}/api/chatbot/reindex",
+        "url": "https://dabbahwala-latest.onrender.com/api/chatbot/reindex",
         "options": {
           "timeout": 60000
         }

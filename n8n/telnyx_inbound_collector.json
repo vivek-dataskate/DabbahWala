@@ -71,7 +71,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "TELNYX_CREDENTIAL_ID",
+          "id": "XnntvX8AXpdR97oQ",
           "name": "Telnyx API Key"
         }
       }
@@ -109,7 +109,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "TELNYX_CREDENTIAL_ID",
+          "id": "XnntvX8AXpdR97oQ",
           "name": "Telnyx API Key"
         }
       }

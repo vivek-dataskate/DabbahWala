@@ -70,13 +70,12 @@
     },
     {
       "parameters": {
-        "fieldToSplitOut": "=",
-        "options": {}
+        "jsCode": "const contacts = $input.first().json;\nif (!Array.isArray(contacts) || contacts.length === 0) return [];\nreturn contacts.map(item => ({ json: item }));"
       },
       "id": "split-contacts",
       "name": "Split Contacts",
-      "type": "n8n-nodes-base.splitOut",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         880,
         240
@@ -116,7 +115,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "TELNYX_CREDENTIAL_ID",
+          "id": "XnntvX8AXpdR97oQ",
           "name": "Telnyx API Key"
         }
       }

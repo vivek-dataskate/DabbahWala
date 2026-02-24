@@ -87,13 +87,12 @@
     },
     {
       "parameters": {
-        "fieldToSplitOut": "=",
-        "options": {}
+        "jsCode": "const campaigns = $input.first().json;\nif (!Array.isArray(campaigns) || campaigns.length === 0) return [];\nreturn campaigns.map(item => ({ json: item }));"
       },
       "id": "split-campaigns",
       "name": "Split Campaign Moves",
-      "type": "n8n-nodes-base.splitOut",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         1100,
         240

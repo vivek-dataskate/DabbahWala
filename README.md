@@ -189,6 +189,11 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 
 All workflows follow `[ExternalApp — FlowType] Name` taxonomy. Credential IDs are in `n8n/config.json`.
 
+**Implementation notes:**
+- **Telnyx from number:** Hardcoded as `+18444322224` in `broadcast_dispatch` / `sms_dispatch` (n8n Variables not available on this instance)
+- **Slack nodes:** Replaced with NoOp placeholders in `airtable_playbook_sync`, `daily_order_upload`, `lapsed_customer_cycle` — not yet configured
+- **sms_dispatch** was recreated (old workflow ID missing); new ID is in `n8n/config.json`
+
 | Workflow | Schedule | Purpose |
 |----------|----------|---------|
 | [Claude] Agent Orchestration | Every 3 h | Batch agent cycle for all active contacts |

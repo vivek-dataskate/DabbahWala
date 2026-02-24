@@ -125,6 +125,15 @@ INTAKE  ──→  EVIDENCE  ──→  INFERENCE  ──→  DECISION  ──�
 
 Workflows follow the `[ExternalApp — FlowType] Name` taxonomy. All credential IDs are tracked in `n8n/config.json`.
 
+### Implementation Notes
+
+| Item | Detail |
+|------|--------|
+| **Telnyx from number** | Hardcoded as `+18444322224` in `broadcast_dispatch` and `sms_dispatch` — n8n Variables feature not available on this instance |
+| **Slack notifications** | Replaced with NoOp placeholder nodes in `airtable_playbook_sync`, `daily_order_upload`, `lapsed_customer_cycle` — Slack integration not yet configured |
+| **chatbot_docs_reindex API URL** | Hardcoded in workflow node (env vars not supported in n8n Cron trigger context) |
+| **sms_dispatch** | Recreated workflow (previous ID missing from n8n instance); new ID tracked in `n8n/config.json` |
+
 | Group | Workflow | Schedule | Purpose |
 |-------|----------|----------|---------|
 | **Shipday** | Delivery Collector | Every 30 min | Fetches orders from Shipday, POSTs to `/api/shipday/ingest-orders` |
