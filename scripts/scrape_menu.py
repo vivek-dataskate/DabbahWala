@@ -45,6 +45,8 @@ os.environ.setdefault(
 
 MENU_URL = "https://www.dabbahwala.com/subscription-plan-build-your-own-box"
 TELNYX_PHONE = "+18444322224"
+# The site's phone input has maxlen=10 and expects the 10-digit local number (no +1 prefix).
+TELNYX_PHONE_LOCAL = TELNYX_PHONE.lstrip("+").lstrip("1")  # "8444322224"
 OTP_TIMEOUT = 90          # seconds to wait for OTP SMS
 OTP_POLL_INTERVAL = 3     # seconds between Telnyx API polls
 
@@ -82,15 +84,28 @@ def poll_telnyx_for_otp(sent_after_ts: float, timeout: int = OTP_TIMEOUT) -> str
                 "https://api.telnyx.com/v2/messages",
                 params={
                     "filter[to][eq]": TELNYX_PHONE,
-                    "filter[direction][eq]": "inbound",
-                    "page[size]": 5,
+                    # Note: do NOT pass filter[direction][eq]=inbound — Telnyx returns 404
+                    # for that combination on toll-free numbers. Filtering by "to" is
+                    # sufficient since inbound messages arrive TO our number.
+                    "page[size]": 10,
                 },
                 headers=headers,
                 timeout=10,
             )
-            resp.raise_for_status()
+            if not resp.is_success:
+                logger.warning(
+                    "Telnyx HTTP %d for GET /v2/messages — body: %s",
+                    resp.status_code,
+                    resp.text[:400],
+                )
+                time.sleep(OTP_POLL_INTERVAL)
+                continue
             messages = resp.json().get("data", [])
             for msg in messages:
+                # Only process inbound messages (direction filter removed from query)
+                if msg.get("direction") == "outbound":
+                    continue
+
                 # received_at is ISO8601 — convert to epoch for comparison
                 received_raw = msg.get("received_at") or msg.get("created_at") or ""
                 if received_raw:
@@ -236,7 +251,11 @@ async def _handle_login(page, PwTimeout):
     """
     await _log_page_state(page, "login-page")
 
-    logger.info("On login page — entering phone number %s", TELNYX_PHONE)
+    logger.info(
+        "On login page — entering phone number %s (local: %s)",
+        TELNYX_PHONE,
+        TELNYX_PHONE_LOCAL,
+    )
 
     # Find phone input (placeholder="Phone number" from the actual site)
     phone_input = None
@@ -261,10 +280,11 @@ async def _handle_login(page, PwTimeout):
         logger.error("Phone input not found on login page. HTML (first 3000): %s", html[:3000])
         raise RuntimeError("Phone number input not found on login page")
 
+    # The input has maxlen=10 and expects the 10-digit local number (no +1 country code).
     otp_request_time = time.time()
     await phone_input.click()
     await phone_input.fill("")
-    await phone_input.type(TELNYX_PHONE, delay=80)
+    await phone_input.type(TELNYX_PHONE_LOCAL, delay=80)
     logger.info("Typed phone number into input")
 
     # Click "Continue" (the submit button on the login page)
@@ -548,15 +568,35 @@ async def scrape_menu_items() -> list[dict]:
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(
             headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+            args=[
+                "--no-sandbox",
+                "--disable-setuid-sandbox",
+                "--disable-dev-shm-usage",
+                # Hide automation fingerprint from reCAPTCHA v3
+                "--disable-blink-features=AutomationControlled",
+            ],
         )
         context = await browser.new_context(
             user_agent=(
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
             ),
             viewport={"width": 1280, "height": 900},
+            locale="en-US",
+            timezone_id="America/New_York",
         )
+        # Mask webdriver property so reCAPTCHA v3 scores us as human
+        await context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+            Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+            Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+            window.chrome = { runtime: {} };
+            const _query = window.navigator.permissions.query.bind(navigator.permissions);
+            window.navigator.permissions.query = (p) =>
+                p.name === 'notifications'
+                    ? Promise.resolve({ state: Notification.permission })
+                    : _query(p);
+        """)
         page = await context.new_page()
 
         # ── Forward browser console messages to Python logger ─────────────────
@@ -589,7 +629,12 @@ async def scrape_menu_items() -> list[dict]:
             # ── Step 1: load the subscription landing page ────────────────────
             logger.info("Step 1 — Navigating to %s", MENU_URL)
             response = await page.goto(MENU_URL, wait_until="load", timeout=90_000)
+            # Let reCAPTCHA v3 observe some interaction before we click anything
             await asyncio.sleep(2)
+            await page.mouse.move(400, 300)
+            await asyncio.sleep(1)
+            await page.evaluate("window.scrollBy(0, 200)")
+            await asyncio.sleep(1)
             await page.screenshot(path="/tmp/dw_step1.png")
             logger.info(
                 "Step 1 complete — HTTP %s | URL: %s",
