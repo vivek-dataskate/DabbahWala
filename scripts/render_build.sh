@@ -7,6 +7,10 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 echo ""
+echo "=== Installing Playwright Chromium browser ==="
+playwright install chromium --with-deps || echo "WARNING: Playwright browser install failed (non-fatal)"
+
+echo ""
 echo "=== Running database migrations ==="
 
 if [ -z "${DATABASE_URL:-}" ]; then
