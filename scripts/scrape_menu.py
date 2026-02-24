@@ -35,6 +35,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("scrape_menu")
 
+# Playwright looks for browsers in ~/.cache by default, which is not persisted
+# across Render build/runtime containers.  The build script installs to this
+# project-relative path, so force the same location here.
+os.environ.setdefault(
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "/opt/render/project/src/.playwright-browsers",
+)
+
 MENU_URL = "https://www.dabbahwala.com/subscription-plan-build-your-own-box?step=1"
 TELNYX_PHONE = "+18444322224"
 OTP_TIMEOUT = 90          # seconds to wait for OTP SMS
