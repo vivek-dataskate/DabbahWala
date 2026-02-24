@@ -8,7 +8,10 @@ pip install -r requirements.txt
 
 echo ""
 echo "=== Installing Playwright Chromium browser ==="
-playwright install chromium --with-deps || echo "WARNING: Playwright browser install failed (non-fatal)"
+# Install into the project directory so it survives into the runtime container.
+# (~/.cache is build-only and does not carry over to the deployed instance.)
+export PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright-browsers
+python -m playwright install chromium --with-deps
 
 echo ""
 echo "=== Running database migrations ==="
