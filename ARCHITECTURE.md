@@ -4,6 +4,7 @@ DabbahWala is an automated customer marketing system built on a **4-layer Claude
 
 ```
 Events  ──→  Agent Pipeline (4 layers)  ──→  Action Queue  ──→  n8n Executors  ──→  Telnyx / Airtable / Instantly
+Website ──→  Playwright Scraper (OTP via Telnyx)  ──→  weekly_menu_schedule table
 ```
 
 ---
@@ -121,7 +122,7 @@ INTAKE  ──→  EVIDENCE  ──→  INFERENCE  ──→  DECISION  ──�
 
 ## n8n Workflow Layer
 
-22 workflows on `digitalworker.dataskate.io`, all version-controlled in `n8n/`. All are active except `[Shipday — Evidence] Historical Import` (manual one-shot trigger).
+23 workflows on `digitalworker.dataskate.io`, all version-controlled in `n8n/`. All are active except `[Shipday — Evidence] Historical Import` (manual one-shot trigger).
 
 Workflows follow the `[ExternalApp — FlowType] Name` taxonomy. All credential IDs are tracked in `n8n/config.json`.
 
@@ -136,6 +137,7 @@ Workflows follow the `[ExternalApp — FlowType] Name` taxonomy. All credential 
 
 | Group | Workflow | Schedule | Purpose |
 |-------|----------|----------|---------|
+| **Website** | Weekly Menu Scrape | Every Monday 8 AM | Playwright navigates dabbahwala.com, SMS OTP via Telnyx `+18444322224`, scrapes menu into `weekly_menu_schedule`. Logs to Airtable + emails result. ID: `xJ7UT2IDUQJBiztS` |
 | **Shipday** | Delivery Collector | Every 30 min | Fetches orders from Shipday, POSTs to `/api/shipday/ingest-orders` |
 | **Shipday** | Feedback Sync | Hourly | Polls feedback, delivery instructions, proof-of-delivery |
 | **Shipday** | Historical Import | Manual only | One-shot backfill of up to 1 year of order history |
@@ -172,8 +174,9 @@ Workflows follow the `[ExternalApp — FlowType] Name` taxonomy. All credential 
 | `events` | Raw event log (order_placed, email_open, sms_received, delivery_failed, etc.) |
 | `orders` | Order records (order_ref, total_amount, delivery_slot, order_type) |
 | `order_items` | Line items (menu_item_id, quantity, unit_price) |
-| `menu_items` | Master menu (item_name, category, is_veg, avg_price) |
+| `menu_items` | Master menu catalog (item_name, category, is_veg, avg_price) |
 | `menu_item_aliases` | CSV dish name -> canonical menu item mapping |
+| `weekly_menu_schedule` | Weekly menu scraped from dabbahwala.com — keyed by `(week_start, item_name)` |
 | `telnyx_messages` | SMS tracking (direction, body, status, source, agent_name) |
 | `telnyx_calls` | Call tracking (duration, transcript, summary) |
 | `delivery_status` | Delivery updates (status, notes, location, updated_by) |
@@ -241,6 +244,7 @@ All routes served by the FastAPI app on Render.
 | `team_content.py` | `/api/team-content` | `POST /sync`, `POST /submit`, `GET /browse`, `POST /search` |
 | `reports.py` | `/api/reports` | `GET /daily/{date}`, `POST /daily/{date}` |
 | `events.py` | `/api/events` | `POST /ingest` |
+| `menu_scrape.py` | `/api/menu-scrape` | `POST /run` (Playwright + Telnyx OTP), `GET /current`, `GET /week/{date}` |
 
 ---
 

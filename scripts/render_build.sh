@@ -7,6 +7,10 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 echo ""
+echo "=== Installing Playwright Chromium browser ==="
+playwright install chromium --with-deps || echo "WARNING: Playwright browser install failed (non-fatal)"
+
+echo ""
 echo "=== Running database migrations ==="
 
 if [ -z "${DATABASE_URL:-}" ]; then
@@ -96,3 +100,14 @@ if [ $FAILED -gt 0 ]; then
 fi
 
 echo "=== All migrations applied successfully ==="
+
+echo ""
+echo "=== Running test suite ==="
+# Run unit/integration tests. Tests are DB-mocked so they don't require a live DB.
+# Failures abort the deploy so broken code never reaches production.
+if python -m pytest tests/ -v --tb=short -q 2>&1; then
+    echo "=== All tests passed ==="
+else
+    echo "ERROR: Tests failed — aborting deploy"
+    exit 1
+fi

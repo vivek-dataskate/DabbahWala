@@ -347,6 +347,20 @@
       "file": "lapsed_customer_cycle.json",
       "note": "Persistent re-engagement cycle for lapsed customers. Infinite rotation with frequency escalation and creative copy variation."
     },
+    "_group_website": "\u2500\u2500 Website \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+    "weekly_menu_scrape": {
+      "id": "xJ7UT2IDUQJBiztS",
+      "name": "[Website \u2014 Evidence] Weekly Menu Scrape",
+      "tags": [
+        "DabbahWala",
+        "Website",
+        "Evidence"
+      ],
+      "schedule": "Every Monday at 8 AM",
+      "active": true,
+      "file": "weekly_menu_scrape.json",
+      "note": "Uses Playwright to navigate dabbahwala.com menu, completes SMS OTP via Telnyx (+18444322224), scrapes weekly items into weekly_menu_schedule table."
+    },
     "_group_system": "\u2500\u2500 System \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
     "action_queue_executor": {
       "id": "RzR3ZNYlty7cuTDY",

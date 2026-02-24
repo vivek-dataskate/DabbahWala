@@ -26,3 +26,5 @@ REPORT_EMAIL_FROM = os.environ.get("REPORT_EMAIL_FROM", "")
 # Shipday delivery management
 SHIPDAY_API_KEY = os.environ.get("SHIPDAY_API_KEY", "")
 INSTANTLY_API_KEY = os.environ.get("INSTANTLY_API_KEY", "")
+TELNYX_API_KEY = os.environ.get("TELNYX_API_KEY", "")
+TELNYX_FROM_NUMBER = os.environ.get("TELNYX_FROM_NUMBER", "+18444322224")
