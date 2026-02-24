@@ -123,11 +123,98 @@ def poll_telnyx_for_otp(sent_after_ts: float, timeout: int = OTP_TIMEOUT) -> str
 
 
 # ---------------------------------------------------------------------------
-# Playwright scraper
+# Playwright helpers
 # ---------------------------------------------------------------------------
+
+async def _log_page_state(page, label: str) -> None:
+    """Log URL, title, all visible buttons, and all visible inputs."""
+    try:
+        url = page.url
+        title = await page.title()
+        logger.info("[%s] URL: %s | Title: %r", label, url, title)
+
+        # All visible buttons
+        buttons = await page.evaluate("""
+            () => Array.from(document.querySelectorAll('button, [role="button"], input[type="submit"]'))
+                .filter(el => {
+                    const r = el.getBoundingClientRect();
+                    return r.width > 0 && r.height > 0;
+                })
+                .map(el => ({
+                    tag: el.tagName,
+                    text: (el.innerText || el.value || '').trim().slice(0, 80),
+                    disabled: el.disabled,
+                    type: el.type || null,
+                }))
+        """)
+        if buttons:
+            btn_summary = "; ".join(
+                f"{b['tag']}({b['text']!r}{', disabled' if b['disabled'] else ''})"
+                for b in buttons[:20]
+            )
+            logger.info("[%s] Buttons (%d): %s", label, len(buttons), btn_summary)
+        else:
+            logger.info("[%s] No visible buttons found", label)
+
+        # All visible inputs
+        inputs = await page.evaluate("""
+            () => Array.from(document.querySelectorAll('input, textarea, select'))
+                .filter(el => {
+                    const r = el.getBoundingClientRect();
+                    return r.width > 0 && r.height > 0;
+                })
+                .map(el => ({
+                    tag: el.tagName,
+                    type: el.type || null,
+                    name: el.name || null,
+                    placeholder: el.placeholder || null,
+                    maxlength: el.maxLength > 0 ? el.maxLength : null,
+                    value_len: el.value ? el.value.length : 0,
+                }))
+        """)
+        if inputs:
+            inp_summary = "; ".join(
+                f"{i['tag']}(type={i['type']!r}, placeholder={i['placeholder']!r}, name={i['name']!r}, maxlen={i['maxlength']})"
+                for i in inputs[:20]
+            )
+            logger.info("[%s] Inputs (%d): %s", label, len(inputs), inp_summary)
+        else:
+            logger.info("[%s] No visible inputs found", label)
+
+    except Exception as exc:
+        logger.warning("[%s] _log_page_state error: %s", label, exc)
+
 
 async def _click_one_time_purchase(page, PwTimeout) -> bool:
     """Click the 'One Time Purchase' button. Returns True if found and clicked."""
+    # Log all matching candidates before clicking
+    try:
+        candidates = await page.evaluate(
+            f"""
+            () => Array.from(document.querySelectorAll(
+                'button, a, [role="button"]'
+            )).filter(el => el.innerText.includes("{ONE_TIME_PURCHASE_TEXT}"))
+             .map(el => ({{
+                tag: el.tagName,
+                text: el.innerText.trim().slice(0, 100),
+                visible: el.getBoundingClientRect().width > 0,
+                disabled: el.disabled,
+                href: el.href || null,
+             }}))
+            """
+        )
+        if candidates:
+            logger.info(
+                "'%s' candidates (%d): %s",
+                ONE_TIME_PURCHASE_TEXT,
+                len(candidates),
+                "; ".join(f"{c['tag']}({c['text']!r}, visible={c['visible']}, disabled={c['disabled']})" for c in candidates),
+            )
+        else:
+            logger.warning("No elements containing '%s' text found in DOM", ONE_TIME_PURCHASE_TEXT)
+    except Exception as exc:
+        logger.warning("Could not enumerate '%s' candidates: %s", ONE_TIME_PURCHASE_TEXT, exc)
+
     locator = page.locator(
         f'button:has-text("{ONE_TIME_PURCHASE_TEXT}"), '
         f'a:has-text("{ONE_TIME_PURCHASE_TEXT}")'
@@ -137,8 +224,8 @@ async def _click_one_time_purchase(page, PwTimeout) -> bool:
         await locator.first.click()
         logger.info("Clicked '%s'", ONE_TIME_PURCHASE_TEXT)
         return True
-    except Exception:
-        logger.warning("'%s' button not found", ONE_TIME_PURCHASE_TEXT)
+    except Exception as exc:
+        logger.warning("'%s' button not found or not clickable: %s", ONE_TIME_PURCHASE_TEXT, exc)
         return False
 
 
@@ -147,6 +234,8 @@ async def _handle_login(page, PwTimeout):
     Complete the phone + OTP login flow on /apex/login.
     Raises RuntimeError if OTP is not received in time.
     """
+    await _log_page_state(page, "login-page")
+
     logger.info("On login page — entering phone number %s", TELNYX_PHONE)
 
     # Find phone input (placeholder="Phone number" from the actual site)
@@ -161,23 +250,25 @@ async def _handle_login(page, PwTimeout):
         try:
             phone_input = await page.wait_for_selector(sel, timeout=8_000)
             if phone_input:
-                logger.info("Phone input found: %s", sel)
+                logger.info("Phone input found via selector: %s", sel)
                 break
         except PwTimeout:
+            logger.info("Selector %r — not found (timeout)", sel)
             continue
 
     if not phone_input:
         html = await page.content()
-        logger.error("Phone input not found on login page. HTML: %s", html[:3000])
+        logger.error("Phone input not found on login page. HTML (first 3000): %s", html[:3000])
         raise RuntimeError("Phone number input not found on login page")
 
     otp_request_time = time.time()
     await phone_input.click()
     await phone_input.fill("")
     await phone_input.type(TELNYX_PHONE, delay=80)
-    logger.info("Typed phone number")
+    logger.info("Typed phone number into input")
 
     # Click "Continue" (the submit button on the login page)
+    submitted = False
     for sel in [
         'button:has-text("Continue")',
         'button[type="submit"]',
@@ -187,16 +278,21 @@ async def _handle_login(page, PwTimeout):
         try:
             btn = await page.wait_for_selector(sel, timeout=5_000)
             if btn:
+                btn_text = await btn.inner_text()
                 await btn.click()
-                logger.info("Clicked submit: %s", sel)
+                logger.info("Clicked submit button %r (text: %r)", sel, btn_text.strip())
+                submitted = True
                 break
         except PwTimeout:
+            logger.info("Submit selector %r — not found (timeout)", sel)
             continue
-    else:
+
+    if not submitted:
         await phone_input.press("Enter")
-        logger.info("Pressed Enter on phone field")
+        logger.info("Pressed Enter on phone field (no submit button matched)")
 
     await page.screenshot(path="/tmp/dw_otp_requested.png")
+    await _log_page_state(page, "otp-requested")
 
     # Poll Telnyx for the OTP
     otp = poll_telnyx_for_otp(sent_after_ts=otp_request_time)
@@ -218,32 +314,38 @@ async def _handle_login(page, PwTimeout):
         try:
             otp_input = await page.wait_for_selector(sel, timeout=5_000)
             if otp_input:
-                logger.info("OTP input found: %s", sel)
+                logger.info("OTP input found via selector: %s", sel)
                 break
         except PwTimeout:
+            logger.info("OTP selector %r — not found (timeout)", sel)
             continue
 
     if not otp_input:
         # Try individual single-digit inputs
         digit_inputs = await page.query_selector_all('input[maxlength="1"]')
         if len(digit_inputs) >= 4:
-            logger.info("Found %d single-digit OTP inputs", len(digit_inputs))
+            logger.info("Found %d single-digit OTP inputs — filling digit by digit", len(digit_inputs))
             for i, digit in enumerate(otp[: len(digit_inputs)]):
                 await digit_inputs[i].fill(digit)
             otp_input = digit_inputs[0]
         else:
             html = await page.content()
-            logger.error("OTP input not found. HTML: %s", html[:3000])
+            logger.error(
+                "OTP input not found. digit_inputs=%d. HTML (first 3000): %s",
+                len(digit_inputs),
+                html[:3000],
+            )
             raise RuntimeError("OTP input not found on page")
 
     if otp_input:
         try:
             await otp_input.fill(otp)
-        except Exception:
-            pass  # already filled digit-by-digit above
-    logger.info("Filled OTP: %s", otp)
+            logger.info("Filled OTP field with: %s", otp)
+        except Exception as exc:
+            logger.info("otp_input.fill() skipped (already filled digit-by-digit): %s", exc)
 
     # Submit OTP
+    otp_submitted = False
     for sel in [
         'button:has-text("Verify")',
         'button:has-text("Continue")',
@@ -254,18 +356,24 @@ async def _handle_login(page, PwTimeout):
         try:
             btn = await page.wait_for_selector(sel, timeout=3_000)
             if btn:
+                btn_text = await btn.inner_text()
                 await btn.click()
-                logger.info("OTP submitted via: %s", sel)
+                logger.info("OTP submitted via %r (text: %r)", sel, btn_text.strip())
+                otp_submitted = True
                 break
         except PwTimeout:
+            logger.info("OTP submit selector %r — not found (timeout)", sel)
             continue
-    else:
-        await page.keyboard.press("Enter")
 
-    await page.wait_for_load_state("networkidle", timeout=30_000)
+    if not otp_submitted:
+        await page.keyboard.press("Enter")
+        logger.info("OTP submitted via Enter key")
+
+    await page.wait_for_load_state("load", timeout=30_000)
     await asyncio.sleep(2)
     await page.screenshot(path="/tmp/dw_after_otp.png")
     logger.info("Login complete — current URL: %s", page.url)
+    await _log_page_state(page, "after-otp")
 
 
 async def _scrape_items_from_page(page) -> list[dict]:
@@ -277,6 +385,23 @@ async def _scrape_items_from_page(page) -> list[dict]:
 
     async def _extract_current_tab() -> list[dict]:
         await asyncio.sleep(1)  # let tab content render
+
+        # Log how many candidate card elements exist before extraction
+        card_count = await page.evaluate("""
+            () => document.querySelectorAll(
+                '[class*="item-card"], [class*="menu-item"], [class*="product-card"], ' +
+                '[class*="dish-card"], [class*="food-item"], [class*="ItemCard"], ' +
+                '[class*="MenuItem"], [class*="ProductCard"]'
+            ).length
+        """)
+        logger.info("Card elements on current tab (primary selectors): %d", card_count)
+
+        if card_count == 0:
+            fallback_count = await page.evaluate("""
+                () => document.querySelectorAll('li, article, [class*="card"], [class*="item"]').length
+            """)
+            logger.info("Card elements (fallback selectors): %d", fallback_count)
+
         return await page.evaluate("""
             () => {
                 const results = [];
@@ -349,27 +474,55 @@ async def _scrape_items_from_page(page) -> list[dict]:
     logger.info("Found %d date tabs", len(date_tabs))
 
     if date_tabs:
+        # Log all tab labels upfront
+        tab_labels = []
+        for tab in date_tabs:
+            try:
+                tab_labels.append((await tab.inner_text()).strip())
+            except Exception:
+                tab_labels.append("?")
+        logger.info("Tab labels: %s", tab_labels)
+
         for i, tab in enumerate(date_tabs):
             try:
-                label = await tab.inner_text()
+                label = tab_labels[i]
+                logger.info("Clicking date tab %d/%d: %r", i + 1, len(date_tabs), label)
                 await tab.click()
-                logger.info("Clicked date tab %d: %s", i, label.strip())
                 tab_items = await _extract_current_tab()
+                new_items = 0
                 for item in tab_items:
                     name = item.get("item_name", "").strip()
                     if name and name not in all_items:
                         all_items[name] = item
-                logger.info("Tab %d yielded %d items (total unique: %d)", i, len(tab_items), len(all_items))
+                        new_items += 1
+                logger.info(
+                    "Tab %d (%r): %d items extracted, %d new (total unique: %d)",
+                    i + 1, label, len(tab_items), new_items, len(all_items),
+                )
             except Exception as e:
                 logger.warning("Error on date tab %d: %s", i, e)
     else:
         # No tabs found — scrape the single visible page
         logger.info("No date tabs found — scraping single page view")
+
+        # Log some of the class names present to aid debugging
+        class_sample = await page.evaluate("""
+            () => {
+                const all = new Set();
+                document.querySelectorAll('[class]').forEach(el => {
+                    (el.className || '').split(/\\s+/).forEach(c => { if (c) all.add(c); });
+                });
+                return Array.from(all).slice(0, 80);
+            }
+        """)
+        logger.info("CSS classes present on page (first 80): %s", class_sample)
+
         tab_items = await _extract_current_tab()
         for item in tab_items:
             name = item.get("item_name", "").strip()
             if name and name not in all_items:
                 all_items[name] = item
+        logger.info("Single-page scrape: %d items", len(all_items))
 
     return list(all_items.values())
 
@@ -406,49 +559,85 @@ async def scrape_menu_items() -> list[dict]:
         )
         page = await context.new_page()
 
+        # ── Forward browser console messages to Python logger ─────────────────
+        def _on_console(msg):
+            level = msg.type  # "log", "warning", "error", "info", etc.
+            text = msg.text
+            if level == "error":
+                logger.warning("[browser:console:error] %s", text)
+            elif level == "warning":
+                logger.info("[browser:console:warning] %s", text)
+            else:
+                logger.debug("[browser:console:%s] %s", level, text)
+
+        page.on("console", _on_console)
+
+        # ── Log non-2xx network responses ─────────────────────────────────────
+        async def _on_response(response):
+            status = response.status
+            if status >= 400:
+                logger.warning(
+                    "[browser:response] %d %s → %s",
+                    status,
+                    response.request.method,
+                    response.url[:120],
+                )
+
+        page.on("response", _on_response)
+
         try:
             # ── Step 1: load the subscription landing page ────────────────────
             logger.info("Step 1 — Navigating to %s", MENU_URL)
-            await page.goto(MENU_URL, wait_until="networkidle", timeout=60_000)
+            response = await page.goto(MENU_URL, wait_until="load", timeout=90_000)
             await asyncio.sleep(2)
             await page.screenshot(path="/tmp/dw_step1.png")
-            logger.info("Landing page loaded — URL: %s", page.url)
+            logger.info(
+                "Step 1 complete — HTTP %s | URL: %s",
+                response.status if response else "n/a",
+                page.url,
+            )
+            await _log_page_state(page, "step1")
 
             # ── Step 2: click "One Time Purchase" ─────────────────────────────
             logger.info("Step 2 — Clicking '%s'", ONE_TIME_PURCHASE_TEXT)
-            await _click_one_time_purchase(page, PwTimeout)
-            await page.wait_for_load_state("networkidle", timeout=30_000)
+            clicked = await _click_one_time_purchase(page, PwTimeout)
+            logger.info("Step 2 — click returned: %s", clicked)
+            await page.wait_for_load_state("load", timeout=30_000)
             await asyncio.sleep(2)
             await page.screenshot(path="/tmp/dw_step2.png")
-            logger.info("After button click — URL: %s", page.url)
+            logger.info("Step 2 complete — URL: %s", page.url)
+            await _log_page_state(page, "step2")
 
             # ── Step 3: handle login if redirected to /apex/login ─────────────
             if "/login" in page.url or "/apex" in page.url:
-                logger.info("Step 3 — Login required, handling OTP flow")
+                logger.info("Step 3 — Login required (URL contains /login or /apex)")
                 await _handle_login(page, PwTimeout)
 
-                # After login we're back on the subscription landing page
                 logger.info("Step 3 complete — URL: %s", page.url)
                 await page.screenshot(path="/tmp/dw_step3.png")
+                await _log_page_state(page, "step3")
 
                 # ── Step 4 (post-login): click "One Time Purchase" again ───────
                 logger.info("Step 4 — Clicking '%s' again after login", ONE_TIME_PURCHASE_TEXT)
-                await _click_one_time_purchase(page, PwTimeout)
-                await page.wait_for_load_state("networkidle", timeout=30_000)
+                clicked = await _click_one_time_purchase(page, PwTimeout)
+                logger.info("Step 4 — click returned: %s", clicked)
+                await page.wait_for_load_state("load", timeout=30_000)
                 await asyncio.sleep(2)
                 await page.screenshot(path="/tmp/dw_step4.png")
-                logger.info("Menu page — URL: %s", page.url)
+                logger.info("Step 4 complete — URL: %s", page.url)
+                await _log_page_state(page, "step4")
             else:
                 # Cached session — already on the menu page
-                logger.info("Cached session — skipped login, on menu at URL: %s", page.url)
+                logger.info("Step 3 — Cached session, skipped login. URL: %s", page.url)
 
             # ── Step 5: scrape menu items across all date tabs ────────────────
-            logger.info("Step 5 — Scraping menu items")
+            logger.info("Step 5 — Starting menu scrape")
             await page.screenshot(path="/tmp/dw_menu.png")
+            await _log_page_state(page, "step5-before-scrape")
             items = await _scrape_items_from_page(page)
 
             if not items:
-                logger.warning("No items scraped — saving HTML for debugging")
+                logger.warning("No items scraped — saving full HTML for debugging")
                 html = await page.content()
                 with open("/tmp/dw_menu_page.html", "w") as f:
                     f.write(html)
@@ -456,14 +645,27 @@ async def scrape_menu_items() -> list[dict]:
                 content = await page.inner_text("main, body")
                 logger.info("Page text (first 3000):\n%s", content[:3000])
             else:
-                logger.info("Scraped %d unique menu items", len(items))
+                logger.info("Step 5 complete — scraped %d unique menu items", len(items))
+                for idx, item in enumerate(items[:5], 1):
+                    logger.info("  Sample item %d: %s", idx, item)
 
             return items
 
         except Exception as exc:
-            logger.error("Scrape failed: %s", exc, exc_info=True)
+            logger.error("Scrape failed at URL=%s: %s", page.url, exc, exc_info=True)
+            try:
+                title = await page.title()
+                logger.error("Page title at failure: %r", title)
+            except Exception:
+                pass
+            try:
+                visible_text = await page.inner_text("body")
+                logger.error("Page body text at failure (first 2000):\n%s", visible_text[:2000])
+            except Exception:
+                pass
             try:
                 await page.screenshot(path="/tmp/dw_error.png")
+                logger.error("Error screenshot saved to /tmp/dw_error.png")
             except Exception:
                 pass
             raise
