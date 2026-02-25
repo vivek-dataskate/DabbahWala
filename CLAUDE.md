@@ -38,7 +38,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 ## Database Migrations
 - All migrations live in `migrations/` and are numbered sequentially
-- Next available migration number: **056**
+- Next available migration number: **057**
 - Use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for idempotency
 
 ## Credentials & Integrations
@@ -73,8 +73,9 @@ If the env var is empty, read it from that file and use it directly in API calls
 - Menu table: **`Weekly Menu`** — fields: Name, Category, Is Veg, Description, Image URL, Week Start, Active, Price
 
 ### n8n Workflow Status
-- All **22 scheduled workflows** are active as of 2026-02-25
+- All **23 scheduled workflows** are active as of 2026-02-25
 - `[Airtable — Evidence] Menu Sync` (ID: `baZV5ViA5lXNCTWR`) replaced the old Playwright weekly scrape
+- `[System — Test] Daily E2E Test Suite` (ID: `M7bwNMGrUMRvAHH4`) — daily 5 AM E2E test runner, added 2026-02-25
 - Only `[Shipday — Evidence] Historical Import` is intentionally inactive (manual one-shot trigger)
 - Credential IDs for all integrations are tracked in `n8n/config.json`
 

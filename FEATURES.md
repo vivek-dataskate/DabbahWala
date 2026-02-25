@@ -262,6 +262,43 @@ High-intent contacts and failed deliveries are escalated as tasks in Airtable fo
 
 ---
 
+## 14. Daily E2E Test Harness
+
+Every system, agent, integration, and automation workflow is automatically validated at 5:00 AM daily. A single HTTP call triggers 55+ end-to-end tests across 14 logical groups. Results are emailed to `vivek@dabbahwala.com` with per-test pass/fail detail. Zero real-customer impact: all test data uses `source='test_harness'` and is cascade-deleted at the end of every run.
+
+**Test Contact:** phone `+18444322224` (Telnyx self-loop), email `vivek@dabbahwala.com`
+
+**Test Groups**
+
+| Group | What Is Tested |
+|-------|---------------|
+| 1 — System Connectivity | DB connection, `/health`, Telnyx API, Instantly API, Airtable API, Shipday API, Anthropic API, n8n API |
+| 2 — Database Schema | All core + agent pipeline tables, stored functions, campaign_routing seed, n8n workflow count |
+| 3 — Test Contact Setup | Create isolated contact; verify DB round-trip |
+| 4 — Events & Webhooks | `ingest_event` (SMS, email_open); Telnyx inbound webhook; Shipday DELIVERED + FAILED webhooks |
+| 5 — Telnyx / SMS | Real outbound SMS self-loop; `telnyx_messages` DB check; action_queue SMS flow |
+| 6 — AI Agent Pipeline | 4-layer Claude cycle on test contact → verify inference_results, decision_recommendations, orchestrator_log, action_queue |
+| 7 — Intelligence & Lifecycle | `POST /api/lifecycle/run` (SQL rules); `POST /api/intelligence/run-cycle` (all 5 phases); segment distribution |
+| 8 — Instantly Email | All 5 DW campaigns exist; add `vivek@` as lead → verify → fetch analytics → remove |
+| 9 — Airtable | Weekly Menu fetch; menu sync; playbook sync; Field Sales Task create + delete |
+| 10 — Action Queue | Pending endpoint; create test entry; mark done |
+| 11 — Order Processing | CSV upload; menu_items populated; order summary endpoint |
+| 12 — Reports | Activity report (Claude); outcome report (Claude); `/api/reports/daily` endpoint |
+| 13 — Self-Service & Chatbot | Query categories; tier-1 `pipeline_snapshot`; customer_lookup; chatbot RAG ask; opportunities/detect |
+| 14 — Cleanup | Cascade-delete all test records; verify zero remaining |
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `migrations/056_test_harness.sql` | `test_runs` table — persists every run with full JSONB results |
+| `app/services/test_harness_service.py` | All 55+ test functions; `run_full_suite()` entry point; cleanup logic |
+| `app/routers/test_harness.py` | `POST /api/test/run`, `GET /api/test/results`, `GET /api/test/results/{run_id}` |
+| `n8n/system_test_suite.json` | Daily 5 AM trigger; parse results; send pass/fail email via Gmail-SMTP |
+| n8n workflow ID `M7bwNMGrUMRvAHH4` | Live workflow — active in n8n |
+
+---
+
 ## 13. Claude Desktop MCP
 
 Marketing and ops team members can query live Postgres data conversationally in Claude Desktop without writing SQL — using 30+ purpose-built tools.
