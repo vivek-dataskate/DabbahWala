@@ -1,0 +1,223 @@
+{
+  "name": "[Claude — Evidence] Weekly Menu Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [1],
+              "triggerAtHour": 6,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Monday 6 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/menu/scrape-trigger",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "background",
+              "value": "false"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "trigger-scraper",
+      "name": "Trigger Menu Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "check-status",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "completed",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-scrape-ok",
+      "name": "Scrape OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [540, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dabbahwala-latest.onrender.com/api/menu/current",
+        "options": {}
+      },
+      "id": "get-current-menu",
+      "name": "Get Current Menu",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [760, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const menu = $('Get Current Menu').first().json;\nconst items = menu.items || [];\nconst week = menu.week_start;\nconst count = menu.item_count || 0;\n\nconst vegItems = items.filter(i => i.is_veg).map(i => i.item_name).join(', ');\nconst nonVegItems = items.filter(i => !i.is_veg).map(i => i.item_name).join(', ');\nconst featured = items.filter(i => i.is_featured).map(i => i.item_name).join(', ');\n\nconst summary = [\n  `Week of ${week}: ${count} items synced`,\n  featured ? `Featured: ${featured}` : '',\n  vegItems ? `Veg: ${vegItems}` : '',\n  nonVegItems ? `Non-Veg: ${nonVegItems}` : ''\n].filter(Boolean).join('\\n');\n\nreturn [{ json: { summary, item_count: count, week_start: week } }];"
+      },
+      "id": "build-summary",
+      "name": "Build Menu Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 200]
+    },
+    {
+      "parameters": {
+        "fromEmail": "core@dabbahwala.com",
+        "toEmail": "={{ $env.REPORT_EMAIL_TO || 'core@dabbahwala.com' }}",
+        "subject": "=✅ Weekly Menu Synced — {{ $json.week_start }}",
+        "emailType": "text",
+        "message": "=Weekly menu has been scraped and synced successfully.\n\n{{ $json.summary }}\n\nYou can view the full menu at:\nhttps://dabbahwala-latest.onrender.com/api/menu/current",
+        "options": {}
+      },
+      "id": "email-success",
+      "name": "Email — Menu Synced",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1200, 200],
+      "credentials": {
+        "smtp": {
+          "id": "Sk6XzPNPnJTXHEbr",
+          "name": "Gmail-SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "core@dabbahwala.com",
+        "toEmail": "={{ $env.REPORT_EMAIL_TO || 'core@dabbahwala.com' }}",
+        "subject": "=⚠️ Weekly Menu Sync FAILED",
+        "emailType": "text",
+        "message": "=The weekly menu scraper did not complete successfully.\n\nStatus: {{ $('Trigger Menu Scraper').first().json.status }}\nError: {{ $('Trigger Menu Scraper').first().json.stderr || 'Unknown error' }}\n\nPlease manually update the menu via:\nPOST https://dabbahwala-latest.onrender.com/api/menu/sync",
+        "options": {}
+      },
+      "id": "email-failure",
+      "name": "Email — Sync Failed",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [760, 420],
+      "credentials": {
+        "smtp": {
+          "id": "Sk6XzPNPnJTXHEbr",
+          "name": "Gmail-SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Monday 6 AM": {
+      "main": [
+        [
+          {
+            "node": "Trigger Menu Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trigger Menu Scraper": {
+      "main": [
+        [
+          {
+            "node": "Scrape OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape OK?": {
+      "main": [
+        [
+          {
+            "node": "Get Current Menu",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Email — Sync Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Current Menu": {
+      "main": [
+        [
+          {
+            "node": "Build Menu Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Menu Summary": {
+      "main": [
+        [
+          {
+            "node": "Email — Menu Synced",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Claude",
+      "id": "tag-claude"
+    },
+    {
+      "name": "Evidence",
+      "id": "tag-evidence"
+    }
+  ],
+  "pinData": {}
+}

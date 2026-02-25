@@ -297,6 +297,33 @@
       "file": "daily_field_brief.json",
       "id": "kOI33cFH4bM8OCaf"
     },
+    "_group_menu": "── Menu Sync ────────────────────────────────────────────────────────────",
+    "menu_sync_weekly": {
+      "id": "sb0jHek7Q9gPeCUd",
+      "name": "[Claude — Evidence] Weekly Menu Sync",
+      "tags": [
+        "DabbahWala",
+        "Claude",
+        "Evidence"
+      ],
+      "schedule": "Every Monday at 6 AM",
+      "active": true,
+      "file": "menu_sync_weekly.json",
+      "note": "Triggers Playwright scraper → dabbahwala.com/subscription-plan-build-your-own-box, receives OTP via Telnyx +18444322224, extracts menu items, POSTs to /api/menu/sync. Emails summary to REPORT_EMAIL_TO."
+    },
+    "growth_agent_cycle": {
+      "id": "Nbut2tjjksGvQYzH",
+      "name": "[Claude — Inference] Growth Agent Cycle",
+      "tags": [
+        "DabbahWala",
+        "Claude",
+        "Inference"
+      ],
+      "schedule": "Every Monday at 7:30 AM",
+      "active": true,
+      "file": "growth_agent_cycle.json",
+      "note": "Weekly: (1) refresh baseline conv rate, (2) measure due experiments, (3) Claude designs+launches new experiment, (4) emails growth report."
+    },
     "_group_claude": "── Claude (AI Intelligence) ──────────────────────────────",
     "agent_orchestration_cron": {
       "id": "VreWonSUTk4VCXPF",
@@ -373,7 +400,7 @@
       "file": "goal_agent_cycle.json",
       "note": "4-phase proactive experiment loop: HYPOTHESIZE (generate ideas) \u2192 EXPERIMENT (select cohorts, queue SMS) \u2192 MEASURE (check 72h conversions) \u2192 HARVEST (proven experiments \u2192 discovered_signals). Creates new signals instead of relying only on existing ones."
     },
-    "_group_system": "\u2500\u2500 System \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+    "_group_system": "── System ────────────────────────────────────────────────",
     "action_queue_executor": {
       "id": "RzR3ZNYlty7cuTDY",
       "name": "[System — Action] Action Queue Executor",

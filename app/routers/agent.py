@@ -141,6 +141,36 @@ def build_contact_profile(cur, contact_id: int) -> dict:
     """, (contact_id,))
     pending_opps = [dict(r) for r in cur.fetchall()]
 
+    # ── This week's menu ──────────────────────────────────────────────────
+    # Prefer the weekly snapshot; fall back to the full active catalog.
+    from datetime import date, timedelta
+    today = date.today()
+    week_start = today - timedelta(days=today.weekday())
+
+    cur.execute(
+        """SELECT item_name, category, is_veg, price, is_featured
+           FROM weekly_menu
+           WHERE week_start = %s
+           ORDER BY is_featured DESC, display_order""",
+        (week_start,),
+    )
+    current_menu = [dict(r) for r in cur.fetchall()]
+
+    if not current_menu:
+        cur.execute(
+            """SELECT item_name, category, is_veg, avg_price AS price, false AS is_featured
+               FROM menu_items WHERE is_active = true
+               ORDER BY category, item_name"""
+        )
+        current_menu = [dict(r) for r in cur.fetchall()]
+
+    # Items on this week's menu the customer has NEVER ordered before
+    ordered_names = {i['item_name'].lower() for i in fav_items}
+    new_to_customer = [
+        m for m in current_menu
+        if m['item_name'].lower() not in ordered_names
+    ]
+
     return {
         'contact': contact,
         'orders': orders,
@@ -149,6 +179,8 @@ def build_contact_profile(cur, contact_id: int) -> dict:
         'call_history': call_history,
         'decisions': decisions,
         'pending_opportunities': pending_opps,
+        'current_menu': current_menu,
+        'new_to_customer_this_week': new_to_customer,
     }
 
 
@@ -163,6 +195,19 @@ fresh daily (not restaurant food — lighter oils, no MSG, small batches). We of
 - One-time orders
 - Weekly subscriptions (save 15-20%, daily delivery, zero planning)
 - Free delivery on orders over $35
+
+## Menu-aware personalisation
+The customer profile includes two menu fields you MUST use when crafting messages:
+
+1. `current_menu` — every item available THIS week. Always mention real items by name.
+2. `new_to_customer_this_week` — items on this week's menu the customer has NEVER ordered.
+   Use these to create curiosity: "We have something new you haven't tried yet…"
+
+Rules for menu references:
+- If the customer has favourite items, anchor the message there first, then bridge to something new.
+- If `new_to_customer_this_week` has veg items and the customer only orders veg, highlight those.
+- Never make up item names. Only reference items that appear in `current_menu`.
+- If `current_menu` is empty, do not fabricate menu items — just be generic about "today's menu".
 
 Our business goals (in priority order):
 1. Get existing customers to REORDER

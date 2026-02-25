@@ -72,6 +72,79 @@ Both reports are emailed to `core@dabbahwala.com`.
 
 ---
 
+## Menu Suggestion Agent
+
+The Claude agent (`/api/agent`) now includes **menu-aware personalisation**. Every contact profile contains:
+
+| Field | Source | Usage |
+|-------|--------|-------|
+| `current_menu` | `weekly_menu` table (Monday sync) | Shows all items available this week |
+| `new_to_customer_this_week` | `current_menu` minus `favorite_items` | Items the customer has *never* ordered — used to spark curiosity |
+
+Claude is instructed to anchor messages to the customer's favourite items, then bridge to something new from `new_to_customer_this_week`. It never fabricates item names.
+
+**Weekly menu sync pipeline:**
+```
+n8n Monday 6 AM
+  └─→ POST /api/menu/scrape-trigger
+       └─→ scripts/scrape_menu.py (Playwright)
+            ├─ Navigate dabbahwala.com/subscription-plan-build-your-own-box
+            ├─ Enter Telnyx +18444322224 for OTP
+            ├─ Poll telnyx_messages table until OTP arrives
+            ├─ Submit OTP → extract menu items from rendered page
+            └─ POST /api/menu/sync  ──→  weekly_menu table
+```
+
+Fallback: if no weekly snapshot exists, Claude uses the full `menu_items` catalog.
+
+**Menu endpoints:**
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/menu/sync` | Accept menu payload (from scraper or manual) |
+| `GET` | `/api/menu/current` | Return this week's menu (used by Claude agent) |
+| `POST` | `/api/menu/scrape-trigger` | Launch Playwright scraper as subprocess |
+| `GET` | `/api/menu/history` | Last N sync audit log entries |
+
+---
+
+## Growth Hacker Agent (Experimental)
+
+A new goal-oriented agent (`/api/growth`) that **invents** ways to generate orders rather than waiting for signals.
+
+```
+Every Monday 7:30 AM (n8n)
+  ├─ 1. BASELINE  — refresh 7-day baseline conversion rate
+  ├─ 2. MEASURE   — score previous experiments (ordered within 7 days?)
+  ├─ 3. DESIGN    — Claude invents a new experiment (hypothesis + message + cohort spec)
+  ├─ 4. DISPATCH  — create opportunities for the cohort via existing action queue
+  └─ 5. REPORT    — email weekly growth summary with results + new experiment details
+```
+
+**Experiment types Claude rotates through:**
+| Type | Examples |
+|------|---------|
+| `timing` | Sunday 8 AM burst, Friday 4 PM hunger nudge, lunch-hour |
+| `offer` | Free dessert add-on, extra roti, $5 delivery credit |
+| `message_angle` | Scarcity ("only 10 orders left"), social proof, nostalgia ("you haven't had Butter Chicken in 3 weeks") |
+| `channel_sequence` | SMS → email 48 h later, call → SMS follow-up |
+
+**Experiment lifecycle:**
+```
+running  ──→  measuring (7 days after launch)  ──→  complete
+                                                      └─ is_winner, learnings, next_hypothesis
+```
+
+**Growth endpoints:**
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| `POST` | `/api/growth/run-cycle` | Design + launch new experiment |
+| `POST` | `/api/growth/measure` | Score due experiments |
+| `POST` | `/api/growth/baseline/update` | Recalculate baseline conversion rate |
+| `GET` | `/api/growth/experiments` | List all experiments with results |
+| `GET` | `/api/growth/insights` | Claude-synthesised learnings across all experiments |
+
+---
+
 ## Intelligence Cycle (5-phase, hourly)
 
 A complementary rule-based system runs hourly alongside the agent pipeline:
@@ -159,6 +232,8 @@ Workflows follow the `[ExternalApp — FlowType] Name` taxonomy. All credential 
 | **Claude** | Hourly Intelligence Cycle | Hourly | Full 5-phase: INTAKE → EVIDENCE → INFERENCE → DECISION → EXECUTION |
 | **Claude** | Lifecycle Cycle Runner | Hourly | Runs `run_lifecycle_cycle()` SP — SQL rule-based stage transitions |
 | **Claude** | Lapsed Customer Daily Cycle | Daily (random offset) | Persistent re-engagement for lapsed customers |
+| **Claude** | Weekly Menu Sync | Every Monday 6 AM | Playwright scraper → OTP via Telnyx → extract menu → `/api/menu/sync` |
+| **Claude** | Growth Agent Cycle | Every Monday 7:30 AM | Measure experiments, design+launch new experiment, email report |
 | **System** | Action Queue Executor | Every 30 min | Routes `action_queue` rows to: Telnyx (SMS), Instantly (leads/sequences), Airtable (tasks/escalations), Google Drive (CSV upload), Gmail-SMTP (email reports) |
 | **System** | Chatbot Docs Reindex | Every Monday 2 AM | Housekeeping — refreshes chatbot document index |
 
@@ -191,6 +266,14 @@ Workflows follow the `[ExternalApp — FlowType] Name` taxonomy. All credential 
 | `decision_recommendations` | Layer 2 outputs — stage, channel, offer, escalation per run |
 | `orchestrator_log` | Layer 3 chosen action, full reasoning text, guardrails applied |
 | `action_queue` | Approved actions (pending -> executing -> done / failed) awaiting n8n |
+
+### Growth Experiment Tables (migration 055)
+
+| Table | Purpose |
+|-------|---------|
+| `experiments` | One row per experiment: hypothesis, type, channel, cohort size, results |
+| `experiment_contacts` | Which contacts are in which experiment + their order outcome |
+| `growth_baseline` | Historical 7-day baseline conversion rates for comparison |
 
 ### Configuration Tables
 
@@ -231,8 +314,10 @@ All routes served by the FastAPI app on Render.
 |--------|--------|--------------|
 | `agents.py` | `/api/agents` | `POST /cycle/run`, `/cycle/run-for-contact`, `/cycle/run-all`, `GET /action-queue/pending`, `POST /action-queue/{id}/done`, `POST /goals`, `POST /report/activity`, `POST /report/outcome` |
 | `intelligence.py` | `/api/intelligence` | `POST /run-cycle`, `GET /pending-actions`, `POST /ingest-instantly-events` |
+| `agent.py` | `/api/agent` | `POST /analyze-contacts`, `POST /analyze-single/{id}` — now includes `current_menu` + `new_to_customer_this_week` in contact profile |
+| `menu_sync.py` | `/api/menu` | `POST /sync`, `GET /current`, `POST /scrape-trigger`, `GET /history` |
+| `growth_agent.py` | `/api/growth` | `POST /run-cycle`, `POST /measure`, `POST /baseline/update`, `GET /experiments`, `GET /insights` |
 | `daily_orders.py` | `/api/daily-orders` | `POST /process`, `GET /summary/{date}` |
-| `agent.py` | `/api/agent` | `POST /analyze-contacts`, `POST /analyze-single/{id}` |
 | `query.py` | `/api/query` | `POST /` (10 Tier-1 SQL + 1 Tier-2 Claude categories), `GET /categories` |
 | `lifecycle.py` | `/api/lifecycle` | `POST /run` — SQL rule engine |
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |

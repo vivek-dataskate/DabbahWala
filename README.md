@@ -8,8 +8,8 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 |-------|-----------|
 | **Backend** | FastAPI (Python 3.11) on Render |
 | **Database** | PostgreSQL 16, `dabbahwala` schema, pgvector for semantic search |
-| **AI** | Claude Sonnet 4.5 — 4-layer agent pipeline (inference, decision, orchestrator, reporting) |
-| **Automation** | n8n (23 workflows, all active) on `digitalworker.dataskate.io` |
+| **AI** | Claude Sonnet 4.5 — 4-layer agent pipeline (inference, decision, orchestrator, reporting) + menu suggestion agent + growth hacker agent |
+| **Automation** | n8n (25 workflows, all active) on `digitalworker.dataskate.io` |
 | **SMS/Voice** | Telnyx — outbound SMS, inbound message/call ingestion, OTP reading, field agent logging |
 | **Email** | Instantly — 5 lifecycle-mapped campaigns |
 | **CRM** | Airtable — field sales tasks, playbook rules, outcome tracking |
@@ -86,8 +86,31 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 ### Smart Agent (`/api/agent`)
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| POST | `/analyze-contacts` | Claude-powered batch opportunity detection |
+| POST | `/analyze-contacts` | Claude-powered batch opportunity detection (menu-aware) |
 | POST | `/analyze-single/{id}` | Single-contact deep analysis |
+
+Each contact profile now includes `current_menu` (this week's menu) and `new_to_customer_this_week` (items the customer has never ordered). Claude uses these to craft hyper-personalised, menu-specific messages.
+
+### Weekly Menu Sync (`/api/menu`)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/sync` | Accept scraped menu payload and store in `weekly_menu` table |
+| GET | `/current` | Return this week's active menu (used by Claude agent) |
+| POST | `/scrape-trigger` | Launch Playwright scraper (OTP via Telnyx) as subprocess |
+| GET | `/history` | Audit log of past syncs |
+
+The scraper (`scripts/scrape_menu.py`) runs every Monday at 6 AM, navigates to the subscription builder, enters the Telnyx business number, reads the OTP from `telnyx_messages`, and extracts menu items from the rendered page.
+
+### Growth Hacker Agent (`/api/growth`)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/run-cycle` | Claude designs + launches a new marketing experiment |
+| POST | `/measure` | Score experiments whose 7-day window has elapsed |
+| POST | `/baseline/update` | Recalculate the baseline 7-day conversion rate |
+| GET | `/experiments` | List all experiments with win/loss results |
+| GET | `/insights` | Claude-synthesised learnings across all completed experiments |
+
+Experiments run every Monday. Claude invents novel hypotheses across four types: **timing** (unusual send windows), **offer** (free add-ons, credits), **message_angle** (scarcity, nostalgia, social proof), and **channel_sequence** (SMS → email follow-up). Results are measured after 7 days, learnings feed future hypotheses.
 
 ### Marketing Query (`/api/query`)
 | Method | Endpoint | Purpose |

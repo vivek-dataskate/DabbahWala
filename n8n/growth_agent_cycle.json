@@ -1,0 +1,198 @@
+{
+  "name": "[Claude — Inference] Growth Agent Cycle",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "weeksInterval": 1,
+              "triggerAtDay": [1],
+              "triggerAtHour": 7,
+              "triggerAtMinute": 30
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Monday 7:30 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [100, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/growth/baseline/update",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "update-baseline",
+      "name": "Refresh Baseline Conv Rate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [320, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/growth/measure",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "measure-experiments",
+      "name": "Measure Previous Experiments",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [540, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/growth/run-cycle",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "run-growth-cycle",
+      "name": "Design + Launch New Experiment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [760, 300]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dabbahwala-latest.onrender.com/api/growth/insights",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "get-insights",
+      "name": "Get Growth Insights",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [980, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the weekly growth report email body\nconst newExp = $('Design + Launch New Experiment').first().json;\nconst measured = $('Measure Previous Experiments').first().json;\nconst insights = $('Get Growth Insights').first().json;\nconst baseline = $('Refresh Baseline Conv Rate').first().json;\n\nconst winners = (measured.results || []).filter(r => r.is_winner);\nconst losers = (measured.results || []).filter(r => !r.is_winner);\n\nconst lines = [\n  '=== GROWTH AGENT WEEKLY REPORT ===',\n  '',\n  `Baseline 7-day conversion rate: ${((baseline.baseline_conv_rate || 0) * 100).toFixed(1)}%`,\n  '',\n  '--- EXPERIMENTS MEASURED THIS WEEK ---',\n  `Total measured: ${measured.measured || 0}`,\n  `Winners: ${winners.length}`,\n  `Losses: ${losers.length}`,\n  '',\n];\n\nfor (const r of (measured.results || [])) {\n  lines.push(\n    `• [${r.is_winner ? '✅ WIN' : '❌ LOSS'}] ${r.name}`,\n    `  Conv: ${((r.conversion_rate || 0) * 100).toFixed(1)}%  |  Orders: ${r.orders_won}/${r.cohort_size}`,\n    `  Learning: ${r.learnings || 'N/A'}`,\n    ''\n  );\n}\n\nlines.push('--- NEW EXPERIMENT LAUNCHED ---');\nif (newExp.status === 'launched') {\n  lines.push(\n    `Name: ${newExp.name}`,\n    `Type: ${newExp.experiment_type}  |  Channel: ${newExp.channel}  |  Cohort: ${newExp.cohort_size}`,\n    `Hypothesis: ${newExp.hypothesis}`,\n    `Measure by: ${newExp.measure_at}`,\n    ''\n  );\n} else {\n  lines.push(`Status: ${newExp.status || 'unknown'} — ${newExp.reason || ''}`, '');\n}\n\nlines.push('--- DISTILLED INSIGHTS ---');\nlines.push(insights.insights_summary || 'Not enough experiments completed yet.');\n\nreturn [{ json: { body: lines.join('\\n'), subject: `Growth Agent — Week of ${new Date().toISOString().slice(0, 10)}` } }];"
+      },
+      "id": "build-report",
+      "name": "Build Weekly Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "core@dabbahwala.com",
+        "toEmail": "={{ $env.REPORT_EMAIL_TO || 'core@dabbahwala.com' }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "email-report",
+      "name": "Email Growth Report",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1420, 300],
+      "credentials": {
+        "smtp": {
+          "id": "Sk6XzPNPnJTXHEbr",
+          "name": "Gmail-SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every Monday 7:30 AM": {
+      "main": [
+        [
+          {
+            "node": "Refresh Baseline Conv Rate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Refresh Baseline Conv Rate": {
+      "main": [
+        [
+          {
+            "node": "Measure Previous Experiments",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Measure Previous Experiments": {
+      "main": [
+        [
+          {
+            "node": "Design + Launch New Experiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Design + Launch New Experiment": {
+      "main": [
+        [
+          {
+            "node": "Get Growth Insights",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Growth Insights": {
+      "main": [
+        [
+          {
+            "node": "Build Weekly Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Weekly Report": {
+      "main": [
+        [
+          {
+            "node": "Email Growth Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Claude",
+      "id": "tag-claude"
+    },
+    {
+      "name": "Inference",
+      "id": "tag-inference"
+    }
+  ],
+  "pinData": {}
+}
