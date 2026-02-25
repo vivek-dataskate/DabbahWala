@@ -179,9 +179,8 @@ def _telnyx_headers() -> dict:
 
 
 def _instantly_headers() -> dict:
-    # Instantly v2 uses Bearer auth
     return {
-        "Authorization": f"Bearer {_env('INSTANTLY_API_KEY')}",
+        "X-API-Key": _env("INSTANTLY_API_KEY"),
         "Content-Type": "application/json",
     }
 
