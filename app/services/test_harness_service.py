@@ -180,8 +180,10 @@ def _telnyx_headers() -> dict:
 
 
 def _instantly_headers() -> dict:
+    key = _env("INSTANTLY_API_KEY")
     return {
-        "X-API-Key": _env("INSTANTLY_API_KEY"),
+        "X-API-Key": key,
+        "Authorization": f"Bearer {key}",
         "Content-Type": "application/json",
     }
 
@@ -1249,6 +1251,7 @@ def _cascade_delete(cur, contact_id: int) -> None:
         "action_queue",
         "orchestrator_log",
         "decision_recommendations",
+        "decision_log",
         "inference_results",
         "customer_goals",
         "delivery_status",
