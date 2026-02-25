@@ -202,7 +202,7 @@
         "queryParameters": {
           "parameters": [
             {
-              "name": "campaign_id",
+              "name": "campaign",
               "value": "={{ $json.instantly_from_campaign_id }}"
             },
             {
@@ -254,7 +254,7 @@
         "bodyParameters": {
           "parameters": [
             {
-              "name": "campaign_id",
+              "name": "campaign",
               "value": "={{ $json.instantly_to_campaign_id }}"
             },
             {
