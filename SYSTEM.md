@@ -317,8 +317,8 @@ The Orchestrator is the final decision-maker. It reads everything and outputs **
 
 | Delivery event | Forced action |
 |---------------|--------------|
-| `delivered` | Warm thank-you SMS with reorder nudge (skip if already contacted in last 24 h) |
-| `delivery_failed` / `delivery_returned` | `escalate_airtable` with urgency=high — relationship recovery before any selling |
+| `delivered` | Agent cycle fires after a **4-hour delay** (threading.Timer in webhooks.py) — gives the customer time to eat and leave feedback before any outreach decision is made |
+| `delivery_failed` / `delivery_returned` | `escalate_airtable` with urgency=high — fires immediately, relationship recovery before any selling |
 | `out_for_delivery` / `driver_assigned` | `none` — never interrupt an order in progress |
 
 **General guardrails:**
@@ -332,6 +332,11 @@ The Orchestrator is the final decision-maker. It reads everything and outputs **
 
 Output: one `chosen_action` (`send_sms` / `move_campaign` / `escalate_airtable` / `none`) inserted into `action_queue`.
 Stored in: `orchestrator_log`
+
+**Batch runner post-processing** (after all contacts in `run-all-contacts` are cycled):
+- `move_campaign` contacts → also immediately pushed to Instantly via API
+- `escalate_airtable` contacts → also immediately creates Airtable field-sales task
+- Any `move_campaign` actions taken → one `send_email_report` action queued to `support@dabbahwala.com` at end of batch (digest, not per-contact)
 
 ### Layer 4 — Report Agents (2 Claude calls, daily, not per-contact)
 
