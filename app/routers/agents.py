@@ -5,12 +5,13 @@ Plus daily Activity and Outcome reporting agents.
 """
 
 import csv
+import hashlib
 import io
 import json
 import logging
 import os
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 import anthropic
@@ -27,6 +28,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MODEL = "claude-sonnet-4-5-20250929"
+MODEL_HAIKU = "claude-haiku-4-5-20251001"
+
+# Module-level playbook cache — avoids one DB round-trip per contact per batch.
+# Hash comparison means we only rebuild when Airtable playbook actually changes.
+_playbook_cache: dict = {"hash": "", "content": ""}
+
+# Category-to-agent mapping for playbook RAG (simple category filtering).
+# Each agent only receives rule categories it can act on, reducing prompt tokens
+# without needing a vector store. Exclusion + priority rules go to all agents.
+_PLAYBOOK_CATEGORIES: dict = {
+    "inference": ["exclusion", "priority", "inference"],
+    "decision":  ["exclusion", "priority", "decision", "messaging"],
+    "menu":      ["exclusion", "messaging"],
+    "orchestrator": ["exclusion", "priority"],
+}
 
 # ---------------------------------------------------------------------------
 # Anthropic client
@@ -41,28 +57,53 @@ def _claude() -> anthropic.Anthropic:
     return anthropic.Anthropic(api_key=key)
 
 
-def _tool_call(client: anthropic.Anthropic, system: str, user: str, tool: dict) -> dict:
-    """Call Claude with a single forced tool and return its input dict."""
+def _tool_call(
+    client: anthropic.Anthropic,
+    system: str,
+    user: str,
+    tool: dict,
+    *,
+    model: Optional[str] = None,
+) -> dict:
+    """Call Claude with a single forced tool and return its input dict.
+
+    Prompt caching: the system prompt is always sent as a cacheable content block.
+    Static content (role instructions + playbook) is identical across all contacts in
+    a batch, so contacts 2-N get a 90% token discount on those tokens.
+
+    model: pass MODEL_HAIKU for simple classification agents (sentiment, engagement,
+           stage, channel, menu). Defaults to MODEL (Sonnet) for complex reasoning.
+    """
+    if model is None:
+        model = MODEL
     tool_name = tool.get("name", "unknown")
-    logger.debug("Calling Claude tool=%s model=%s", tool_name, MODEL)
+    logger.debug("Calling Claude tool=%s model=%s", tool_name, model)
     t0 = time.time()
+    # Wrap system as a cacheable content block — identical prefix across all contacts
+    # means cache hits from contact #2 onward (90% discount on those tokens).
+    system_blocks = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
     try:
         response = client.messages.create(
-            model=MODEL,
+            model=model,
             max_tokens=1024,
-            system=system,
+            system=system_blocks,
             tools=[tool],
             tool_choice={"type": "tool", "name": tool_name},
             messages=[{"role": "user", "content": user}],
         )
         elapsed = time.time() - t0
+        cache_read = getattr(response.usage, "cache_read_input_tokens", 0) or 0
+        cache_write = getattr(response.usage, "cache_creation_input_tokens", 0) or 0
         logger.debug(
-            "Claude tool=%s completed in %.2fs (stop_reason=%s input_tokens=%s output_tokens=%s)",
+            "Claude tool=%s model=%s completed in %.2fs (stop=%s in=%s out=%s cache_read=%s cache_write=%s)",
             tool_name,
+            model,
             elapsed,
             response.stop_reason,
             response.usage.input_tokens if response.usage else "?",
             response.usage.output_tokens if response.usage else "?",
+            cache_read,
+            cache_write,
         )
         for block in response.content:
             if block.type == "tool_use":
@@ -223,7 +264,12 @@ def _fetch_playbook_rules() -> str:
     This makes agents DYNAMIC — users can add rules in Airtable that change
     how every agent reasons, without redeploying code.
     Returns empty string if no rules are configured.
+
+    Hash-based cache: compares SHA-256 of formatted content against the stored hash.
+    DB is only re-queried when the playbook actually changes, avoiding one round-trip
+    per contact in a batch. Prompt caching in _tool_call further reduces token cost.
     """
+    global _playbook_cache
     try:
         with get_cursor(commit=False) as cur:
             cur.execute(
@@ -269,10 +315,62 @@ def _fetch_playbook_rules() -> str:
                     lines.append(
                         f"- **{r['rule_name']}** (priority {r['priority']}): {r['instruction']}"
                     )
-        return "\n".join(lines)
+        formatted = "\n".join(lines)
+        # Hash check — only update cache when content actually changes
+        content_hash = hashlib.sha256(formatted.encode()).hexdigest()
+        if content_hash == _playbook_cache["hash"]:
+            logger.debug("Playbook cache hit (hash=%.8s) — skipping DB rebuild", content_hash)
+            return _playbook_cache["content"]
+        logger.info("Playbook updated (hash=%.8s) — refreshing cache", content_hash)
+        _playbook_cache["hash"] = content_hash
+        _playbook_cache["content"] = formatted
+        return formatted
     except Exception as e:
         logger.warning("Could not fetch playbook rules: %s — agents continuing without them", e)
         return ""
+
+
+def _filter_playbook(playbook: str, agent_layer: str) -> str:
+    """Return only the playbook sections relevant to this agent layer.
+
+    Reduces per-agent prompt tokens without needing a vector store.
+    agent_layer: 'inference' | 'decision' | 'menu' | 'orchestrator'
+
+    If the playbook is empty or the layer has no matching sections, returns
+    the full playbook so agents never lose context silently.
+    """
+    if not playbook:
+        return ""
+    allowed_cats = _PLAYBOOK_CATEGORIES.get(agent_layer, [])
+    if not allowed_cats:
+        return playbook
+
+    label_map = {
+        "EXCLUSION RULES": "exclusion",
+        "PRIORITY RULES":  "priority",
+        "INFERENCE RULES": "inference",
+        "DECISION RULES":  "decision",
+        "MESSAGING RULES": "messaging",
+        "GENERAL RULES":   "general",
+    }
+    lines = playbook.split("\n")
+    filtered: list = []
+    in_allowed = False
+    for line in lines:
+        # Section header detection
+        if line.startswith("### "):
+            in_allowed = any(
+                cat in label_map and label_map[cat] in allowed_cats
+                for cat in [line[4:].split(" (")[0]]
+                if cat in label_map
+            )
+        if in_allowed or not line.startswith("### "):
+            # Always include preamble lines (before first section header)
+            if line.startswith("## Your Active Playbook") or line.startswith("These rules"):
+                filtered.append(line)
+            elif in_allowed:
+                filtered.append(line)
+    return "\n".join(filtered) if filtered else playbook
 
 
 def _fetch_order_preferences(contact_id: int) -> dict:
@@ -325,6 +423,127 @@ def _fetch_order_preferences(contact_id: int) -> dict:
         "preferred_order_days": preferred_days,
         "order_type_breakdown": order_types,
     }
+
+
+def _current_week_start() -> date:
+    today = date.today()
+    return today - timedelta(days=today.weekday())  # Monday of current week
+
+
+def _fetch_current_menu() -> list:
+    """Fetch this week's menu items for agent personalisation.
+
+    Falls back to the active menu_items catalogue if no weekly snapshot exists.
+    """
+    try:
+        with get_cursor(commit=False) as cur:
+            week_start = _current_week_start()
+            cur.execute(
+                """
+                SELECT mi.item_name, mi.category, mi.is_veg, wm.price, wm.is_featured
+                FROM weekly_menu wm
+                JOIN menu_items mi ON mi.id = wm.menu_item_id
+                WHERE wm.week_start = %s
+                ORDER BY wm.is_featured DESC, wm.display_order NULLS LAST
+                """,
+                (week_start,),
+            )
+            rows = cur.fetchall()
+            if not rows:
+                cur.execute(
+                    "SELECT item_name, category, is_veg FROM menu_items WHERE is_active = true LIMIT 20"
+                )
+                rows = cur.fetchall()
+        items = [dict(r) for r in rows]
+        logger.debug("Fetched %d menu items for week_start=%s", len(items), week_start)
+        return items
+    except Exception as e:
+        logger.warning("Could not fetch current menu: %s — menu agent will skip", e)
+        return []
+
+
+def _run_menu_agent(
+    client: anthropic.Anthropic,
+    contact: dict,
+    order_prefs: dict,
+    menu_items: list,
+    playbook: str,
+) -> dict:
+    """Layer 1 — Menu Personalisation Agent (Haiku).
+
+    Matches customer order history to this week's menu to identify:
+    - top_picks: items they've ordered before that are available this week
+    - bridge_item: one item they've never tried but would likely enjoy
+    - avoid: items to skip (dietary mismatch or known dislikes)
+
+    Output feeds directly into the Offer agent's suggested_copy generation,
+    replacing the raw 12-item list with 2-3 targeted recommendations.
+    """
+    if not menu_items:
+        return {"top_picks": [], "avoid": [], "bridge_item": None, "bridge_reason": ""}
+
+    menu_formatted = "\n".join(
+        f"- {i.get('item_name')} ({i.get('category', '')}, "
+        f"{'veg' if i.get('is_veg') else 'non-veg'}"
+        f"{', featured' if i.get('is_featured') else ''})"
+        for i in menu_items
+    )
+    top_items = [p["item"] for p in (order_prefs.get("top_items") or [])]
+
+    system = (
+        "You are the Menu Personalisation Agent for DabbahWala food delivery. "
+        "Match this customer's order history to this week's menu. "
+        "Identify items they already love that are available, one new item they should try, "
+        "and items to avoid (dietary mismatch or repeated non-ordering). "
+        "Keep it tight — max 3 top_picks, 1 bridge_item."
+        + playbook
+    )
+    user = (
+        f"Customer: {contact.get('first_name', '')} | "
+        f"Segment: {contact.get('lifecycle_segment', 'unknown')} | "
+        f"Total orders: {contact.get('total_orders', 0)}\n\n"
+        f"Customer's past top items (by quantity ordered): {', '.join(top_items) or 'none recorded'}\n"
+        f"Preferred order days: {', '.join(order_prefs.get('preferred_order_days') or []) or 'unknown'}\n\n"
+        f"This week's menu:\n{menu_formatted}"
+    )
+    tool = {
+        "name": "submit_menu_picks",
+        "description": "Submit personalised menu picks for this customer this week",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "top_picks": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Menu items matching customer's known favourites (max 3)",
+                },
+                "avoid": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Items to avoid mentioning — dietary mismatch or never ordered despite availability",
+                },
+                "bridge_item": {
+                    "type": "string",
+                    "description": "One item they have never tried but would likely enjoy based on their pattern. Null if no good match.",
+                },
+                "bridge_reason": {
+                    "type": "string",
+                    "description": "One sentence: why this bridge item fits their taste profile",
+                },
+            },
+            "required": ["top_picks", "avoid", "bridge_item", "bridge_reason"],
+        },
+    }
+    result = _tool_call(client, system, user, tool, model=MODEL_HAIKU)
+    if not result:
+        return {"top_picks": top_items[:3], "avoid": [], "bridge_item": None, "bridge_reason": ""}
+    logger.info(
+        "Menu picks contact_id=%s: top=%s bridge=%s",
+        contact.get("id"),
+        result.get("top_picks"),
+        result.get("bridge_item"),
+    )
+    return result
 
 
 def _fetch_latest_inference(contact_id: int) -> Optional[dict]:
@@ -477,7 +696,7 @@ def _run_sentiment_agent(
             "required": ["sentiment", "confidence", "summary"],
         },
     }
-    result = _tool_call(client, system, user, tool)
+    result = _tool_call(client, system, user, tool, model=MODEL_HAIKU)
     if not result:
         logger.warning(
             "Sentiment agent fallback for contact_id=%s — returning neutral/0.4", contact.get("id")
@@ -500,6 +719,7 @@ def _run_intent_agent(
     outcomes: list,
     playbook: str,
     order_prefs: Optional[dict] = None,
+    menu_picks: Optional[dict] = None,
 ) -> dict:
     """Classify purchase intent.
 
@@ -535,7 +755,6 @@ def _run_intent_agent(
         "  - 'delivery_failed' = customer had a bad experience; weight this heavily against purchase readiness\n"
         "  - 'out_for_delivery' / 'driver_assigned' = order in progress; do NOT classify as ready_to_order yet\n"
         "  - No delivery events + long gap since last order = likely lapsed; use email engagement to calibrate."
-        + outcome_summary
         + playbook
     )
     prefs_section = ""
@@ -553,13 +772,24 @@ def _run_intent_agent(
             "Use this to personalise intent assessment — a customer who always orders "
             "on Thursdays and hasn't ordered this Thursday yet is likely in buying mode."
         )
+    menu_section = ""
+    if menu_picks and (menu_picks.get("top_picks") or menu_picks.get("bridge_item")):
+        menu_section = (
+            f"\n\nThis week's personalised menu picks: "
+            f"top_picks={menu_picks.get('top_picks')}, "
+            f"bridge_item={menu_picks.get('bridge_item')} — "
+            f"{menu_picks.get('bridge_reason', '')}. "
+            "If top items are available this week, weight toward ready_to_order."
+        )
     user = (
         f"Customer: {contact.get('first_name', '')} {contact.get('last_name', '')} | "
         f"Lifecycle: {contact.get('lifecycle_segment', 'unknown')} | "
         f"Orders: {contact.get('total_orders', 0)} | "
         f"Opens (7d/30d): {contact.get('opens_7d', 0)}/{contact.get('opens_30d', 0)} | "
         f"Clicks (7d/30d): {contact.get('clicks_7d', 0)}/{contact.get('clicks_30d', 0)}"
-        f"{prefs_section}\n\n"
+        f"{prefs_section}"
+        f"{outcome_summary}"
+        f"{menu_section}\n\n"
         + (f"Ground team sales note (treat as high-confidence): {contact['sales_notes']}\n\n" if contact.get("sales_notes") else "")
         + f"Recent events ({len(events)} total, showing first 25):\n"
         f"{json.dumps(events[:25], indent=2, default=str)}\n\n"
@@ -660,7 +890,7 @@ def _run_engagement_agent(
             "required": ["engagement_score", "trend", "last_touch_hours_ago"],
         },
     }
-    result = _tool_call(client, system, user, tool)
+    result = _tool_call(client, system, user, tool, model=MODEL_HAIKU)
     if not result:
         logger.warning(
             "Engagement agent fallback for contact_id=%s (last_event=%dh ago)",
@@ -751,7 +981,7 @@ def _run_stage_agent(
             "required": ["recommended_stage", "confidence", "reason"],
         },
     }
-    result = _tool_call(client, system, user, tool)
+    result = _tool_call(client, system, user, tool, model=MODEL_HAIKU)
     if not result:
         logger.warning("Stage agent fallback for contact_id=%s", contact.get("id"))
         return {
@@ -826,7 +1056,7 @@ def _run_channel_agent(
             "required": ["recommended_channel", "channel_timing", "reason"],
         },
     }
-    result = _tool_call(client, system, user, tool)
+    result = _tool_call(client, system, user, tool, model=MODEL_HAIKU)
     if not result:
         logger.warning("Channel agent fallback for contact_id=%s", contact.get("id"))
         return {"recommended_channel": "none", "channel_timing": "none", "reason": "Insufficient data"}
@@ -846,6 +1076,7 @@ def _run_offer_agent(
     outcomes: list,
     playbook: str,
     recent_actions: Optional[list] = None,
+    menu_picks: Optional[dict] = None,
 ) -> dict:
     """Recommend offer type and generate ready-to-send copy.
 
@@ -908,14 +1139,28 @@ def _run_offer_agent(
         "Also draft a short suggested SMS/email copy (max 160 chars for SMS suitability). "
         "Base your choice on intent, sentiment, and what has worked historically. "
         "Never generate copy that sounds like a previous attempt — vary the angle every time."
-        + progression_note
-        + outcome_insight
         + playbook
     )
+    # Build menu copy hint from personalised picks
+    menu_copy_hint = ""
+    if menu_picks:
+        picks = menu_picks.get("top_picks") or []
+        bridge = menu_picks.get("bridge_item")
+        bridge_reason = menu_picks.get("bridge_reason", "")
+        if picks:
+            menu_copy_hint += f"\n\nPersonalised menu picks for copy: customer favourites available this week: {', '.join(picks)}."
+        if bridge:
+            menu_copy_hint += f" Bridge item to introduce: {bridge} — {bridge_reason}."
+        if menu_copy_hint:
+            menu_copy_hint += " Reference these specifically in your copy instead of generic menu language."
+
     user = (
         f"Customer: {contact.get('first_name', '')} | Orders: {contact.get('total_orders', 0)} | "
         f"Sentiment: {inference.get('sentiment', 'neutral')} | Intent: {inference.get('intent', 'unknown')}\n"
-        f"Engagement score: {inference.get('engagement_score', 0):.2f} | Total outreach attempts: {attempt_count}\n\n"
+        f"Engagement score: {inference.get('engagement_score', 0):.2f} | Total outreach attempts: {attempt_count}\n"
+        f"{progression_note}"
+        f"{outcome_insight}"
+        f"{menu_copy_hint}\n\n"
         f"Previous outcomes ({len(outcomes)} records):\n{json.dumps(outcomes, indent=2, default=str)}"
     )
     tool = {
@@ -1003,7 +1248,6 @@ def _run_escalation_agent(
         "  - Your escalation notes should be actionable: tell the field team EXACTLY what to try, "
         "not just 'contact this customer'.\n"
         "Urgency: high (act today), medium (act this week), none (no escalation)."
-        + escalation_context
         + playbook
     )
     user = (
@@ -1015,6 +1259,7 @@ def _run_escalation_agent(
         f"Inference: {json.dumps(inference, indent=2, default=str)}\n"
         f"Active goal: {json.dumps(goal, indent=2, default=str)}\n"
         f"Failed attempts (from feedback): {failed_attempts} | Total automated touches: {total_automated}"
+        f"{escalation_context}"
     )
     tool = {
         "name": "submit_escalation",
@@ -1281,7 +1526,11 @@ def _run_full_cycle(contact_id: int) -> dict:
     goal = _fetch_active_goal(contact_id)
     recent_actions = _fetch_recent_actions(contact_id, hours=168)  # 7 days — full channel history
     outcomes = _fetch_recent_outcomes(contact_id, limit=10)   # feedback loop
-    playbook = _fetch_playbook_rules()                         # dynamic config
+    playbook = _fetch_playbook_rules()                         # dynamic config (hash-cached)
+    playbook_inference = _filter_playbook(playbook, "inference")
+    playbook_decision  = _filter_playbook(playbook, "decision")
+    playbook_menu      = _filter_playbook(playbook, "menu")
+    playbook_orch      = _filter_playbook(playbook, "orchestrator")
     goal_id = goal["id"] if goal else None
 
     logger.info(
@@ -1310,12 +1559,14 @@ def _run_full_cycle(contact_id: int) -> dict:
             latest_delivery.get("occurred_at"),
         )
 
-    # Layer 1 — inference (3 agents, outcome feedback + playbook injected)
+    # Layer 1 — inference (menu + 3 agents, outcome feedback + playbook injected)
     logger.info("--- Layer 1: Inference ---")
     order_prefs = _fetch_order_preferences(contact_id)
-    sentiment = _run_sentiment_agent(client, contact, comms, outcomes, playbook)
-    intent = _run_intent_agent(client, contact, events, comms, outcomes, playbook, order_prefs)
-    engagement = _run_engagement_agent(client, contact, events, playbook)
+    menu_items = _fetch_current_menu()
+    menu_picks = _run_menu_agent(client, contact, order_prefs, menu_items, playbook_menu)
+    sentiment = _run_sentiment_agent(client, contact, comms, outcomes, playbook_inference)
+    intent = _run_intent_agent(client, contact, events, comms, outcomes, playbook_inference, order_prefs, menu_picks)
+    engagement = _run_engagement_agent(client, contact, events, playbook_inference)
     inference_id = _store_inference(contact_id, goal_id, sentiment, intent, engagement)
 
     inference_summary = {
@@ -1327,10 +1578,10 @@ def _run_full_cycle(contact_id: int) -> dict:
 
     # Layer 2 — decisions (4 agents, outcome feedback + playbook injected)
     logger.info("--- Layer 2: Decision ---")
-    stage = _run_stage_agent(client, contact, inference_summary, playbook)
-    channel = _run_channel_agent(client, contact, inference_summary, recent_actions, playbook)
-    offer = _run_offer_agent(client, contact, inference_summary, outcomes, playbook, recent_actions)
-    escalation = _run_escalation_agent(client, contact, inference_summary, goal, outcomes, playbook)
+    stage = _run_stage_agent(client, contact, inference_summary, playbook_decision)
+    channel = _run_channel_agent(client, contact, inference_summary, recent_actions, playbook_decision)
+    offer = _run_offer_agent(client, contact, inference_summary, outcomes, playbook_decision, recent_actions, menu_picks)
+    escalation = _run_escalation_agent(client, contact, inference_summary, goal, outcomes, playbook_decision)
     decision_id = _store_decision(contact_id, inference_id, stage, channel, offer, escalation)
 
     decision_summary = {
@@ -1344,7 +1595,7 @@ def _run_full_cycle(contact_id: int) -> dict:
     # Layer 3 — orchestrator (playbook injected; delivery context + goal guide final choice)
     logger.info("--- Layer 3: Orchestrator ---")
     orch_result = _run_orchestrator(
-        client, contact, decision_summary, goal, recent_actions, playbook, latest_delivery
+        client, contact, decision_summary, goal, recent_actions, playbook_orch, latest_delivery
     )
     orch_log_id = _store_orchestration(contact_id, decision_id, goal_id, orch_result)
 
@@ -1916,6 +2167,76 @@ def run_agent_cycle_lapsed():
 
     logger.info(
         "run-all-lapsed complete: %d processed %d errors in %.0fs",
+        len(results), len(errors), time.time() - t_batch,
+    )
+    return {"processed": len(results), "errors": errors, "results": results}
+
+
+@router.post("/cycle/run-daily-sweep")
+def run_agent_daily_sweep():
+    """Daily dormant-contact sweep — targets contacts not run in the last 3 days.
+
+    Complements the event-driven per-contact triggers (telnyx_inbound, order upload).
+    Runs at 9 AM daily via agent_orchestration_cron.json.
+
+    Eligibility:
+      - Not churned / opted out
+      - Has email or phone (reachable)
+      - No agent cycle in the last 72 hours (avoids re-running recently triggered contacts)
+      - Any one of: opened email in last 30d, any event in last 30d, ordered in last 60d
+    Capped at 200 contacts per run to bound cost (~$4.20 at mixed Haiku/Sonnet rates).
+    """
+    logger.info("POST /cycle/run-daily-sweep — querying dormant-eligible contacts")
+    with get_cursor(commit=False) as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT c.id FROM contacts c
+            LEFT JOIN engagement_rollups er ON er.contact_id = c.id
+            LEFT JOIN events ev
+                   ON ev.contact_id = c.id
+                  AND ev.occurred_at > now() - interval '30 days'
+            LEFT JOIN orders o
+                   ON o.contact_id = c.id
+                  AND o.order_date > CURRENT_DATE - 60
+            WHERE c.lifecycle_segment NOT IN ('churned', 'optout')
+              AND (c.email IS NOT NULL OR c.phone IS NOT NULL)
+              AND (
+                  er.opens_30d > 0
+                  OR ev.id IS NOT NULL
+                  OR o.id IS NOT NULL
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM orchestrator_log ol
+                  WHERE ol.contact_id = c.id
+                    AND ol.run_at > now() - interval '72 hours'
+              )
+            LIMIT 200
+            """
+        )
+        contact_ids = [r["id"] for r in cur.fetchall()]
+
+    logger.info("run-daily-sweep: found %d contacts not run in last 72h", len(contact_ids))
+    if not contact_ids:
+        return {"processed": 0, "errors": [], "results": []}
+
+    results = []
+    errors = []
+    t_batch = time.time()
+    for i, cid in enumerate(contact_ids, 1):
+        try:
+            r = _run_full_cycle(cid)
+            results.append(r)
+            if i % 20 == 0:
+                logger.info(
+                    "run-daily-sweep progress: %d/%d processed (%d errors) elapsed=%.0fs",
+                    i, len(contact_ids), len(errors), time.time() - t_batch,
+                )
+        except Exception as e:
+            logger.error("Cycle failed for contact_id=%s in run-daily-sweep: %s", cid, e, exc_info=True)
+            errors.append({"contact_id": cid, "error": str(e)})
+
+    logger.info(
+        "run-daily-sweep complete: %d processed %d errors in %.0fs",
         len(results), len(errors), time.time() - t_batch,
     )
     return {"processed": len(results), "errors": errors, "results": results}

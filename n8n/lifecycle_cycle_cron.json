@@ -1,13 +1,15 @@
 {
-  "name": "[Claude — Decision] Lifecycle Cycle Runner",
+  "name": "[Claude \u2014 Decision] Lifecycle Cycle Runner",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
             {
-              "field": "hours",
-              "hoursInterval": 1
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 6,
+              "triggerAtMinute": 0
             }
           ]
         }
@@ -269,7 +271,7 @@
     {
       "parameters": {},
       "id": "no-campaigns",
-      "name": "No Campaigns — Done",
+      "name": "No Campaigns \u2014 Done",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -323,7 +325,7 @@
         ],
         [
           {
-            "node": "No Campaigns — Done",
+            "node": "No Campaigns \u2014 Done",
             "type": "main",
             "index": 0
           }

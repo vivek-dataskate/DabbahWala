@@ -1,13 +1,15 @@
 {
-  "name": "[Claude — Inference] Hourly Intelligence Cycle",
+  "name": "[Claude \u2014 Inference] Hourly Intelligence Cycle",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
             {
-              "field": "hours",
-              "hoursInterval": 1
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 7,
+              "triggerAtMinute": 0
             }
           ]
         }
@@ -294,7 +296,7 @@
     {
       "parameters": {},
       "id": "no-actions",
-      "name": "No Pending — Skip",
+      "name": "No Pending \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -305,7 +307,7 @@
     {
       "parameters": {},
       "id": "skip-other",
-      "name": "Other Actions — Skip",
+      "name": "Other Actions \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -392,7 +394,7 @@
         ],
         [
           {
-            "node": "No Pending — Skip",
+            "node": "No Pending \u2014 Skip",
             "type": "main",
             "index": 0
           }
@@ -428,7 +430,7 @@
         ],
         [
           {
-            "node": "Other Actions — Skip",
+            "node": "Other Actions \u2014 Skip",
             "type": "main",
             "index": 0
           }

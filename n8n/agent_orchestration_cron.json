@@ -1,13 +1,15 @@
 {
-  "name": "[Claude — Inference] Agent Orchestration",
+  "name": "[Claude \u2014 Inference] Agent Orchestration",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
             {
-              "field": "hours",
-              "hoursInterval": 3
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
             }
           ]
         }
@@ -24,9 +26,9 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://dabbahwala-latest.onrender.com/api/agents/cycle/run-all",
+        "url": "https://dabbahwala-latest.onrender.com/api/agents/cycle/run-daily-sweep",
         "options": {
-          "timeout": 300000
+          "timeout": 600000
         }
       },
       "id": "run-agent-cycle",

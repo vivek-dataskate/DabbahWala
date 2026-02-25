@@ -61,11 +61,11 @@ def _phase_intake(cur) -> dict:
         'calls_completed': 0, 'orders_placed': 0, 'new_events_total': 0
     }
 
-    # Count recent events (last 2 hours to catch anything since last run)
+    # Count recent events (last 24 hours — matches daily run cadence)
     cur.execute("""
         SELECT event_type, count(*) as cnt
         FROM events
-        WHERE occurred_at > now() - interval '2 hours'
+        WHERE occurred_at > now() - interval '24 hours'
         GROUP BY event_type
     """)
     for row in cur.fetchall():
@@ -86,14 +86,14 @@ def _phase_intake(cur) -> dict:
     # Count recent Telnyx messages
     cur.execute("""
         SELECT count(*) as cnt FROM telnyx_messages
-        WHERE sent_at > now() - interval '2 hours'
+        WHERE sent_at > now() - interval '24 hours'
     """)
     stats['telnyx_messages'] = cur.fetchone()['cnt']
 
     # Count recent Telnyx calls
     cur.execute("""
         SELECT count(*) as cnt FROM telnyx_calls
-        WHERE started_at > now() - interval '2 hours'
+        WHERE started_at > now() - interval '24 hours'
     """)
     stats['telnyx_calls'] = cur.fetchone()['cnt']
 
