@@ -1211,7 +1211,7 @@ Rules:
     ai_client = anthropic.AsyncAnthropic(api_key=ANTHROPIC_API_KEY)
     resp = await ai_client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=1500,
+        max_tokens=2048,
         system=system_prompt,
         messages=[{"role": "user", "content": question}],
     )

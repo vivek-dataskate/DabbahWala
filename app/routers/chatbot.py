@@ -554,7 +554,7 @@ def _build_answer(question: str, client: anthropic.Anthropic) -> tuple[str, list
 
     response = client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=1500,
+        max_tokens=4096,
         system=_SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
     )
