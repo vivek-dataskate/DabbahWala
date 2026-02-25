@@ -55,8 +55,15 @@
       "parameters": {
         "method": "GET",
         "url": "=https://api.instantly.ai/api/v2/analytics/campaign/summary",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOmVwbU1CSFRWa3ZiaQ=="
+            }
+          ]
+        },
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -68,12 +75,6 @@
         },
         "options": {
           "timeout": 60000
-        }
-      },
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "FKw9At5AkLdEmHHi",
-          "name": "Instantly API Key"
         }
       },
       "id": "fetch-analytics",
