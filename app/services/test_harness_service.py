@@ -1217,6 +1217,25 @@ def _g15_competitor_agent(suite: TestSuite) -> None:
         return {"experiment_count": b.get("count", 0)}
     _run(suite, "competitor_agent_list_experiments", G, list_experiments)
 
+    def goal_hypothesis_hash_column():
+        """Verify hypothesis_hash column and unique index exist on goal_experiments."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.columns
+                WHERE table_name = 'goal_experiments' AND column_name = 'hypothesis_hash'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "goal_experiments.hypothesis_hash column missing"
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM pg_indexes
+                WHERE tablename = 'goal_experiments'
+                  AND indexname = 'goal_experiments_hypothesis_hash_key'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "goal_experiments_hypothesis_hash_key index missing"
+        return {"hypothesis_hash_column": "exists", "unique_index": "exists"}
+    _run(suite, "goal_hypothesis_hash_schema", G, goal_hypothesis_hash_column)
+
 
 # ─── GROUP 14: Data Cleanup ───────────────────────────────────────────────────
 

@@ -199,6 +199,17 @@ Tests the query engine and RAG chatbot.
 
 ---
 
+## Group 15 — Competitor & Goal Agent (`15_competitor_agent`)
+
+| Test Name | What It Checks |
+|-----------|----------------|
+| `competitor_agent_schema` | `competitor_agent_runs` table and `goal_experiments.source` column exist |
+| `competitor_agent_list_runs` | `GET /api/competitor-agent/runs` returns 200 with `runs` key |
+| `competitor_agent_list_experiments` | `GET /api/competitor-agent/experiments` returns 200 with `experiments` key |
+| `goal_hypothesis_hash_schema` | `goal_experiments.hypothesis_hash` column and unique index exist (migration 058) |
+
+---
+
 ## Group 14 — Data Cleanup (`14_cleanup`)
 
 Always runs last, even if earlier groups fail. Removes all test data.
