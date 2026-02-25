@@ -71,6 +71,7 @@ def get_active_contacts():
             WHERE c.current_campaign IS NOT NULL
               AND c.current_campaign != 'APP_TO_DIRECT'
               AND c.email IS NOT NULL
+              AND c.email NOT LIKE '%@app.placeholder.local'
               AND c.lifecycle_segment != 'optout'
             ORDER BY c.id
         """)
