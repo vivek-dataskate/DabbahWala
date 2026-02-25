@@ -179,9 +179,8 @@ def _telnyx_headers() -> dict:
 
 
 def _instantly_headers() -> dict:
-    # Instantly v2 uses Bearer auth
     return {
-        "Authorization": f"Bearer {_env('INSTANTLY_API_KEY')}",
+        "X-API-Key": _env("INSTANTLY_API_KEY"),
         "Content-Type": "application/json",
     }
 
@@ -288,7 +287,7 @@ def _g1_connectivity(suite: TestSuite) -> None:
         sc, body = _req(
             "GET",
             f"{SHIPDAY_BASE}/orders?startDate=2026-01-01&endDate=2026-01-02",
-            headers={"Authorization": f"Bearer {key}"},
+            headers={"Authorization": f"Basic {key}"},
         )
         assert sc in (200, 201, 400), f"Shipday API returned {sc}: {str(body)[:200]}"
         return {"status": sc}
@@ -522,7 +521,7 @@ def _g4_events(suite: TestSuite) -> None:
         sc, body = _local("POST", "/api/delivery/status", json_body={
             "contact_email": TEST_EMAIL,
             "order_ref": f"{TEST_ORDER_REF}-FAIL",
-            "status": "delivery_failed",
+            "status": "failed",
             "updated_by": "test_harness",
             "notes": "Test harness failure simulation",
             "metadata": {"source": "test_harness"},
@@ -630,12 +629,8 @@ def _g6_agent_pipeline(suite: TestSuite) -> None:
         with get_cursor(commit=True) as cur:
             cur.execute("""
                 INSERT INTO customer_goals
-                    (contact_id, goal_type, goal_description, status, created_at)
+                    (contact_id, goal, progress_notes, status, created_at)
                 VALUES (%s, 'convert_to_order', 'Test harness goal — trigger agent cycle', 'active', NOW())
-                ON CONFLICT (contact_id) DO UPDATE
-                  SET goal_type = EXCLUDED.goal_type,
-                      goal_description = EXCLUDED.goal_description,
-                      status = 'active'
                 RETURNING id
             """, (suite.test_contact_id,))
             row = cur.fetchone()
