@@ -65,14 +65,7 @@ https://claude.ai/code/session_01KFDkgbfakqfRJD9TCJ6oaE
 
 Extract the PR number from the response.
 
-### 4. Ask for merge permission
-
-**STOP HERE.** Show the user the PR URL and ask:
-> "PR #NNN is ready. Shall I merge to main and delete the branch?"
-
-Do NOT merge automatically. Wait for the user to say yes.
-
-### 5. Merge (only after explicit yes)
+### 4. Merge immediately
 
 ```bash
 curl -s -X PUT \
