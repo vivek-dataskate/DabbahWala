@@ -2273,6 +2273,7 @@ def run_agent_cycle_all_contacts(limit: int = 1000):
     errors = []
     campaigns_pushed = 0
     airtable_pushed = 0
+    email_outreach_log: list = []  # track email outreach for support CC notification
     t_batch = time.time()
 
     for i, cid in enumerate(contact_ids, 1):
@@ -2298,6 +2299,12 @@ def run_agent_cycle_all_contacts(limit: int = 1000):
                         if pushed:
                             campaigns_pushed += 1
                             r["instantly_pushed"] = to_campaign
+                            email_outreach_log.append({
+                                "name": f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip(),
+                                "email": email,
+                                "campaign": to_campaign,
+                                "segment": contact.get("lifecycle_segment", ""),
+                            })
                             logger.info(
                                 "Instantly push: contact_id=%s → campaign=%s", cid, to_campaign
                             )
@@ -2341,6 +2348,42 @@ def run_agent_cycle_all_contacts(limit: int = 1000):
         except Exception as e:
             logger.error("Cycle failed contact_id=%s in run-all-contacts: %s", cid, e, exc_info=True)
             errors.append({"contact_id": cid, "error": str(e)})
+
+    # Notify support@dabbahwala.com of all automated email outreach queued this batch
+    if email_outreach_log:
+        try:
+            rows = "".join(
+                f"<tr><td>{e['name']}</td><td>{e['email']}</td>"
+                f"<td>{e['campaign']}</td><td>{e['segment']}</td></tr>"
+                for e in email_outreach_log
+            )
+            html_body = (
+                f"<h2>Automated Email Outreach — {len(email_outreach_log)} contact(s) queued</h2>"
+                f"<table border='1' cellpadding='6' cellspacing='0'>"
+                f"<thead><tr><th>Name</th><th>Email</th><th>Campaign</th><th>Segment</th></tr></thead>"
+                f"<tbody>{rows}</tbody></table>"
+                f"<p style='color:#666;font-size:12px;'>Sent by automated agent cycle. "
+                f"No action required unless you want to override.</p>"
+            )
+            with get_cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO action_queue (contact_id, action_type, payload)
+                    VALUES (NULL, 'send_email_report', %s::jsonb)
+                    """,
+                    (json.dumps({
+                        "to": "support@dabbahwala.com",
+                        "subject": f"[DabbahWala] {len(email_outreach_log)} automated email(s) queued",
+                        "html_body": html_body,
+                        "csv_filename": "",
+                        "csv_content": "",
+                    }),),
+                )
+            logger.info(
+                "Queued support notification for %d email outreach actions", len(email_outreach_log)
+            )
+        except Exception as e:
+            logger.warning("Failed to queue support email notification: %s", e)
 
     elapsed = time.time() - t_batch
     logger.info(
