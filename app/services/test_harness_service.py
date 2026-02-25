@@ -25,6 +25,7 @@ Test groups
 12. Reports                   — activity report (Claude), outcome report (Claude)
 13. Self-Service & Chatbot    — query categories, tier-1 SQL query, chatbot ask
 14. Cleanup                   — delete all test data from DB
+15. Competitor Agent          — schema check, list runs, list experiments
 """
 
 import json
@@ -51,7 +52,7 @@ TEST_FIRST_NAME     = "DWTest"
 TEST_LAST_NAME      = "Harness"
 TEST_ORDER_REF      = "TH-ORDER-TEST-001"
 
-LOCAL_BASE          = f"http://localhost:{os.getenv('API_PORT', '8000')}"
+LOCAL_BASE          = f"http://localhost:{os.getenv('PORT', os.getenv('API_PORT', '8000'))}"
 TELNYX_BASE         = "https://api.telnyx.com/v2"
 INSTANTLY_BASE      = "https://api.instantly.ai/api/v2"
 AIRTABLE_BASE       = "https://api.airtable.com/v0"
@@ -773,7 +774,7 @@ def _g7_intelligence(suite: TestSuite) -> None:
         with get_cursor(commit=False) as cur:
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM decision_log
-                WHERE created_at > NOW() - INTERVAL '24 hours'
+                WHERE decided_at > NOW() - INTERVAL '24 hours'
             """)
             row = cur.fetchone()
         cnt = row["cnt"] if row else 0
@@ -942,33 +943,34 @@ def _g9_airtable(suite: TestSuite) -> None:
         return {"status": sc}
     _run(suite, "airtable_playbook_sync", G, playbook_sync)
 
-    _airtable_task_id: list = []   # closure cell
-
     def field_task_create():
+        if not suite.test_contact_id:
+            raise AssertionError("No test contact — skipping airtable task enqueue test")
         from app.services.airtable_sync import create_field_sales_task
-        task_id = create_field_sales_task(
-            contact_name=f"{TEST_FIRST_NAME} {TEST_LAST_NAME}",
-            phone=TEST_PHONE,
-            reason="[TEST HARNESS] automated validation task",
-            priority="low",
-            notes="Created by test harness — will be deleted automatically",
-        )
-        assert task_id, "create_field_sales_task returned no ID"
-        _airtable_task_id.append(task_id)
-        return {"airtable_record_id": task_id}
-    _run(suite, "airtable_field_task_lifecycle", G, field_task_create)
-
-    if _airtable_task_id:
-        def field_task_delete():
-            tid = _airtable_task_id[0]
-            sc, body = _req(
-                "DELETE",
-                f"{AIRTABLE_BASE}/{AIRTABLE_BASE_ID}/Field%20Sales%20Tasks/{tid}",
-                headers=_airtable_headers(),
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS cnt FROM action_queue WHERE action_type = 'sync_airtable_task' AND contact_id = %s",
+                (suite.test_contact_id,),
             )
-            assert sc in (200, 204), f"Airtable delete returned {sc}: {str(body)[:300]}"
-            return {"deleted_record_id": tid}
-        _run(suite, "airtable_field_task_delete", G, field_task_delete)
+            before = (cur.fetchone() or {}).get("cnt", 0)
+        create_field_sales_task({
+            "id": suite.test_contact_id,
+            "first_name": TEST_FIRST_NAME,
+            "last_name": TEST_LAST_NAME,
+            "phone": TEST_PHONE,
+            "email": TEST_EMAIL,
+            "priority": "low",
+            "reason": "[TEST HARNESS] automated validation task",
+        })
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS cnt FROM action_queue WHERE action_type = 'sync_airtable_task' AND contact_id = %s",
+                (suite.test_contact_id,),
+            )
+            after = (cur.fetchone() or {}).get("cnt", 0)
+        assert after > before, f"No sync_airtable_task entry created in action_queue (before={before}, after={after})"
+        return {"action_queue_entries": after}
+    _run(suite, "airtable_field_task_lifecycle", G, field_task_create)
 
 
 # ─── GROUP 10: Action Queue ───────────────────────────────────────────────────
@@ -1176,6 +1178,65 @@ def _g13_query_chatbot(suite: TestSuite) -> None:
     _run(suite, "opportunities_detect", G, opportunities_detect)
 
 
+# ─── GROUP 15: Competitor Agent ──────────────────────────────────────────────
+
+def _g15_competitor_agent(suite: TestSuite) -> None:
+    G = "15_competitor_agent"
+
+    def schema_check():
+        """Verify competitor_agent_runs table and goal_experiments.source column exist."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.tables
+                WHERE table_name = 'competitor_agent_runs'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "competitor_agent_runs table missing"
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.columns
+                WHERE table_name = 'goal_experiments' AND column_name = 'source'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "goal_experiments.source column missing"
+        return {"competitor_agent_runs": "exists", "goal_experiments.source": "exists"}
+    _run(suite, "competitor_agent_schema", G, schema_check)
+
+    def list_runs():
+        sc, body = _local("GET", "/api/competitor-agent/runs")
+        assert sc == 200, f"competitor-agent/runs returned {sc}"
+        b = body if isinstance(body, dict) else {}
+        assert "runs" in b, f"Missing 'runs' key in response: {b}"
+        return {"run_count": b.get("count", 0)}
+    _run(suite, "competitor_agent_list_runs", G, list_runs)
+
+    def list_experiments():
+        sc, body = _local("GET", "/api/competitor-agent/experiments")
+        assert sc == 200, f"competitor-agent/experiments returned {sc}"
+        b = body if isinstance(body, dict) else {}
+        assert "experiments" in b, f"Missing 'experiments' key in response: {b}"
+        return {"experiment_count": b.get("count", 0)}
+    _run(suite, "competitor_agent_list_experiments", G, list_experiments)
+
+    def goal_hypothesis_hash_column():
+        """Verify hypothesis_hash column and unique index exist on goal_experiments."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.columns
+                WHERE table_name = 'goal_experiments' AND column_name = 'hypothesis_hash'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "goal_experiments.hypothesis_hash column missing"
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM pg_indexes
+                WHERE tablename = 'goal_experiments'
+                  AND indexname = 'goal_experiments_hypothesis_hash_key'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "goal_experiments_hypothesis_hash_key index missing"
+        return {"hypothesis_hash_column": "exists", "unique_index": "exists"}
+    _run(suite, "goal_hypothesis_hash_schema", G, goal_hypothesis_hash_column)
+
+
 # ─── GROUP 14: Data Cleanup ───────────────────────────────────────────────────
 
 def _cascade_delete(cur, contact_id: int) -> None:
@@ -1255,6 +1316,7 @@ def run_full_suite(triggered_by: str = "manual") -> TestSuite:
         _g11_orders(suite)
         _g12_reports(suite)
         _g13_query_chatbot(suite)
+        _g15_competitor_agent(suite)
     except Exception as e:
         logger.exception("Test suite failed unexpectedly at group level: %s", e)
     finally:

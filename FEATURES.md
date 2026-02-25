@@ -273,6 +273,30 @@ A weekly experiment loop where Claude invents novel marketing hypotheses, launch
 
 ---
 
+## 15. Competitor Research Agent
+
+A weekly Claude-powered agent that researches competitor marketing tactics and auto-injects novel experiment hypotheses into the goal agent queue. Runs every Monday at 6:30 AM, 30 minutes before the goal agent picks up pending experiments at 9 AM. Goal: drive 100% repeat order rate by continuously sourcing fresh ideas from outside DabbahWala's existing playbook.
+
+**Three-phase cycle:**
+1. **RESEARCH** — Parse CookUnity `.eml` samples from `data/cookunitysamples/` (drop new files to auto-include) + live-scrape CookUnity, HelloFresh, Factor75, Freshly, Sunbasket homepages + apply Claude's food-subscription retention knowledge
+2. **GAP ANALYSIS** — Compare competitor angles against last 60 days of `goal_experiments` (already tried) and `discovered_signals` (already proven)
+3. **INJECT** — Generate 8 novel hypotheses covering all four retention segments (never_ordered, one_and_done, lapsing_regular, high_value_at_risk) and insert into `goal_experiments` as `source = 'competitor_agent'`
+
+Hypotheses are deduplicated via a SHA-256 `hypothesis_hash` column — the same idea is never requeued even across multiple runs.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `routers/competitor_agent.py` | `POST /api/competitor-agent/run` (full cycle), `GET /runs`, `GET /experiments` |
+| `data/cookunitysamples/` | Drop `.eml` files here — auto-detected on each run |
+| `competitor_agent_runs` table | Audit log: emails parsed, websites scraped, hypotheses queued, status, error |
+| `goal_experiments.source` column | Distinguishes `goal_agent` vs `competitor_agent` hypotheses |
+| `goal_experiments.hypothesis_hash` column | SHA-256 dedup key — prevents re-inserting the same hypothesis |
+| `[Claude — Inference] Competitor Research Agent` n8n | Fires every Monday 6:30 AM |
+
+---
+
 ## 10. Daily Reporting
 
 Two Claude-written email reports land in the team inbox each morning — an operational summary of what the system did, and an outcome summary of what converted.

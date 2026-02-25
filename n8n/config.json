@@ -387,6 +387,19 @@
       "file": "airtable_menu_sync.json",
       "note": "Pulls all records from Airtable 'Weekly Menu' table and POSTs to POST /api/menu/sync to upsert into weekly_menu_schedule in Postgres."
     },
+    "competitor_agent_cycle": {
+      "id": "",
+      "name": "[Claude — Inference] Competitor Research Agent",
+      "tags": [
+        "DabbahWala",
+        "Claude",
+        "Inference"
+      ],
+      "schedule": "Every Monday at 6:30 AM",
+      "active": true,
+      "file": "competitor_agent_cycle.json",
+      "note": "Weekly: (1) parse competitor .eml samples from data/cookunitysamples/, (2) scrape CookUnity/HelloFresh/Factor/Freshly/Sunbasket live, (3) Claude generates 8 novel hypotheses covering all 4 retention segments (never_ordered, one_and_done, lapsing_regular, high_value_at_risk), (4) auto-injects into goal_experiments. Goal agent picks them up at 9 AM. Goal: 100% repeat order rate."
+    },
     "goal_agent_cycle": {
       "id": "",
       "name": "[Claude \u2014 Inference] Goal-Oriented Agent Cycle",

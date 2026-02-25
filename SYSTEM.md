@@ -176,6 +176,16 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `decision_log` | Lifecycle transition audit trail |
 | `daily_reports` | Aggregated daily metrics |
 
+### Goal & Competitor Agent Tables (migrations 050, 055, 057, 058)
+
+| Table | Purpose |
+|-------|---------|
+| `goal_experiments` | One row per experiment hypothesis — `hypothesis_hash VARCHAR(64) UNIQUE` prevents re-inserting the same idea; `source` tracks whether it came from `goal_agent` or `competitor_agent` |
+| `goal_experiment_contacts` | Enrolled contacts per experiment; tracks `converted`, `conversion_at` |
+| `goal_agent_runs` | Audit log of every goal agent run (all four phases) |
+| `discovered_signals` | Reusable SQL-based signals harvested from proven experiments |
+| `competitor_agent_runs` | Audit log for weekly competitor research runs — emails parsed, sites scraped, hypotheses queued |
+
 ### Lifecycle Segments (enum)
 
 `cold` · `engaged` · `active_customer` · `new_customer` · `lapsed_customer` · `reactivation_candidate` · `cooling` · `optout`
@@ -222,6 +232,8 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `airtable_menu.py` | `/api/menu` | `GET /items`, `POST /sync` (Airtable → Postgres) |
 | `menu_sync.py` | `/api/menu-sync` | Menu suggestion agent endpoints |
 | `growth_agent.py` | `/api/growth` | Growth hacker agent endpoints |
+| `goal_agent.py` | `/api/goal-agent` | `POST /run`, `/hypothesize`, `/experiment`, `/measure`, `/harvest`; `GET /experiments`, `/signals`, `/runs` |
+| `competitor_agent.py` | `/api/competitor-agent` | `POST /run` (full cycle: parse emails + scrape sites + generate + inject); `GET /runs`, `/experiments` |
 | `chatbot.py` | `/api/chatbot` | `POST /ask`, `GET /suggest`, `GET /history`, `POST /reindex` — RAG Q&A over project docs |
 | `auth.py` | _(root)_ | `GET /login`, `GET /auth/google`, `GET /auth/callback`, `GET /auth/me`, `GET /auth/logout` — Google OAuth2 for @dabbahwala.com accounts |
 
@@ -371,7 +383,7 @@ The Intelligence Cycle scans every contact in the database each hour to find beh
 
 ## 8. n8n Workflow Layer
 
-**26 workflows on `digitalworker.dataskate.io` — all active except `[Shipday — Evidence] Historical Import` (manual one-shot)**
+**27 workflows on `digitalworker.dataskate.io` — all active except `[Shipday — Evidence] Historical Import` (manual one-shot)**
 
 Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/`.
 
@@ -403,6 +415,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Claude** | Lapsed Customer Daily | Daily (random offset) | Persistent re-engagement for lapsed customers |
 | **Claude** | Menu Sync Weekly | Weekly | Menu suggestion agent cycle |
 | **Claude** | Growth Agent Cycle | Daily 9 AM | Growth hacker 4-phase experiment loop |
+| **Claude** | Competitor Research Agent | Every Monday 6:30 AM | `POST /api/competitor-agent/run` — parse .eml samples + scrape 5 competitor sites + Claude generates 8 hypotheses covering all 4 retention segments → auto-inject into `goal_experiments` |
 | **System** | Action Queue Executor | Every 30 min | Route action_queue rows to Telnyx / Instantly / Airtable / Drive / SMTP |
 | **System** | Chatbot Docs Reindex | Every Monday 2 AM | Refresh chatbot document index |
 | **System** | Daily E2E Test Suite | Daily 5:00 AM ET | Run 55+ end-to-end tests across 14 groups → email results to vivek@dabbahwala.com |
