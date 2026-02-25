@@ -34,6 +34,18 @@ def get_pending_campaigns():
         ]
 
 
+@router.post("/bulk-executed")
+def mark_bulk_executed(payload: BulkExecutedRequest):
+    if not payload.queue_ids:
+        return {"status": "ok", "updated": 0}
+    with get_cursor() as cur:
+        cur.execute(
+            "UPDATE campaign_queue SET status = 'executed', executed_at = now() WHERE id = ANY(%s)",
+            (payload.queue_ids,),
+        )
+        return {"status": "ok", "updated": cur.rowcount}
+
+
 @router.post("/{queue_id}/executed")
 def mark_executed(queue_id: int):
     with get_cursor() as cur:
@@ -181,6 +193,10 @@ def _load_campaign_json(campaign_name: str) -> tuple[dict, dict]:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Template file missing for {campaign_name}")
     return meta, json.loads(path.read_text())
+
+
+class BulkExecutedRequest(BaseModel):
+    queue_ids: list[int]
 
 
 class TemplateUpdate(BaseModel):

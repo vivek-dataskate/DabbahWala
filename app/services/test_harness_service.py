@@ -402,6 +402,15 @@ def _g2_schema(suite: TestSuite) -> None:
         return {"campaign_routing_rows": cnt}
     _run(suite, "campaign_routing_seeded", G, campaign_routing)
 
+    def bulk_executed_endpoint():
+        """POST /api/campaigns/bulk-executed with empty list → 200 {"status": "ok", "updated": 0}."""
+        sc, body = _local("POST", "/api/campaigns/bulk-executed", json_body={"queue_ids": []})
+        assert sc == 200, f"bulk-executed returned {sc}: {body}"
+        assert body.get("status") == "ok", f"Unexpected body: {body}"
+        assert body.get("updated") == 0, f"Expected 0 updated for empty list, got: {body}"
+        return {"status": sc, "updated": body.get("updated")}
+    _run(suite, "bulk_executed_endpoint", G, bulk_executed_endpoint)
+
     def n8n_workflow_count():
         key = _env("N8N_API_KEY")
         if not key:

@@ -148,8 +148,30 @@
     },
     {
       "parameters": {
+        "jsCode": "// Collect all queue_ids from the skip branch into one array for a single bulk DB call.\nconst queue_ids = $input.all().map(item => item.json.queue_id).filter(id => id !== undefined && id !== null);\nreturn [{ json: { queue_ids } }];"
+      },
+      "id": "aggregate-skip-ids",
+      "name": "Aggregate Skip IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1760,
+        120
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/campaigns/{{ $json.queue_id }}/executed",
+        "url": "https://dabbahwala-latest.onrender.com/api/campaigns/bulk-executed",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "queue_ids",
+              "value": "={{ $json.queue_ids }}"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "mark-skip-executed",
@@ -157,7 +179,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1760,
+        2000,
         120
       ]
     },
@@ -300,8 +322,44 @@
     },
     {
       "parameters": {
+        "jsCode": "// For each item that exited Add Lead to New Campaign (success or continueOnFail),\n// retrieve the queue_id from the paired Prepare Instantly Payload item.\nconst queueId = $('Prepare Instantly Payload').item.json.queue_id;\nreturn { json: { queue_id: queueId } };",
+        "mode": "runOnceForEachItem"
+      },
+      "id": "extract-executed-queue-id",
+      "name": "Extract Executed Queue ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2580,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect all queue_ids from successfully-processed leads into one array for a single bulk DB call.\nconst queue_ids = $input.all().map(item => item.json.queue_id).filter(id => id !== undefined && id !== null);\nreturn [{ json: { queue_ids } }];"
+      },
+      "id": "aggregate-executed-ids",
+      "name": "Aggregate Executed IDs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2780,
+        360
+      ]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/campaigns/{{ $('Prepare Instantly Payload').item.json.queue_id }}/executed",
+        "url": "https://dabbahwala-latest.onrender.com/api/campaigns/bulk-executed",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "queue_ids",
+              "value": "={{ $json.queue_ids }}"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "mark-executed",
@@ -309,7 +367,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2580,
+        2980,
         360
       ]
     },
@@ -414,7 +472,7 @@
       "main": [
         [
           {
-            "node": "Mark Skip Executed",
+            "node": "Aggregate Skip IDs",
             "type": "main",
             "index": 0
           }
@@ -422,6 +480,17 @@
         [
           {
             "node": "Has Old Campaign?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Skip IDs": {
+      "main": [
+        [
+          {
+            "node": "Mark Skip Executed",
             "type": "main",
             "index": 0
           }
@@ -469,6 +538,28 @@
       ]
     },
     "Add Lead to New Campaign": {
+      "main": [
+        [
+          {
+            "node": "Extract Executed Queue ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Executed Queue ID": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Executed IDs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Executed IDs": {
       "main": [
         [
           {

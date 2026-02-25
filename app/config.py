@@ -7,6 +7,18 @@ load_dotenv()
 _raw_db_url = os.environ.get("DATABASE_URL", "postgresql://localhost:5432/dabbahwala")
 # Render uses postgres:// but psycopg2 needs postgresql://
 DATABASE_URL = _raw_db_url.replace("postgres://", "postgresql://", 1) if _raw_db_url.startswith("postgres://") else _raw_db_url
+# Supabase: switch session-mode pooler (5432) → transaction-mode pooler (6543).
+# Transaction mode multiplexes server connections across many concurrent clients,
+# eliminating "MaxClientsInSessionMode" errors under parallel n8n workflow execution.
+# Also embed search_path as a startup option so every connection has it without
+# needing a separate SET command (which pgBouncer may not preserve across transactions).
+if "pooler.supabase.com:5432/" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace(
+        "pooler.supabase.com:5432/",
+        "pooler.supabase.com:6543/",
+    )
+    sep = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL += f"{sep}options=-csearch_path%3Ddabbahwala"
 API_HOST = os.environ.get("API_HOST", "0.0.0.0")
 API_PORT = int(os.environ.get("API_PORT", "8000"))
 
