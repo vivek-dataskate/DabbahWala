@@ -68,7 +68,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nif (!items || items.length === 0) return [];\n// n8n HTTP Request may either:\n//   (a) return ONE item whose .json is the full array  \u2014 split it\n//   (b) already split the array into N items          \u2014 pass through\nif (items.length === 1 && Array.isArray(items[0].json)) {\n  const arr = items[0].json;\n  return arr.map(c => ({ json: c }));\n}\nreturn items;"
+        "jsCode": "const items = $input.all();\nif (!items || items.length === 0) return [];\n// n8n HTTP Request may either:\n//   (a) return ONE item whose .json is the full array  — split it\n//   (b) already split the array into N items          — pass through\nif (items.length === 1 && Array.isArray(items[0].json)) {\n  const arr = items[0].json;\n  return arr.map(c => ({ json: c }));\n}\nreturn items;"
       },
       "id": "split-campaigns",
       "name": "Split Campaign Moves",
