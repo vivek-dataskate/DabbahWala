@@ -7,16 +7,6 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 echo ""
-echo "=== Installing Playwright Chromium browser ==="
-# Install into the project directory so it survives into the runtime container.
-# (~/.cache is build-only and does not carry over to the deployed instance.)
-export PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright-browsers
-# Install system-level OS dependencies first (apt packages), then the browser
-# binary separately so any failure is clearly attributed to its step.
-python -m playwright install-deps chromium
-python -m playwright install chromium
-
-echo ""
 echo "=== Running database migrations ==="
 
 if [ -z "${DATABASE_URL:-}" ]; then
