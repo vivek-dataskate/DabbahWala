@@ -54,7 +54,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.instantly.ai/api/v2/analytics/campaign/summary",
+        "url": "=https://api.instantly.ai/api/v2/campaigns/analytics",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -68,8 +68,12 @@
         "queryParameters": {
           "parameters": [
             {
-              "name": "campaign_id",
+              "name": "id",
               "value": "={{ $json.campaign_id }}"
+            },
+            {
+              "name": "exclude_total_leads_count",
+              "value": "true"
             }
           ]
         },
@@ -89,7 +93,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Normalise Instantly analytics response → shape Render expects\nconst a = $input.first().json;\n\n// Instantly v2 analytics uses various field names depending on version\nconst emailsSent    = a.emails_sent_count    ?? a.total_emails_sent ?? a.contacted ?? null;\nconst opens         = a.open_count           ?? a.open              ?? a.all_time_open_count  ?? null;\nconst uniqueOpens   = a.unique_open_count    ?? opens;\nconst replies       = a.reply_count          ?? a.reply             ?? a.all_time_reply_count ?? null;\nconst clicks        = a.link_click_count     ?? a.link_click        ?? null;\nconst bounces       = a.bounced_count        ?? a.bounced           ?? a.all_time_bounced_count ?? null;\nconst unsubscribes  = a.unsubscribed_count   ?? a.unsubscribed      ?? null;\nconst leadsCount    = a.leads_count          ?? a.leads             ?? null;\n\n// Compute rates (avoid division by zero)\nconst openRate  = (emailsSent && opens  != null) ? Math.round(opens  / emailsSent * 10000) / 100 : null;\nconst replyRate = (emailsSent && replies != null) ? Math.round(replies / emailsSent * 10000) / 100 : null;\n\nreturn [{\n  json: {\n    campaign_id:  a.campaign_id  || a.id || $('Split Into One Per Campaign').first().json.campaign_id,\n    leads_count:  leadsCount,\n    emails_sent:  emailsSent,\n    unique_opens: uniqueOpens,\n    opens,\n    replies,\n    clicks,\n    bounces,\n    unsubscribes,\n    open_rate:    openRate,\n    reply_rate:   replyRate\n  }\n}];"
+        "jsCode": "// Normalise Instantly analytics response → shape Render expects\n// /api/v2/campaigns/analytics returns an array; unwrap it\nconst raw = $input.first().json;\nconst a = Array.isArray(raw) ? (raw[0] || {}) : raw;\n\n// If no data returned for this campaign, skip gracefully\nif (!a.campaign_id && !a.emails_sent_count) {\n  return [{ json: {\n    campaign_id: $('Split Into One Per Campaign').first().json.campaign_id,\n    skipped: true\n  }}];\n}\n\nconst emailsSent   = a.emails_sent_count ?? null;\nconst opens        = a.open_count        ?? null;\nconst uniqueOpens  = a.open_count_unique ?? opens;\nconst replies      = a.reply_count       ?? null;\nconst clicks       = a.link_click_count  ?? null;\nconst bounces      = a.bounced_count     ?? null;\nconst unsubscribes = a.unsubscribed_count ?? null;\nconst leadsCount   = a.leads_count       ?? null;\n\n// Compute rates (avoid division by zero)\nconst openRate  = (emailsSent && opens  != null) ? Math.round(opens  / emailsSent * 10000) / 100 : null;\nconst replyRate = (emailsSent && replies != null) ? Math.round(replies / emailsSent * 10000) / 100 : null;\n\nreturn [{\n  json: {\n    campaign_id:  a.campaign_id || $('Split Into One Per Campaign').first().json.campaign_id,\n    leads_count:  leadsCount,\n    emails_sent:  emailsSent,\n    unique_opens: uniqueOpens,\n    opens,\n    replies,\n    clicks,\n    bounces,\n    unsubscribes,\n    open_rate:    openRate,\n    reply_rate:   replyRate\n  }\n}];"
       },
       "id": "normalise-stats",
       "name": "Normalise Stats",

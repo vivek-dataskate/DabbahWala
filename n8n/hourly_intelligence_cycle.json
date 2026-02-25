@@ -26,7 +26,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.instantly.ai/api/v1/analytics/campaign/summary",
+        "url": "=https://api.instantly.ai/api/v2/campaigns/analytics",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -40,12 +40,8 @@
         "queryParameters": {
           "parameters": [
             {
-              "name": "limit",
-              "value": "100"
-            },
-            {
-              "name": "since",
-              "value": "={{ $now.minus(2, 'hours').toISO() }}"
+              "name": "start_date",
+              "value": "={{ $now.minus(2, 'hours').format('yyyy-MM-dd') }}"
             }
           ]
         },
