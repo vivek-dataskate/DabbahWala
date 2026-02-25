@@ -10,6 +10,7 @@ Suggestion-chip questions are pre-computed once after indexing and stored in
 chatbot_canned_qa so repeated clicks never call the AI again.
 """
 import datetime
+import hashlib
 import logging
 import os
 import re
@@ -26,12 +27,13 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
 
-CHUNK_SIZE = 900       # characters per chunk
-CHUNK_OVERLAP = 120    # overlap between consecutive chunks
+CHUNK_SIZE = 900            # characters per chunk
+CHUNK_OVERLAP = 120         # overlap between consecutive chunks
 REINDEX_INTERVAL_DAYS = 30  # reindex at most once per month
-MAX_FILE_BYTES = 200_000   # skip files larger than this (e.g. bulk SQL dumps)
+MAX_FILE_BYTES = 200_000    # skip files larger than this (e.g. bulk SQL dumps)
+SEMANTIC_CACHE_THRESHOLD = 0.72  # pg_trgm similarity required to serve a cached answer
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +184,38 @@ def _save_last_indexed_at() -> None:
         )
 
 
+def _compute_docs_hash(docs: list[dict]) -> str:
+    """SHA-256 over every file's source path + content — changes when any doc changes."""
+    h = hashlib.sha256()
+    for doc in sorted(docs, key=lambda d: d["source"]):
+        h.update(doc["source"].encode())
+        h.update(doc["content"].encode())
+    return h.hexdigest()
+
+
+def _get_stored_docs_hash() -> str | None:
+    try:
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT value FROM chatbot_doc_meta WHERE key = 'docs_hash'")
+            row = cur.fetchone()
+            return row["value"] if row else None
+    except Exception:
+        return None
+
+
+def _save_docs_hash(hash_val: str) -> None:
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """
+            INSERT INTO chatbot_doc_meta (key, value, updated_at)
+            VALUES ('docs_hash', %s, NOW())
+            ON CONFLICT (key) DO UPDATE
+              SET value = EXCLUDED.value, updated_at = NOW()
+            """,
+            (hash_val,),
+        )
+
+
 def _do_index(docs: list[dict]) -> int:
     """Replace all chunks and return total chunks written."""
     total = 0
@@ -203,7 +237,7 @@ def _do_index(docs: list[dict]) -> int:
 
 
 def _ensure_indexed() -> None:
-    """Index all docs; reindex at most once per month, then pre-cache chips."""
+    """Index all docs; reindex at most once per month, then pre-cache chips only if content changed."""
     last_at = _last_indexed_at()
     if last_at is not None:
         age_days = (datetime.datetime.now(datetime.timezone.utc) - last_at).days
@@ -216,14 +250,21 @@ def _ensure_indexed() -> None:
         logger.warning("No docs to index")
         return
 
-    logger.info("Reindexing chatbot docs (%d files)", len(docs))
+    new_hash = _compute_docs_hash(docs)
+    docs_changed = new_hash != _get_stored_docs_hash()
+
+    logger.info("Reindexing chatbot docs (%d files, changed=%s)", len(docs), docs_changed)
     _save_last_indexed_at()  # save before indexing so interruptions don't re-trigger next deploy
     total = _do_index(docs)
+    _save_docs_hash(new_hash)
     logger.info("Reindex complete: %d total chunks from %d files", total, len(docs))
 
-    # Pre-cache chip answers in background so startup isn't blocked
-    _clear_canned()
-    _start_precache_thread()
+    if docs_changed:
+        # Docs changed — rebuild chip cache so answers reflect new content
+        _clear_canned()
+        _start_precache_thread()
+    else:
+        logger.info("Docs unchanged — skipping chip cache rebuild (answers still valid)")
 
 
 def _ensure_tables() -> None:
@@ -270,6 +311,12 @@ def _ensure_tables() -> None:
         )
         cur.execute(
             "CREATE INDEX IF NOT EXISTS idx_chatbot_interactions_created ON chatbot_interactions (created_at DESC)"
+        )
+        # pg_trgm powers the semantic similarity cache (no embedding API needed)
+        cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_chatbot_interactions_question_trgm "
+            "ON chatbot_interactions USING GiST (question gist_trgm_ops)"
         )
         cur.execute(
             """
@@ -416,6 +463,39 @@ def _clear_canned() -> None:
             cur.execute("DELETE FROM chatbot_canned_qa")
     except Exception as exc:
         logger.warning("Could not clear canned QA: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Semantic similarity cache (pg_trgm — no embedding API needed)
+# ---------------------------------------------------------------------------
+
+def _find_cached_answer(question: str) -> dict | None:
+    """
+    Search chatbot_interactions for a previously answered question that is
+    trigram-similar to the current one (>= SEMANTIC_CACHE_THRESHOLD).
+    Returns the cached answer/sources, or None if no close match exists.
+    """
+    try:
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                """
+                SELECT answer, sources, similarity(question, %s) AS sim
+                FROM chatbot_interactions
+                WHERE similarity(question, %s) >= %s
+                ORDER BY sim DESC, created_at DESC
+                LIMIT 1
+                """,
+                (question, question, SEMANTIC_CACHE_THRESHOLD),
+            )
+            row = cur.fetchone()
+            if row:
+                logger.debug(
+                    "Semantic cache hit (sim=%.2f): %s", row["sim"], question[:60]
+                )
+                return {"answer": row["answer"], "sources": list(row["sources"] or [])}
+    except Exception as exc:
+        logger.warning("Semantic cache lookup failed: %s", exc)
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -567,12 +647,16 @@ async def ask(req: ChatRequest):
             sources=[],
         )
 
-    # Fast path: return pre-cached answer for chip questions
+    # Fast path 1: return pre-cached answer for exact chip questions
     cached = _lookup_canned(question)
     if cached:
         logger.debug("Returning canned answer for: %s", question[:60])
         return ChatResponse(question=question, answer=cached["answer"], sources=cached["sources"])
 
+    # Fast path 2: semantic similarity cache — return a past answer if similar enough
+    similar = _find_cached_answer(question)
+    if similar:
+        return ChatResponse(question=question, answer=similar["answer"], sources=similar["sources"])
 
     try:
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -661,19 +745,33 @@ async def suggest(q: str = "", limit: int = 6):
 
 @router.post("/reindex")
 async def reindex():
-    """Force a full re-index of all documentation chunks and rebuild the chip answer cache."""
+    """
+    Force a full re-index of all documentation chunks.
+    Chip cache is only rebuilt when the document content has actually changed
+    (detected via SHA-256 hash comparison), saving AI API calls on quiet weeks.
+    """
     docs = _load_md_files()
     if not docs:
         raise HTTPException(status_code=500, detail="No files found to index")
 
+    new_hash = _compute_docs_hash(docs)
+    docs_changed = new_hash != _get_stored_docs_hash()
+
     try:
         total = _do_index(docs)
         _save_last_indexed_at()
+        _save_docs_hash(new_hash)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Indexing failed: {exc}")
 
-    # Clear stale canned answers and rebuild in background
-    _clear_canned()
-    _start_precache_thread()
+    if docs_changed:
+        _clear_canned()
+        _start_precache_thread()
 
-    return {"status": "ok", "total_chunks": total, "files_indexed": [d["source"] for d in docs]}
+    return {
+        "status": "ok",
+        "total_chunks": total,
+        "files_indexed": [d["source"] for d in docs],
+        "docs_changed": docs_changed,
+        "chips_rebuilding": docs_changed,
+    }
