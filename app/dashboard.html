@@ -271,6 +271,24 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
   </div>
 
   <div class="chip-section">
+    <div class="chip-category" style="color:#0077b6">📊 Campaign Reports</div>
+    <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <label style="font-size:0.82rem;color:#555;font-weight:500">From
+        <input type="date" id="rpt-date-from" style="margin-left:6px;padding:4px 8px;border:1.5px solid #d0d0e0;border-radius:6px;font-size:0.82rem">
+      </label>
+      <label style="font-size:0.82rem;color:#555;font-weight:500">To
+        <input type="date" id="rpt-date-to" style="margin-left:6px;padding:4px 8px;border:1.5px solid #d0d0e0;border-radius:6px;font-size:0.82rem">
+      </label>
+    </div>
+    <div class="chip-row">
+      <button class="chip" onclick="runReport(this,'sms_performance')">SMS performance</button>
+      <button class="chip" onclick="runReport(this,'email_performance')">Email performance</button>
+      <button class="chip" onclick="runReport(this,'activity_report')">Activity report</button>
+      <button class="chip" onclick="runReport(this,'outcome_report')">Outcome report</button>
+    </div>
+  </div>
+
+  <div class="chip-section">
     <div class="chip-category" style="color:#e76f51">📋 Team &amp; Notes</div>
     <div class="chip-row">
       <button class="chip" onclick="runChip(this,'team_notes')">Team notes</button>
@@ -565,6 +583,30 @@ async function runChip(btn, cat) {
   finally { btn.classList.remove('running'); }
 }
 
+// ─── Campaign report date pickers ─────────────────────────────────────────────
+(function initReportDates() {
+  const from = document.getElementById('rpt-date-from');
+  const to   = document.getElementById('rpt-date-to');
+  if (from) from.value = _d(-30);
+  if (to)   to.value   = _d(0);
+})();
+
+async function runReport(btn, cat) {
+  if (btn.classList.contains('running')) return;
+  const dateFrom = document.getElementById('rpt-date-from')?.value || _d(-30);
+  const dateTo   = document.getElementById('rpt-date-to')?.value   || _d(0);
+  btn.classList.add('running');
+  setLoading('s-result', 'Loading…');
+  try {
+    const payload = { category: cat, date_from: dateFrom, date_to: dateTo };
+    const res  = await fetch('/api/query', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (!res.ok) { setError('s-result', data.detail || JSON.stringify(data)); return; }
+    setPreResult('s-result', data.answer);
+  } catch(e) { setError('s-result', 'Network error: ' + e.message); }
+  finally { btn.classList.remove('running'); }
+}
+
 async function runSearch() {
   const q = document.getElementById('s-input').value.trim();
   if (!q) return;
@@ -585,6 +627,7 @@ async function runSearch() {
   } catch(e) { setError('s-result','Network error: '+e.message); }
   finally { setBtn('s-btn',false,'Search'); }
 }
+
 
 function renderContactActions(id,answerText,contacts) {
   const ACTION_LABEL = {send_sms:'📱 Send SMS',send_email:'✉️ Send Email'};

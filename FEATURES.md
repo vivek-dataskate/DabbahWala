@@ -420,3 +420,30 @@ Marketing and ops team members can query live Postgres data conversationally in 
 | `mcp_server/tools/agents.py` | `get_latest_inference()`, `get_latest_decision()`, `get_orchestrator_history()`, `get_pending_actions()`, `get_agent_cycle_summary()` |
 | `mcp_server/tools/instantly.py` | `instantly_list_campaigns()`, `instantly_get_campaign_analytics()`, `instantly_list_leads()`, `instantly_get_email_events()` |
 | `mcp_server/tools/shipday.py` | `get_shipday_order()`, `list_shipday_orders()`, `get_shipday_carriers()`, `get_shipday_order_tracking()` |
+
+---
+
+## 16. Campaign Reports Dashboard
+
+A "Campaign Reports" section on the marketing dashboard lets the team pull SMS performance, email performance, activity, and outcome reports for any custom date range — no SQL needed.
+
+**How it works:**
+1. Team selects a From / To date range (defaults to last 30 days)
+2. Clicks one of four report chips — results appear in the search result panel
+3. Each report queries `broadcast_jobs`, `broadcast_recipients`, `events`, `decision_log`, and `orders` directly
+
+**Reports:**
+
+| Report | What it shows |
+|--------|--------------|
+| SMS performance | Per-campaign: recipients, sent count, delivery rate for SMS-channel broadcasts |
+| Email performance | Per-campaign: recipients, sent count, delivery rate + subject line for email-channel broadcasts |
+| Activity report | Event counts (email opens, email clicks, SMS sent, SMS clicks, orders placed, unsubscribes) + daily breakdown |
+| Outcome report | Customers brought back (lapsed/reactivation_candidate → active_customer), winback revenue, marketing-attributed orders, lifecycle transitions, pipeline snapshot |
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `app/routers/query.py` | `_handle_sms_performance()`, `_handle_email_performance()`, `_handle_activity_report()`, `_handle_outcome_report()` — all accept `date_from`/`date_to` |
+| `app/dashboard.html` | "Campaign Reports" section with From/To date pickers and 4 chips calling `runReport()` |
