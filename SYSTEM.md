@@ -203,7 +203,8 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 
 | Router | Prefix | Key Endpoints |
 |--------|--------|--------------|
-| `agents.py` | `/api/agents` | `POST /cycle/run`, `/cycle/run-for-contact`, `/cycle/run-all`, `GET /action-queue/pending`, `POST /action-queue/{id}/done`, `POST /goals`, `POST /report/activity`, `POST /report/outcome` |
+| `test_harness.py` | `/api/test` | `POST /run` (full E2E suite), `GET /results`, `GET /results/{run_id}` |
+| `agents.py` | `/api/agents` | `POST /cycle/run`, `/cycle/run-for-contact`, `/cycle/run-all`, `/cycle/run-daily-sweep`, `/cycle/run-all-lapsed`, `GET /action-queue/pending`, `POST /action-queue/{id}/done`, `POST /goals`, `POST /report/activity`, `POST /report/outcome` |
 | `intelligence.py` | `/api/intelligence` | `POST /run-cycle`, `GET /pending-actions`, `POST /ingest-instantly-events` |
 | `daily_orders.py` | `/api/daily-orders` | `POST /process`, `GET /summary/{date}` |
 | `query.py` | `/api/query` | `POST /` (10 Tier-1 SQL + 1 Tier-2 Claude categories), `GET /categories` |
@@ -239,34 +240,42 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 
 ## 6. Claude AI Agent Pipeline
 
-**All agent calls use `claude-sonnet-4-5-20250929` with forced tool use for structured output.**
+**Model routing:** Sonnet (`claude-sonnet-4-5-20250929`) for complex reasoning (Intent, Offer, Escalation, Orchestrator); Haiku (`claude-haiku-4-5-20251001`) for fast classification (Menu, Sentiment, Engagement, Stage, Channel).
 
-### Layer 1 — Inference (3 parallel Claude calls)
+**Prompt caching:** All system prompts are sent as cacheable content blocks (`cache_control: ephemeral`). The static prefix (role instructions + playbook) is identical across contacts, giving a 90% token discount from contact #2 onward in a batch.
 
-Input: contact profile + 30-day events + full communication history + active goal.
+**Playbook RAG:** Each agent layer receives only the relevant playbook categories (inference agents: exclusion+priority+inference; decision agents: exclusion+priority+decision+messaging; orchestrator: exclusion+priority only).
 
-| Agent | Tool | Output |
-|-------|------|--------|
-| **Sentiment** | `record_sentiment` | `sentiment` (positive/neutral/negative), `confidence`, `summary` |
-| **Intent** | `record_intent` | `intent` (ready_to_order/needs_info/price_sensitive/not_interested/unknown), `signals[]`, `confidence` |
-| **Engagement** | `record_engagement` | `engagement_score` (0–1), `trend` (rising/flat/falling), `last_touch_hours_ago` |
+**Playbook hash cache:** `_fetch_playbook_rules()` stores a SHA-256 hash of the formatted playbook. DB is only re-queried when the content actually changes — not on every contact.
 
+### Layer 1 — Inference (Menu + 3 agents)
+
+Input: contact profile + 30-day events + full communication history + active goal + this week's menu.
+
+| Agent | Model | Tool | Output |
+|-------|-------|------|--------|
+| **Menu** | Haiku | `submit_menu_picks` | `top_picks[]` (favourites on menu this week), `bridge_item` (new intro), `avoid[]` |
+| **Sentiment** | Haiku | `submit_sentiment` | `sentiment` (positive/neutral/negative), `confidence`, `summary` |
+| **Intent** | Sonnet | `submit_intent` | `intent` (ready_to_order/needs_info/price_sensitive/not_interested/unknown), `signals[]`, `confidence` |
+| **Engagement** | Haiku | `submit_engagement` | `engagement_score` (0–1), `trend` (rising/flat/falling), `last_touch_hours_ago` |
+
+Menu picks feed into Intent (weights toward `ready_to_order` when favourites are available) and Offer (copy references specific items).
 Stored in: `inference_results`
 
-### Layer 2 — Decision (4 parallel Claude calls)
+### Layer 2 — Decision (4 agents)
 
 Input: contact profile + full Layer 1 inference bundle.
 
-| Agent | Tool | Output |
-|-------|------|--------|
-| **Stage** | `record_stage` | `recommended_stage`, `confidence`, `reason` |
-| **Channel** | `record_channel` | `recommended_channel` (sms/email/call/none), `channel_timing` (immediate/tomorrow/3days/none), `reason` |
-| **Offer** | `record_offer` | `offer_type` (discount/reminder/social_proof/none), `suggested_copy`, `reason` |
-| **Escalation** | `record_escalation` | `should_escalate` (bool), `urgency` (high/medium/none), `reason` |
+| Agent | Model | Tool | Output |
+|-------|-------|------|--------|
+| **Stage** | Haiku | `submit_stage` | `recommended_stage`, `confidence`, `reason` |
+| **Channel** | Haiku | `submit_channel` | `recommended_channel` (sms/email/call/none), `channel_timing` (immediate/tomorrow/3days/none), `reason` |
+| **Offer** | Sonnet | `submit_offer` | `offer_type` (discount/reminder/social_proof/none), `suggested_copy` (references menu picks), `reason` |
+| **Escalation** | Sonnet | `submit_escalation` | `should_escalate` (bool), `urgency` (high/medium/none), `reason` |
 
 Stored in: `decision_recommendations`
 
-### Layer 3 — Orchestrator (1 Claude call)
+### Layer 3 — Orchestrator (1 Sonnet call)
 
 Input: all Layer 2 recommendations + latest delivery event.
 
@@ -291,6 +300,10 @@ Stored in: `orchestrator_log`
 | **Activity Report** | Daily 8:00 AM | Claude-generated HTML summary of agent runs, actions, escalations — emailed with CSV |
 | **Outcome Report** | Daily 8:30 AM | Claude-generated HTML summary of orders, opens, conversions — emailed with CSV |
 
+### Daily Sweep Endpoint
+
+`POST /api/agents/cycle/run-daily-sweep` — targets contacts not run in the last 72 hours (cap 200/day). Called by the daily agent orchestration cron at 9 AM. Complements the real-time per-contact triggers from `telnyx_inbound_collector` and `daily_order_upload`.
+
 ### Playbook Injection
 
 The `agent_playbook` table (synced from Airtable every 15 min) injects user-configured rules into Claude system prompts:
@@ -308,11 +321,11 @@ The `agent_playbook` table (synced from Airtable every 15 min) injects user-conf
 
 ## 7. Intelligence Cycle
 
-**5-phase hourly cycle (`/api/intelligence/run-cycle`)**
+**5-phase daily cycle (`/api/intelligence/run-cycle`) — runs at 7:00 AM**
 
 | Phase | What It Does |
 |-------|-------------|
-| **INTAKE** | Poll Instantly for email events (opens, clicks, replies); count recent Telnyx SMS/calls |
+| **INTAKE** | Poll Instantly for email events (opens, clicks, replies) in last 24 h; count recent Telnyx SMS/calls |
 | **EVIDENCE** | Refresh 7-day engagement rollups; calculate lifecycle distribution snapshot |
 | **INFERENCE** | Detect 7 signal types (see below) |
 | **DECISION** | Create opportunities from high-confidence signals; queue campaign moves; queue SMS |
@@ -342,7 +355,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 
 | Group | Workflow | Schedule | Purpose |
 |-------|----------|----------|---------|
-| **Airtable** | Menu Sync | Hourly | Pull Airtable "Weekly Menu" → `POST /api/menu/sync` → `weekly_menu_schedule` |
+| **Airtable** | Menu Sync | Daily 6:30 AM | Pull Airtable "Weekly Menu" → `POST /api/menu/sync` → `weekly_menu_schedule` |
 | **Airtable** | Playbook Sync | Every 15 min | Sync rules from Airtable → `agent_playbook` table |
 | **Airtable** | Outcome Sync | Every 15 min | Pull Airtable field sales outcomes → update opportunities |
 | **Shipday** | Delivery Collector | Every 30 min | Poll Shipday → `POST /api/delivery/status` |
@@ -360,9 +373,9 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Reporting** | Daily Field Brief | Daily 7:30 AM | `POST /api/field-agent/daily-brief` |
 | **Reporting** | Daily Activity Report | Daily 8:00 AM | `POST /api/agents/report/activity` → Claude HTML + CSV → email |
 | **Reporting** | Daily Outcome Report | Daily 8:30 AM | `POST /api/agents/report/outcome` → Claude HTML + CSV → email |
-| **Claude** | Agent Orchestration | Every 3 h | `POST /api/agents/cycle/run-all` — batch agent cycle |
-| **Claude** | Hourly Intelligence Cycle | Hourly | `POST /api/intelligence/run-cycle` — full 5-phase cycle |
-| **Claude** | Lifecycle Cycle Runner | Hourly | `POST /api/lifecycle/run` — SQL rule engine |
+| **Claude** | Agent Orchestration | Daily 9:00 AM | `POST /api/agents/cycle/run-daily-sweep` — dormant contacts (cap 200, 72 h cooldown) |
+| **Claude** | Daily Intelligence Cycle | Daily 7:00 AM | `POST /api/intelligence/run-cycle` — full 5-phase cycle (24 h poll window) |
+| **Claude** | Lifecycle Cycle Runner | Daily 6:00 AM | `POST /api/lifecycle/run` — SQL rule engine |
 | **Claude** | Lapsed Customer Daily | Daily (random offset) | Persistent re-engagement for lapsed customers |
 | **Claude** | Menu Sync Weekly | Weekly | Menu suggestion agent cycle |
 | **Claude** | Growth Agent Cycle | Daily 9 AM | Growth hacker 4-phase experiment loop |

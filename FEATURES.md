@@ -30,22 +30,26 @@ Contacts are automatically classified into 8 stages and moved between them based
 
 ## 2. AI Agent Pipeline
 
-Per-contact AI reasoning using 8 sequential Claude calls that produce one concrete outreach action. Runs in real-time after inbound events and in batch every 3 hours.
+Per-contact AI reasoning using 9 sequential Claude calls (Menu + 3 Inference + 4 Decision + Orchestrator) that produce one concrete outreach action. Runs in real-time after inbound events and in a daily dormant sweep at 9 AM.
 
-**Flow:** Inference (×3 parallel) → Decision (×4 parallel) → Orchestrator (×1) → `action_queue`
+**Flow:** Menu (Haiku) → Inference ×3 (Haiku/Sonnet) → Decision ×4 (Haiku/Sonnet) → Orchestrator (Sonnet) → `action_queue`
+
+**Model routing:** Haiku for fast classification (Menu, Sentiment, Engagement, Stage, Channel); Sonnet for complex reasoning (Intent, Offer, Escalation, Orchestrator). Prompt caching (`cache_control: ephemeral`) on all system prompts gives a 90% token discount from contact #2 onward.
+
+**Playbook RAG:** Category filtering routes only relevant rule categories to each agent layer (inference/decision/messaging/exclusion). Hash-based in-memory cache avoids DB round-trips when playbook is unchanged.
 
 **Assets**
 
 | Asset | Role |
 |-------|------|
-| `routers/agents.py` | Full 4-layer pipeline implementation (~1,000 lines) |
+| `routers/agents.py` | Full 4-layer pipeline implementation |
 | `customer_goals` table | One active goal per contact (`convert_to_order` / `retain` / `reactivate`) |
 | `inference_results` table | Layer 1 outputs — sentiment, intent, engagement |
 | `decision_recommendations` table | Layer 2 outputs — stage, channel, offer, escalation |
 | `orchestrator_log` table | Layer 3 chosen action, full reasoning, guardrails applied |
 | `action_queue` table | Pending → executing → done/failed lifecycle for each action |
 | `agent_playbook` table | User-configured rules injected into Claude system prompts (synced from Airtable) |
-| `[Claude] Agent Orchestration` n8n | Batch cycle every 3 hours for all active-goal contacts |
+| `[Claude] Agent Orchestration` n8n | Daily sweep at 9 AM — dormant contacts not run in 72 h (cap 200) |
 | `[Telnyx] Inbound SMS Collector` n8n | Triggers real-time cycle per contact after inbound SMS/call |
 
 **Delivery guardrails (Layer 3 overrides):**
@@ -127,7 +131,7 @@ Real-time delivery status from Shipday is ingested and used by the AI orchestrat
 
 ## 6. Marketing Intelligence Cycle
 
-A 5-phase rule-based engine runs every hour to detect signals across all contacts and generate opportunities for the action queue — without waiting for a specific inbound event.
+A 5-phase rule-based engine runs once daily (7:00 AM) to detect signals across all contacts and generate opportunities for the action queue — without waiting for a specific inbound event. Poll window is 24 hours to match the daily cadence.
 
 **7 signal types detected:**
 
@@ -151,7 +155,7 @@ A 5-phase rule-based engine runs every hour to detect signals across all contact
 | `refresh_engagement_rollups()` stored proc | Recalculates rollups from raw events |
 | `create_opportunity()` stored proc | Creates opportunity with deduplication |
 | `routers/opportunities.py` | CRUD + detection endpoints |
-| `[Claude] Hourly Intelligence Cycle` n8n | Fires `POST /api/intelligence/run-cycle` every hour |
+| `[Claude] Daily Intelligence Cycle` n8n | Fires `POST /api/intelligence/run-cycle` daily at 7:00 AM |
 | `[Instantly] Campaign Performance` n8n | Ingests Instantly email events into DB hourly |
 
 ---
@@ -168,7 +172,7 @@ The weekly menu is maintained by staff in Airtable and automatically synced to P
 | `weekly_menu_schedule` table | Postgres mirror, keyed by `(week_start, item_name)` |
 | `routers/airtable_menu.py` | CRUD endpoints — `GET/POST/PUT/DELETE /api/menu/items`, `POST /api/menu/sync` |
 | `routers/menu_sync.py` | `GET /api/menu/current` used by the agent pipeline to load this week's menu |
-| `[Airtable] Menu Sync` n8n | Pulls all Airtable records → upserts Postgres every hour (ID: `baZV5ViA5lXNCTWR`) |
+| `[Airtable] Menu Sync` n8n | Pulls all Airtable records → upserts Postgres daily at 6:30 AM (ID: `baZV5ViA5lXNCTWR`) |
 | `current_menu` field | Injected into every Claude contact profile — full this-week menu |
 | `new_to_customer_this_week` field | Items from `current_menu` that the customer has never ordered; used to spark curiosity |
 
