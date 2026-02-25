@@ -167,6 +167,7 @@ Tests CSV order ingestion and menu resolution.
 | Test Name | What It Checks |
 |-----------|----------------|
 | `order_csv_process` | Uploads test CSV to `POST /api/daily-orders/process` |
+| `order_csv_first_name_backfill` | Nulls test contact's first_name, uploads CSV, verifies `COALESCE` backfill sets it |
 | `menu_items_present` | `menu_items` table has >0 rows (Airtable sync worked) |
 | `order_summary_endpoint` | `GET /api/daily-orders/summary/{today}` returns 200 or 404 |
 

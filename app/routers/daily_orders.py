@@ -708,10 +708,16 @@ async def process_daily_orders(
                     "VALUES (%s, 'order_placed', %s::jsonb, %s)",
                     (contact_id, meta, f"{order_date}T12:00:00Z")
                 )
+                _csv_name_parts = name.split(None, 1)
+                _csv_fn = _csv_name_parts[0] if _csv_name_parts else None
+                _csv_ln = _csv_name_parts[1] if len(_csv_name_parts) > 1 else None
                 cur.execute(
                     "UPDATE contacts SET total_orders = total_orders + 1, "
-                    "last_order_at = %s, updated_at = now() WHERE id = %s",
-                    (order_date, contact_id)
+                    "last_order_at = %s, "
+                    "first_name = COALESCE(first_name, %s), "
+                    "last_name = COALESCE(last_name, %s), "
+                    "updated_at = now() WHERE id = %s",
+                    (order_date, _csv_fn or None, _csv_ln or None, contact_id)
                 )
 
     logger.info(

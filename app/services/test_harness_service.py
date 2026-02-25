@@ -1081,6 +1081,53 @@ def _g11_orders(suite: TestSuite) -> None:
         return {"status": r2.status_code, "processed": b2.get("orders_processed", "?")}
     _run(suite, "order_csv_process", G, order_csv_process)
 
+    def order_csv_first_name_backfill():
+        """Verify CSV upload backfills first_name/last_name for contacts where they are NULL."""
+        if not suite.test_contact_id:
+            return {"skip": "no test contact"}
+        import io
+        today = _date.today().isoformat()
+        # Temporarily null out first_name/last_name on the test contact
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "UPDATE contacts SET first_name = NULL, last_name = NULL WHERE id = %s",
+                (suite.test_contact_id,),
+            )
+        # Upload a CSV row using the test contact's phone number
+        csv_rows = (
+            "Order Number,Order Date,Customer Name,Phone,Email\n"
+            f"TH-BF-{today},{today},{TEST_FIRST_NAME} {TEST_LAST_NAME},{TEST_PHONE},{TEST_EMAIL}\n"
+        )
+        with httpx.Client(timeout=60) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_backfill.csv", io.BytesIO(csv_rows.encode()), "text/csv")},
+            )
+        assert r.status_code in (200, 201), (
+            f"CSV backfill upload returned {r.status_code}: {r.text[:300]}"
+        )
+        # Verify first_name was backfilled
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT first_name, last_name FROM contacts WHERE id = %s",
+                (suite.test_contact_id,),
+            )
+            row = cur.fetchone()
+        assert row and row["first_name"] == TEST_FIRST_NAME, (
+            f"first_name not backfilled — got '{row['first_name'] if row else None}'"
+        )
+        # Restore original name
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "UPDATE contacts SET first_name = %s, last_name = %s WHERE id = %s",
+                (TEST_FIRST_NAME, TEST_LAST_NAME, suite.test_contact_id),
+            )
+        return {
+            "backfilled_first_name": row["first_name"],
+            "backfilled_last_name": row.get("last_name"),
+        }
+    _run(suite, "order_csv_first_name_backfill", G, order_csv_first_name_backfill)
+
     def menu_items_present():
         """Verify menu_items table has content (synced from Airtable)."""
         with get_cursor(commit=False) as cur:
