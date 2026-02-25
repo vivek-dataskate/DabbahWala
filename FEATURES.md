@@ -1,0 +1,281 @@
+# DabbahWala — Business Features
+
+Each section describes a business-critical capability and the technical assets that deliver it.
+
+> **Navigation:** [README](README.md) · [System Reference](SYSTEM.md) · [Claude Instructions](CLAUDE.md)
+
+---
+
+## 1. Customer Lifecycle Management
+
+Contacts are automatically classified into 8 stages and moved between them based on order frequency, engagement signals, and time-based rules — without manual intervention.
+
+**Stages:** `cold` → `engaged` → `new_customer` → `active_customer` → `cooling` → `lapsed_customer` → `reactivation_candidate` → `optout`
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `contacts.lifecycle_segment` | Current stage stored on every contact row |
+| `rules` table | Predicate SQL + action pairs defining when to transition |
+| `campaign_routing` table | Maps each lifecycle stage to an Instantly email campaign |
+| `decision_log` table | Audit trail of every stage transition |
+| `run_lifecycle_cycle()` stored proc | Main rule engine — evaluates predicates, transitions segments, queues campaigns |
+| `evaluate_rules()` stored proc | Core rule evaluation loop called by the above |
+| `routers/lifecycle.py` | `POST /api/lifecycle/run` endpoint |
+| `[Claude] Lifecycle Cycle Runner` n8n | Fires `POST /api/lifecycle/run` every hour |
+| `[Airtable] Playbook Sync` n8n | Syncs user-configured rules into `agent_playbook` every 15 min |
+
+---
+
+## 2. AI Agent Pipeline
+
+Per-contact AI reasoning using 8 sequential Claude calls that produce one concrete outreach action. Runs in real-time after inbound events and in batch every 3 hours.
+
+**Flow:** Inference (×3 parallel) → Decision (×4 parallel) → Orchestrator (×1) → `action_queue`
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `routers/agents.py` | Full 4-layer pipeline implementation (~1,000 lines) |
+| `customer_goals` table | One active goal per contact (`convert_to_order` / `retain` / `reactivate`) |
+| `inference_results` table | Layer 1 outputs — sentiment, intent, engagement |
+| `decision_recommendations` table | Layer 2 outputs — stage, channel, offer, escalation |
+| `orchestrator_log` table | Layer 3 chosen action, full reasoning, guardrails applied |
+| `action_queue` table | Pending → executing → done/failed lifecycle for each action |
+| `agent_playbook` table | User-configured rules injected into Claude system prompts (synced from Airtable) |
+| `[Claude] Agent Orchestration` n8n | Batch cycle every 3 hours for all active-goal contacts |
+| `[Telnyx] Inbound SMS Collector` n8n | Triggers real-time cycle per contact after inbound SMS/call |
+
+**Delivery guardrails (Layer 3 overrides):**
+- `delivered` → thank-you SMS with reorder nudge (24 h cooldown)
+- `delivery_failed` / `delivery_returned` → high-urgency Airtable escalation
+- `out_for_delivery` / `driver_assigned` → no action (order in flight)
+
+---
+
+## 3. Multi-Channel Marketing Execution
+
+Actions decided by the agent pipeline are dispatched to the correct channel (SMS, email, or field sales) via the `action_queue` mechanism.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `action_queue` table | Staging table for all approved outreach actions |
+| `[System] Action Queue Executor` n8n | Polls queue every 30 min; routes to Telnyx / Instantly / Airtable / Google Drive / Gmail-SMTP |
+| `[Telnyx] Broadcast Dispatch` n8n | Dispatches broadcasts every 5 min — SMS via Telnyx, email via Gmail-SMTP |
+| `[Telnyx] Broadcast Form` n8n | Web form for the team to send manual delay alerts or promo blasts |
+| Telnyx API | SMS sending from `+18444322224` |
+| Instantly API | Campaign-based email delivery (5 lifecycle-mapped campaigns) |
+| Airtable API | Field sales task creation for human escalations |
+| `routers/sms.py` | `GET /api/sms/pending`, `POST /api/sms/{id}/sent` |
+| `routers/campaigns.py` | `GET /api/campaigns/pending`, `POST /api/campaigns/{id}/executed` |
+
+**5 Instantly campaigns:**
+
+| Campaign | Target Segment |
+|----------|---------------|
+| `DW-NurtureSlow-ColdContacts` | cold |
+| `DW-PromoStandard-ActiveEngaged` | engaged, active_customer |
+| `DW-NewCustomerOnboarding` | new_customer |
+| `DW-PromoAggressive-LapsedCustomers` | lapsed_customer |
+| `DW-Reactivation-LongDormant` | reactivation_candidate |
+
+---
+
+## 4. Daily Order Processing
+
+A CSV file of the day's orders is uploaded every afternoon and automatically creates/updates contacts, records orders and menu items, detects opportunities, and triggers agent cycles.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `routers/daily_orders.py` | `POST /api/daily-orders/process` — 5-step CSV pipeline |
+| `orders` table | Order records (ref, date, amount, slot, type) |
+| `order_items` table | Line items per order |
+| `menu_items` table | Master menu catalog (137 items) |
+| `menu_item_aliases` table | CSV dish name → canonical menu item resolution |
+| `[Orders] Daily CSV Upload` n8n | Uploads daily CSV at 1 PM EST (Mon–Sat) |
+
+**5-step menu item resolution:** exact match → alias lookup → normalized match → fuzzy match (85% threshold) → create new item
+
+**Post-upload triggers:** lifecycle run → opportunity detection → agent cycle for new/returning contacts
+
+---
+
+## 5. Delivery-Aware Intelligence
+
+Real-time delivery status from Shipday is ingested and used by the AI orchestrator to override standard outreach logic — e.g., thank customers immediately after delivery, escalate instantly on failure.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| Shipday API | Source of delivery status, driver location, ETA |
+| `delivery_status` table | Delivery event log per contact and order |
+| `update_delivery_status()` stored proc | Delivery event processing with contact linkage |
+| `routers/delivery.py` | `POST /api/delivery/status` |
+| `[Shipday] Delivery Collector` n8n | Polls Shipday every 30 min |
+| `[Shipday] Feedback Sync` n8n | Polls feedback, delivery instructions, proof-of-delivery hourly |
+| `[Shipday] Historical Import` n8n | Manual one-shot backfill (intentionally inactive) |
+| Layer 3 orchestrator guardrails | Reads latest delivery event; overrides standard action logic |
+
+---
+
+## 6. Marketing Intelligence Cycle
+
+A 5-phase rule-based engine runs every hour to detect signals across all contacts and generate opportunities for the action queue — without waiting for a specific inbound event.
+
+**7 signal types detected:**
+
+| Signal | Detection Logic |
+|--------|----------------|
+| `engaged_no_order` | 3+ opens/clicks in 7 days, no order in 7 days |
+| `new_customer_no_repeat` | Exactly 1 order, 5+ days since first, no repeat |
+| `lapsed_reengaged` | Lapsed segment + recent SMS reply or email click |
+| `reorder_intent` | Call transcript contains reorder keywords |
+| `app_customers_for_conversion` | Orders via app, never ordered direct |
+| `subscription_candidates` | 3+ one-time orders in 30 days, regular cadence |
+| `high_value_at_risk` | 5+ total orders, no order in 14+ days |
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `routers/intelligence.py` | 5-phase cycle: INTAKE → EVIDENCE → INFERENCE → DECISION → EXECUTION |
+| `opportunities` table | One row per detected opportunity (`pending` → `dispatched` → `outcome_recorded`) |
+| `engagement_rollups` table | 7-day/30-day rolling metrics per contact |
+| `refresh_engagement_rollups()` stored proc | Recalculates rollups from raw events |
+| `create_opportunity()` stored proc | Creates opportunity with deduplication |
+| `routers/opportunities.py` | CRUD + detection endpoints |
+| `[Claude] Hourly Intelligence Cycle` n8n | Fires `POST /api/intelligence/run-cycle` every hour |
+| `[Instantly] Campaign Performance` n8n | Ingests Instantly email events into DB hourly |
+
+---
+
+## 7. Menu Management
+
+The weekly menu is maintained by staff in Airtable and automatically synced to Postgres hourly. Claude uses the live menu to personalise every outreach message — anchoring to favourites, bridging to items the customer has never tried.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| Airtable "Weekly Menu" table | Staff-editable source of truth (Name, Category, Is Veg, Price, Active) |
+| `weekly_menu_schedule` table | Postgres mirror, keyed by `(week_start, item_name)` |
+| `routers/airtable_menu.py` | CRUD endpoints — `GET/POST/PUT/DELETE /api/menu/items`, `POST /api/menu/sync` |
+| `routers/menu_sync.py` | `GET /api/menu/current` used by the agent pipeline to load this week's menu |
+| `[Airtable] Menu Sync` n8n | Pulls all Airtable records → upserts Postgres every hour (ID: `baZV5ViA5lXNCTWR`) |
+| `current_menu` field | Injected into every Claude contact profile — full this-week menu |
+| `new_to_customer_this_week` field | Items from `current_menu` that the customer has never ordered; used to spark curiosity |
+
+---
+
+## 8. Self-Service Marketing Queries
+
+The marketing team can ask instant data questions via a web form without writing SQL. Queries route to either fast SQL (free) or a Claude-powered free-form analysis.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `routers/query.py` | `POST /api/query` — routes to 10 SQL categories or 1 Claude category |
+| `[Airtable] Marketing Query Form` n8n | Web form at `digitalworker.dataskate.io/form/marketing-query-form`; logs results to Airtable |
+
+**10 Tier-1 SQL categories** (instant, free): `customer_lookup`, `pipeline_snapshot`, `campaign_performance`, `who_to_contact`, `daily_summary`, `order_analytics`, `communication_history`, `ground_team_notes`, `ad_copies`, `submit_input`
+
+**1 Tier-2 Claude category** (`free_form`, ~$0.02/query): Claude receives lifecycle distribution, order stats, top dishes, recent transitions, playbook rules, and team content — responds with actionable insights.
+
+---
+
+## 9. Growth Hacker Agent
+
+A weekly experiment loop where Claude invents novel marketing hypotheses, launches them against a test cohort, measures conversion 7 days later, and feeds learnings back into the next experiment.
+
+**Experiment types:** `timing` (unusual send windows), `offer` (free add-ons, credits), `message_angle` (scarcity, nostalgia, social proof), `channel_sequence` (SMS → email follow-up)
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `routers/growth_agent.py` | `POST /api/growth/run-cycle`, `/measure`, `/baseline/update`; `GET /experiments`, `/insights` |
+| `experiments` table | One row per experiment: hypothesis, type, channel, cohort size, results |
+| `experiment_contacts` table | Which contacts are in each experiment + order outcome |
+| `growth_baseline` table | Historical 7-day baseline conversion rates for comparison |
+| `[Claude] Growth Agent Cycle` n8n | Runs every Monday 7:30 AM: measure prior → design new → dispatch → email report |
+
+---
+
+## 10. Daily Reporting
+
+Two Claude-written email reports land in the team inbox each morning — an operational summary of what the system did, and an outcome summary of what converted.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `routers/agents.py` `/report/activity` | Queries last 24 h of agent runs, actions, escalations; Claude writes HTML + CSV |
+| `routers/agents.py` `/report/outcome` | Queries orders, opens, goal achievements; Claude writes HTML + CSV |
+| `[Reporting] Daily Activity Report` n8n | Fires at 8:00 AM daily |
+| `[Reporting] Daily Outcome Report` n8n | Fires at 8:30 AM daily |
+| `[Reporting] Daily Field Brief` n8n | Fires at 7:30 AM — generates field sales call list |
+| Gmail-SMTP n8n credential (`Sk6XzPNPnJTXHEbr`) | Delivers report emails to `REPORT_EMAIL_TO` (default `core@dabbahwala.com`) |
+
+---
+
+## 11. Team Empowerment
+
+Ground team observations, social media ad copies, and user-configured agent rules flow into Claude's decision-making — so institutional knowledge shapes every outreach message.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `team_content` table | Stores ground notes, ad copies, Google Doc content |
+| `routers/team_content.py` | `POST /sync` (Google Docs), `POST /submit` (form), `GET /browse`, `POST /search` |
+| `[Google] Docs & Drive Sync` n8n | Polls Drive folder every 30 min; classifies docs as `ground_note` or `ad_copy` |
+| Google Drive folder `1O0ES9uiDL6AWf9QMMYiyRUWGtymDjPF5` | Source of team documents |
+| `agent_playbook` table | 6 rule categories: exclusion, priority, inference, decision, messaging, general |
+| `routers/playbook.py` | CRUD + Airtable sync for playbook rules |
+| `[Airtable] Playbook Sync` n8n | Syncs rules from Airtable every 15 min |
+| Layer 1–3 system prompts | Inject active playbook rules before every Claude call |
+
+---
+
+## 12. Field Sales Management
+
+High-intent contacts and failed deliveries are escalated as tasks in Airtable for the field team. Outcomes recorded in Airtable close the feedback loop back into the system.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `opportunities` table | Pending → dispatched → outcome_recorded lifecycle |
+| `routers/opportunities.py` | Detect, create, dispatch, and outcome endpoints |
+| `create_opportunity()` stored proc | Dedup-safe opportunity creation |
+| Airtable "Field Sales Tasks" base | Where field agents see and update their task queue |
+| `[Airtable] Outcome Sync` n8n | Polls Airtable every 15 min; posts outcomes back via `POST /api/opportunities/{id}/outcome` |
+| `routers/telnyx.py` `/field-agent-message` | Logs SMS sent by field agents from personal phones |
+
+---
+
+## 13. Claude Desktop MCP
+
+Marketing and ops team members can query live Postgres data conversationally in Claude Desktop without writing SQL — using 30+ purpose-built tools.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `mcp_server/server.py` | FastMCP app; registers all tool groups |
+| `mcp_server/tools/contacts.py` | `get_contact_detail()`, `search_contacts()` |
+| `mcp_server/tools/analytics.py` | `get_lifecycle_summary()`, `get_campaign_performance()`, `get_engagement_trends()` |
+| `mcp_server/tools/communications.py` | `get_communication_history()`, delivery tracking |
+| `mcp_server/tools/recommendations.py` | `suggest_reactivation_targets()`, `recommend_content_strategy()` |
+| `mcp_server/tools/opportunities.py` | `detect_opportunities()`, `create_opportunity()`, `get_high_intent_signals()` |
+| `mcp_server/tools/agents.py` | `get_latest_inference()`, `get_latest_decision()`, `get_orchestrator_history()`, `get_pending_actions()`, `get_agent_cycle_summary()` |
+| `mcp_server/tools/instantly.py` | `instantly_list_campaigns()`, `instantly_get_campaign_analytics()`, `instantly_list_leads()`, `instantly_get_email_events()` |
+| `mcp_server/tools/shipday.py` | `get_shipday_order()`, `list_shipday_orders()`, `get_shipday_carriers()`, `get_shipday_order_tracking()` |
