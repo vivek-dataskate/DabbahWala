@@ -55,7 +55,7 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. This backend syst
 |-----------|----------|-------|
 | Web service | Render (Starter) — Oregon | Auto-deploys on push to `main` |
 | PostgreSQL 16 | Render (Starter) — Oregon | Schema: `dabbahwala` |
-| n8n automation | Self-hosted `digitalworker.dataskate.io` | 25 workflows |
+| n8n automation | Self-hosted `digitalworker.dataskate.io` | 30 workflows |
 | CI/CD | GitHub Actions | — |
 
 ### External Services
@@ -129,19 +129,21 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 
 ## 4. Database Schema
 
-**PostgreSQL 16, schema: `dabbahwala`, 55+ migrations**
+**PostgreSQL 16, schema: `dabbahwala`, 59+ migrations**
 
 ### Core Tables
 
 | Table | Purpose |
 |-------|---------|
-| `contacts` | Master customer record — email, phone, lifecycle_segment, channel flags, order counts, current campaign |
+| `contacts` | Master customer record — email, phone, lifecycle_segment, channel flags, order counts, current campaign, `source` (origin tag e.g. `test_harness`, `shipday`, `import`) |
 | `events` | Raw event log — order_placed, email_open, sms_received, delivery_failed, etc. |
 | `orders` | Order records — order_ref, total_amount, delivery_slot, order_type |
 | `order_items` | Line items — menu_item_id, quantity, unit_price |
 | `menu_items` | Master menu catalog — item_name, category, is_veg, avg_price |
 | `menu_item_aliases` | CSV dish name → canonical menu item mapping |
+| `weekly_menu` | Weekly menu snapshot keyed by `(week_start, item_name)` — `is_featured`, `display_order`, `price`, FK to `menu_items` |
 | `weekly_menu_schedule` | Airtable-driven weekly menu, keyed by `(week_start, item_name)`, includes `airtable_record_id`, `active`, `price` |
+| `menu_sync_log` | Audit log of each menu scrape/sync attempt — source, items found/upserted, status, error |
 
 ### Communication Tables
 
@@ -175,6 +177,15 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `opportunities` | Conversion opportunities with signal type, confidence, status |
 | `decision_log` | Lifecycle transition audit trail |
 | `daily_reports` | Aggregated daily metrics |
+| `test_runs` | E2E test suite run records — JSONB results, pass/fail counts, triggered_by (migration 056) |
+
+### Growth Hacker Agent Tables (migration 055)
+
+| Table | Purpose |
+|-------|---------|
+| `experiments` | One row per growth experiment — type (timing/offer/message_angle/channel_sequence), cohort size, results |
+| `experiment_contacts` | Contacts enrolled in each growth experiment + order outcome |
+| `growth_baseline` | Historical 7-day baseline conversion rates (updated by growth agent for comparison) |
 
 ### Goal & Competitor Agent Tables (migrations 050, 055, 057, 058)
 
@@ -204,6 +215,8 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `get_campaign_performance()` | Campaign stats (opens, clicks, orders) |
 | `generate_daily_report()` | Aggregate metrics for a date |
 | `create_opportunity()` | Opportunity creation with deduplication |
+| `get_pending_campaign_moves()` | Returns pending `campaign_queue` rows joined with contacts — includes `contact_first_name`, `contact_last_name` for Instantly lead creation (updated migration 059) |
+| `store_telnyx_message(...)` | 12-parameter version only — old 9-parameter overload dropped (migration 059) to fix ambiguous-function error |
 
 ---
 
@@ -383,7 +396,7 @@ The Intelligence Cycle scans every contact in the database each hour to find beh
 
 ## 8. n8n Workflow Layer
 
-**27 workflows on `digitalworker.dataskate.io` — all active except `[Shipday — Evidence] Historical Import` (manual one-shot)**
+**30 workflows on `digitalworker.dataskate.io` — all active except `[Shipday — Evidence] Historical Import` (manual one-shot)**
 
 Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/`.
 
@@ -391,9 +404,10 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 
 | Group | Workflow | Schedule | Purpose |
 |-------|----------|----------|---------|
-| **Airtable** | Menu Sync | Daily 6:30 AM | Pull Airtable "Weekly Menu" → `POST /api/menu/sync` → `weekly_menu_schedule` |
+| **Airtable** | Menu Sync | Hourly | Pull Airtable "Weekly Menu" → `POST /api/menu/sync` → `weekly_menu_schedule` |
 | **Airtable** | Playbook Sync | Every 15 min | Sync rules from Airtable → `agent_playbook` table |
 | **Airtable** | Outcome Sync | Every 15 min | Pull Airtable field sales outcomes → update opportunities |
+| **Airtable** | Marketing Query Form | On-demand (form submit) | n8n form → `POST /api/query` → Claude inference → logs to Airtable |
 | **Shipday** | Delivery Collector | Every 30 min | Poll Shipday → `POST /api/delivery/status` |
 | **Shipday** | Feedback Sync | Hourly | Poll delivery feedback, instructions, proof-of-delivery |
 | **Shipday** | Historical Import | Manual only | One-shot backfill of up to 1 year of order history |
@@ -414,7 +428,8 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Claude** | Lifecycle Cycle Runner | Daily 6:00 AM | `POST /api/lifecycle/run` — SQL rule engine |
 | **Claude** | Lapsed Customer Daily | Daily (random offset) | Persistent re-engagement for lapsed customers |
 | **Claude** | Menu Sync Weekly | Weekly | Menu suggestion agent cycle |
-| **Claude** | Growth Agent Cycle | Daily 9 AM | Growth hacker 4-phase experiment loop |
+| **Claude** | Growth Agent Cycle | Every Monday 7:30 AM | Growth hacker 4-phase experiment loop: refresh baseline → measure → design+launch → email report |
+| **Claude** | Goal-Oriented Agent Cycle | Daily 9:00 AM | `POST /api/goal-agent/run` — 4-phase proactive loop: HYPOTHESIZE → EXPERIMENT → MEASURE → HARVEST; proven experiments become `discovered_signals` |
 | **Claude** | Competitor Research Agent | Every Monday 6:30 AM | `POST /api/competitor-agent/run` — parse .eml samples + scrape 5 competitor sites + Claude generates 8 hypotheses covering all 4 retention segments → auto-inject into `goal_experiments` |
 | **System** | Action Queue Executor | Every 30 min | Route action_queue rows to Telnyx / Instantly / Airtable / Drive / SMTP |
 | **System** | Chatbot Docs Reindex | Every Monday 2 AM | Refresh chatbot document index |
@@ -537,7 +552,7 @@ On every merge to `main`:
 2. `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
 **Migration rules:**
-- Files in `migrations/` numbered sequentially (next: **057**)
+- Files in `migrations/` numbered sequentially (next: **060**)
 - Always use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`
 - Never modify existing migrations — always create a new one
 - Schema: `dabbahwala`
@@ -559,10 +574,10 @@ On every merge to `main`:
 | Metric | Count |
 |--------|-------|
 | API endpoints | ~88+ |
-| Database migrations | 56 |
+| Database migrations | 59 |
 | Database tables | 22+ |
 | Stored functions | 15+ |
-| n8n workflows | 26 |
+| n8n workflows | 30 |
 | MCP tools | 35+ |
 | Claude calls per contact cycle | 8 (3 + 4 + 1) |
 | Signal types detected | 7 |
