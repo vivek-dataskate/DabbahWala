@@ -54,8 +54,8 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. This backend syst
 | Component | Platform | Notes |
 |-----------|----------|-------|
 | Web service | Render (Starter) — Oregon | Auto-deploys on push to `main` |
-| PostgreSQL 16 | Render (Starter) — Oregon | Schema: `dabbahwala` |
-| n8n automation | Self-hosted `digitalworker.dataskate.io` | 30 workflows |
+| PostgreSQL 16 (Supabase) | pooler.supabase.com — transaction mode (port 6543) | Schema: `dabbahwala`; search_path set via connection startup option |
+| n8n automation | Self-hosted `digitalworker.dataskate.io` | 25 workflows |
 | CI/CD | GitHub Actions | — |
 
 ### External Services
@@ -215,8 +215,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `get_campaign_performance()` | Campaign stats (opens, clicks, orders) |
 | `generate_daily_report()` | Aggregate metrics for a date |
 | `create_opportunity()` | Opportunity creation with deduplication |
-| `get_pending_campaign_moves()` | Returns pending `campaign_queue` rows joined with contacts — includes `contact_first_name`, `contact_last_name` for Instantly lead creation (updated migration 059) |
-| `store_telnyx_message(...)` | 12-parameter version only — old 9-parameter overload dropped (migration 059) to fix ambiguous-function error |
+| `get_pending_campaign_moves()` | Returns pending campaign_queue rows joined with contacts — includes `contact_first_name`, `contact_last_name` for Instantly lead creation |
 
 ---
 
@@ -235,7 +234,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `query.py` | `/api/query` | `POST /` (14 Tier-1 SQL + 1 Tier-2 Claude categories — includes `sms_performance`, `email_performance`, `activity_report`, `outcome_report` with date-range filtering), `GET /categories` |
 | `lifecycle.py` | `/api/lifecycle` | `POST /run` — SQL rule engine |
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |
-| `campaigns.py` | `/api/campaigns` | `GET /pending`, `POST /{id}/executed` |
+| `campaigns.py` | `/api/campaigns` | `GET /pending`, `POST /bulk-executed` (batch mark), `POST /{id}/executed` |
 | `telnyx.py` | `/api/telnyx` | `POST /message`, `POST /call`, `POST /field-agent-message` |
 | `delivery.py` | `/api/delivery` | `POST /status` |
 | `playbook.py` | `/api/playbook` | `GET /rules`, `POST /rules`, `POST /sync-from-airtable` |
@@ -425,7 +424,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Reporting** | Daily Outcome Report | Daily 8:30 AM | `POST /api/agents/report/outcome` → Claude HTML + CSV → email |
 | **Claude** | Agent Orchestration | Daily 9:00 AM | `POST /api/agents/cycle/run-daily-sweep` — dormant contacts (cap 200, 72 h cooldown) |
 | **Claude** | Daily Intelligence Cycle | Daily 7:00 AM | `POST /api/intelligence/run-cycle` — full 5-phase cycle (24 h poll window) |
-| **Claude** | Lifecycle Cycle Runner | Daily 6:00 AM | `POST /api/lifecycle/run` — SQL rule engine |
+| **Claude** | Lifecycle Cycle Runner | Daily 6:00 AM | `POST /api/lifecycle/run` — SQL rule engine; pending contacts pushed to Instantly via bulk `POST /api/campaigns/bulk-executed` (single DB call) |
 | **Claude** | Lapsed Customer Daily | Daily (random offset) | Persistent re-engagement for lapsed customers |
 | **Claude** | Menu Sync Weekly | Weekly | Menu suggestion agent cycle |
 | **Claude** | Growth Agent Cycle | Every Monday 7:30 AM | Growth hacker 4-phase experiment loop: refresh baseline → measure → design+launch → email report |

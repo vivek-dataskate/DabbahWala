@@ -2,6 +2,7 @@ import logging
 from contextlib import contextmanager
 
 import psycopg2
+from fastapi import HTTPException
 from psycopg2.extras import RealDictCursor
 from psycopg2.pool import SimpleConnectionPool
 
@@ -46,16 +47,6 @@ def get_connection():
                 "Direct connection also failed: %s", direct_err, exc_info=True
             )
             raise
-    # Set search_path so all queries resolve to the dabbahwala schema
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SET search_path TO dabbahwala")
-        conn.commit()
-        logger.debug("search_path=dabbahwala set on conn_id=%s", id(conn))
-    except Exception as e:
-        logger.error("Failed to set search_path: %s", e, exc_info=True)
-        conn.close()
-        raise
     return conn
 
 
@@ -87,10 +78,7 @@ def get_cursor(commit=True):
             conn.commit()
             logger.debug("Transaction committed on conn_id=%s", id(conn))
     except Exception as e:
-        # HTTPException is a business-logic signal (e.g. 404 Not Found), not a DB error.
-        # Roll back to reset connection state, but don't pollute logs with a false alarm.
-        from fastapi import HTTPException as _HTTPException
-        if not isinstance(e, _HTTPException):
+        if not isinstance(e, HTTPException):
             logger.error(
                 "DB error on conn_id=%s — rolling back: %s", id(conn), e, exc_info=True
             )
