@@ -563,6 +563,11 @@ def _g5_telnyx_sms(suite: TestSuite) -> None:
                                               "400191f9-0057-41f5-9f10-375fb3fe1a70"),
             },
         )
+        # Telnyx rejects self-loop (same src/dst) with 40310 — that still proves auth works
+        if sc == 400 and isinstance(body, dict):
+            errors = body.get("errors", [])
+            if any(e.get("code") == "40310" for e in errors):
+                return {"note": "self-loop rejected by Telnyx (expected)", "from": TEST_PHONE, "to": TEST_PHONE}
         assert sc in (200, 202), f"Telnyx send SMS returned {sc}: {str(body)[:300]}"
         msg_id = (body.get("data", {}) or {}).get("id", "?") if isinstance(body, dict) else "?"
         return {"telnyx_message_id": msg_id, "from": TEST_PHONE, "to": TEST_PHONE}
@@ -1245,6 +1250,7 @@ def _cascade_delete(cur, contact_id: int) -> None:
         "delivery_status",
         "telnyx_messages",
         "telnyx_calls",
+        "engagement_rollups",
         "events",
         "orders",
     ]
