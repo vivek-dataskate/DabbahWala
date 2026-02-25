@@ -27,6 +27,8 @@ class CampaignMove(BaseModel):
     queue_id: int
     contact_email: Optional[str] = None
     contact_phone: Optional[str] = None
+    contact_first_name: Optional[str] = None
+    contact_last_name: Optional[str] = None
     from_campaign: Optional[str] = None
     to_campaign: str
 

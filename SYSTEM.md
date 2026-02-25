@@ -234,7 +234,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `query.py` | `/api/query` | `POST /` (14 Tier-1 SQL + 1 Tier-2 Claude categories — includes `sms_performance`, `email_performance`, `activity_report`, `outcome_report` with date-range filtering), `GET /categories` |
 | `lifecycle.py` | `/api/lifecycle` | `POST /run` — SQL rule engine |
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |
-| `campaigns.py` | `/api/campaigns` | `GET /pending`, `POST /bulk-executed` (batch mark), `POST /{id}/executed` |
+| `campaigns.py` | `/api/campaigns` | `GET /pending`, `GET /active-contacts` (all contacts with active campaign — for Instantly seed), `POST /bulk-executed` (batch mark), `POST /{id}/executed` |
 | `telnyx.py` | `/api/telnyx` | `POST /message`, `POST /call`, `POST /field-agent-message` |
 | `delivery.py` | `/api/delivery` | `POST /status` |
 | `playbook.py` | `/api/playbook` | `GET /rules`, `POST /rules`, `POST /sync-from-airtable` |
@@ -417,6 +417,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Instantly** | Campaign Performance | Hourly | Fetch Instantly analytics → DB |
 | **Instantly** | Campaign Sync | Every 6 h | Sync campaigns tagged `dabbahwala` → `POST /api/webhooks/sync-campaigns` |
 | **Instantly** | Campaign Setup | Daily midnight | Create missing Instantly campaigns (no-op if all exist) |
+| **Instantly** | Bulk Lead Seeder | Manual only | One-shot: seed all active contacts into their Instantly campaign; skips missing `first_name`; `skip_if_in_workspace=true` (idempotent) |
 | **Google** | Docs & Drive Sync | Every 30 min | List Drive folder → read Google Docs → `POST /api/team-content/sync` |
 | **Orders** | Daily CSV Upload | Daily 1 PM EST | Upload daily CSV → `POST /api/daily-orders/process` |
 | **Reporting** | Daily Field Brief | Daily 7:30 AM | `POST /api/field-agent/daily-brief` |

@@ -221,6 +221,15 @@
       "file": "instantly_campaign_sync.json",
       "note": "Fetches Instantly campaigns tagged 'dabbahwala' and POSTs to POST /api/webhooks/sync-campaigns"
     },
+    "instantly_bulk_seed": {
+      "id": "1s7npKViuy1eyowW",
+      "name": "[Instantly — Sync] Bulk Lead Seeder",
+      "tags": ["DabbahWala", "Instantly", "Action"],
+      "schedule": "Manual trigger only",
+      "active": false,
+      "file": "instantly_bulk_seed.json",
+      "note": "One-shot manual workflow: seeds ALL active contacts (with current_campaign set) into their respective Instantly campaigns. Skips contacts with missing first_name. Use skip_if_in_workspace=true to avoid duplicates."
+    },
     "instantly_setup": {
       "id": "NbnkM3nTFKSgtcfb",
       "name": "[Instantly — Action] Campaign Setup",

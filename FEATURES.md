@@ -92,7 +92,7 @@ Actions decided by the agent pipeline are dispatched to the correct channel (SMS
 | Telnyx API | SMS sending from `+18444322224` |
 | Instantly API | Campaign-based email delivery (5 lifecycle-mapped campaigns) |
 | Airtable API | Field sales task creation for human escalations |
-| `routers/campaigns.py` | `GET /api/campaigns/pending`, `POST /api/campaigns/{id}/executed` |
+| `routers/campaigns.py` | `GET /api/campaigns/pending`, `GET /api/campaigns/active-contacts`, `POST /api/campaigns/bulk-executed`, `POST /api/campaigns/{id}/executed` |
 
 **5 Instantly campaigns:**
 

@@ -26,16 +26,20 @@ def get_pending_campaigns():
     with get_cursor(commit=False) as cur:
         cur.execute("SELECT * FROM get_pending_campaign_moves()")
         rows = cur.fetchall()
-        return [
-            CampaignMove(
-                queue_id=r["queue_id"],
-                contact_email=r["contact_email"],
-                contact_phone=r["contact_phone"],
-                from_campaign=r["from_campaign"],
-                to_campaign=r["to_campaign"],
-            )
-            for r in rows
-        ]
+    moves = [
+        CampaignMove(
+            queue_id=r["queue_id"],
+            contact_email=r["contact_email"],
+            contact_phone=r["contact_phone"],
+            contact_first_name=r.get("contact_first_name"),
+            contact_last_name=r.get("contact_last_name"),
+            from_campaign=r["from_campaign"],
+            to_campaign=r["to_campaign"],
+        )
+        for r in rows
+    ]
+    logger.info("get_pending_campaigns — returned %d pending moves", len(moves))
+    return moves
 
 
 @router.post("/bulk-executed")
@@ -47,7 +51,32 @@ def mark_bulk_executed(payload: BulkExecutedRequest):
             "UPDATE campaign_queue SET status = 'executed', executed_at = now() WHERE id = ANY(%s)",
             (payload.queue_ids,),
         )
-        return {"status": "ok", "updated": cur.rowcount}
+        updated = cur.rowcount
+    logger.info("mark_bulk_executed — marked %d queue entries as executed (ids=%s)", updated, payload.queue_ids)
+    return {"status": "ok", "updated": updated}
+
+
+@router.get("/active-contacts")
+def get_active_contacts():
+    """Return all contacts with a current campaign — used for one-time Instantly bulk seed."""
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT c.id AS contact_id,
+                   c.email,
+                   c.first_name,
+                   c.last_name,
+                   c.phone,
+                   c.current_campaign
+            FROM contacts c
+            WHERE c.current_campaign IS NOT NULL
+              AND c.current_campaign != 'APP_TO_DIRECT'
+              AND c.email IS NOT NULL
+              AND c.lifecycle_segment != 'optout'
+            ORDER BY c.id
+        """)
+        rows = cur.fetchall()
+    logger.info("get_active_contacts — returned %d contacts with active campaigns", len(rows))
+    return [dict(r) for r in rows]
 
 
 @router.post("/{queue_id}/executed")

@@ -1,8 +1,11 @@
+import logging
+
 from fastapi import APIRouter
 
 from app.db import get_cursor
 from app.models import LifecycleResult
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -11,7 +14,13 @@ def run_lifecycle_cycle():
     with get_cursor() as cur:
         cur.execute("SELECT * FROM run_lifecycle_cycle()")
         row = cur.fetchone()
-        return LifecycleResult(
-            contacts_updated=row["contacts_updated"],
-            campaigns_queued=row["campaigns_queued"],
-        )
+    result = LifecycleResult(
+        contacts_updated=row["contacts_updated"],
+        campaigns_queued=row["campaigns_queued"],
+    )
+    logger.info(
+        "run_lifecycle_cycle — contacts_updated=%d campaigns_queued=%d",
+        result.contacts_updated,
+        result.campaigns_queued,
+    )
+    return result
