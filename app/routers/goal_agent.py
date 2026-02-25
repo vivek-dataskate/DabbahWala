@@ -15,6 +15,7 @@ Four-phase loop (runs daily):
 This creates a continuous improvement loop: ideas → test → signal → system learns.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -362,17 +363,29 @@ def _run_hypothesis_generator(client: anthropic.Anthropic, snapshot: dict) -> li
     return hypotheses
 
 
+def _hypothesis_hash(h: dict) -> str:
+    """Return a 16-char hex fingerprint of experiment_type + hypothesis text.
+
+    Used as a dedup key so the same idea is never inserted twice, even across
+    multiple daily runs of the hypothesis generator.
+    """
+    key = f"{h.get('experiment_type', '')}|{h.get('hypothesis', '').lower().strip()}"
+    return hashlib.sha256(key.encode()).hexdigest()[:16]
+
+
 def _save_experiments(hypotheses: list[dict]) -> list[int]:
-    """Persist hypothesis list to goal_experiments table."""
+    """Persist hypothesis list to goal_experiments, skipping duplicates by hash."""
     ids = []
     for h in hypotheses:
+        h_hash = _hypothesis_hash(h)
         with get_cursor() as cur:
             cur.execute(
                 """
                 INSERT INTO goal_experiments
                     (hypothesis, experiment_type, cohort_description, cohort_filter,
-                     message_template, success_threshold, status)
-                VALUES (%s, %s, %s, %s::jsonb, %s, %s, 'pending')
+                     message_template, success_threshold, status, hypothesis_hash)
+                VALUES (%s, %s, %s, %s::jsonb, %s, %s, 'pending', %s)
+                ON CONFLICT (hypothesis_hash) DO NOTHING
                 RETURNING id
                 """,
                 (
@@ -382,9 +395,17 @@ def _save_experiments(hypotheses: list[dict]) -> list[int]:
                     json.dumps(h.get("cohort_filter", {})),
                     h.get("message_template", ""),
                     h.get("success_threshold", 0.10),
+                    h_hash,
                 ),
             )
-            ids.append(cur.fetchone()["id"])
+            row = cur.fetchone()
+            if row:
+                ids.append(row["id"])
+            else:
+                logger.info(
+                    "GoalAgent HYPOTHESIZE: skipped duplicate hypothesis hash=%s type=%s",
+                    h_hash, h.get("experiment_type"),
+                )
     return ids
 
 

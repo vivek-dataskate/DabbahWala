@@ -1,0 +1,97 @@
+{
+  "name": "[Claude — Inference] Competitor Research Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 6 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Monday at 6:30 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/competitor-agent/run",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "run-competitor-agent",
+      "name": "Run Competitor Research Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log the result summary\nconst result = $('Run Competitor Research Cycle').first().json;\nreturn [{\n  json: {\n    timestamp: result.timestamp,\n    email_samples_parsed: result.email_samples_parsed,\n    websites_scraped: result.websites_scraped,\n    hypotheses_queued: result.hypotheses_queued,\n    summary: `Competitor Agent: parsed ${result.email_samples_parsed} emails, scraped ${result.websites_scraped} sites, queued ${result.hypotheses_queued} new experiments`\n  }\n}];"
+      },
+      "id": "log-result",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Every Monday at 6:30 AM": {
+      "main": [
+        [
+          {
+            "node": "Run Competitor Research Cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Competitor Research Cycle": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Claude",
+      "id": "tag-claude"
+    },
+    {
+      "name": "Inference",
+      "id": "tag-inference"
+    }
+  ],
+  "pinData": {}
+}

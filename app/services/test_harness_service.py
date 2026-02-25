@@ -25,6 +25,7 @@ Test groups
 12. Reports                   — activity report (Claude), outcome report (Claude)
 13. Self-Service & Chatbot    — query categories, tier-1 SQL query, chatbot ask
 14. Cleanup                   — delete all test data from DB
+15. Competitor Agent          — schema check, list runs, list experiments
 """
 
 import json
@@ -1177,6 +1178,65 @@ def _g13_query_chatbot(suite: TestSuite) -> None:
     _run(suite, "opportunities_detect", G, opportunities_detect)
 
 
+# ─── GROUP 15: Competitor Agent ──────────────────────────────────────────────
+
+def _g15_competitor_agent(suite: TestSuite) -> None:
+    G = "15_competitor_agent"
+
+    def schema_check():
+        """Verify competitor_agent_runs table and goal_experiments.source column exist."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.tables
+                WHERE table_name = 'competitor_agent_runs'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "competitor_agent_runs table missing"
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.columns
+                WHERE table_name = 'goal_experiments' AND column_name = 'source'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "goal_experiments.source column missing"
+        return {"competitor_agent_runs": "exists", "goal_experiments.source": "exists"}
+    _run(suite, "competitor_agent_schema", G, schema_check)
+
+    def list_runs():
+        sc, body = _local("GET", "/api/competitor-agent/runs")
+        assert sc == 200, f"competitor-agent/runs returned {sc}"
+        b = body if isinstance(body, dict) else {}
+        assert "runs" in b, f"Missing 'runs' key in response: {b}"
+        return {"run_count": b.get("count", 0)}
+    _run(suite, "competitor_agent_list_runs", G, list_runs)
+
+    def list_experiments():
+        sc, body = _local("GET", "/api/competitor-agent/experiments")
+        assert sc == 200, f"competitor-agent/experiments returned {sc}"
+        b = body if isinstance(body, dict) else {}
+        assert "experiments" in b, f"Missing 'experiments' key in response: {b}"
+        return {"experiment_count": b.get("count", 0)}
+    _run(suite, "competitor_agent_list_experiments", G, list_experiments)
+
+    def goal_hypothesis_hash_column():
+        """Verify hypothesis_hash column and unique index exist on goal_experiments."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM information_schema.columns
+                WHERE table_name = 'goal_experiments' AND column_name = 'hypothesis_hash'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "goal_experiments.hypothesis_hash column missing"
+            cur.execute("""
+                SELECT COUNT(*) AS cnt
+                FROM pg_indexes
+                WHERE tablename = 'goal_experiments'
+                  AND indexname = 'goal_experiments_hypothesis_hash_key'
+            """)
+            assert cur.fetchone()["cnt"] == 1, "goal_experiments_hypothesis_hash_key index missing"
+        return {"hypothesis_hash_column": "exists", "unique_index": "exists"}
+    _run(suite, "goal_hypothesis_hash_schema", G, goal_hypothesis_hash_column)
+
+
 # ─── GROUP 14: Data Cleanup ───────────────────────────────────────────────────
 
 def _cascade_delete(cur, contact_id: int) -> None:
@@ -1256,6 +1316,7 @@ def run_full_suite(triggered_by: str = "manual") -> TestSuite:
         _g11_orders(suite)
         _g12_reports(suite)
         _g13_query_chatbot(suite)
+        _g15_competitor_agent(suite)
     except Exception as e:
         logger.exception("Test suite failed unexpectedly at group level: %s", e)
     finally:
