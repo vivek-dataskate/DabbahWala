@@ -18,45 +18,30 @@
       "name": "Every Hour",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        220,
-        300
-      ]
+      "position": [220, 300]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://dabbahwala-latest.onrender.com/api/lifecycle/run",
-        "options": {
-          "timeout": 60000
-        }
+        "options": {"timeout": 60000}
       },
       "id": "run-lifecycle",
       "name": "Run Lifecycle Cycle",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        440,
-        300
-      ]
+      "position": [440, 300]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
           "conditions": [
             {
               "id": "has-campaigns",
               "leftValue": "={{ $json.campaigns_queued }}",
               "rightValue": 0,
-              "operator": {
-                "type": "number",
-                "operation": "gt"
-              }
+              "operator": {"type": "number", "operation": "gt"}
             }
           ],
           "combinator": "and"
@@ -67,10 +52,7 @@
       "name": "Campaigns Queued?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        660,
-        300
-      ]
+      "position": [660, 300]
     },
     {
       "parameters": {
@@ -82,10 +64,7 @@
       "name": "Fetch Pending Campaigns",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        880,
-        240
-      ]
+      "position": [880, 240]
     },
     {
       "parameters": {
@@ -95,41 +74,28 @@
       "name": "Split Campaign Moves",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1100,
-        240
-      ]
+      "position": [1100, 240]
     },
     {
       "parameters": {
-        "jsCode": "// Map internal campaign names to Instantly campaign IDs\nconst INSTANTLY_IDS = {\n  'NURTURE_SLOW':            '76a88797-961a-47b6-af11-77e2211c4e73',\n  'PROMO_STANDARD':          'f3e2d621-9bf2-4130-bc1c-f8168fc44e1e',\n  'ACTIVE_CUSTOMER':         'c763e229-f633-468b-bfe4-7f9a4fd21036',\n  'PROMO_AGGRESSIVE':        '87d44ff1-8720-4c1d-92ff-b827970f323f',\n  'NEW_CUSTOMER_ONBOARDING': '8a5ccbfb-500d-4060-ad99-76aa0159bbf2',\n  'REACTIVATION':            '69c84455-d9b8-437f-b249-8325d23798e6'\n};\n\nconst item = $input.item.json;\n\nconst toCampaignId   = INSTANTLY_IDS[item.to_campaign];\nconst fromCampaignId = item.from_campaign ? INSTANTLY_IDS[item.from_campaign] : null;\n\nif (!toCampaignId) {\n  throw new Error(`Unknown campaign name: ${item.to_campaign}`);\n}\n\nreturn {\n  json: {\n    queue_id:                 item.queue_id,\n    email:                    item.contact_email,\n    phone:                    item.contact_phone || null,\n    to_campaign:              item.to_campaign,\n    from_campaign:            item.from_campaign || null,\n    instantly_to_campaign_id: toCampaignId,\n    instantly_from_campaign_id: fromCampaignId\n  }\n};"
+        "jsCode": "// Map internal campaign names to Instantly campaign IDs\nconst INSTANTLY_IDS = {\n  'NURTURE_SLOW':            '76a88797-961a-47b6-af11-77e2211c4e73',\n  'PROMO_STANDARD':          'f3e2d621-9bf2-4130-bc1c-f8168fc44e1e',\n  'ACTIVE_CUSTOMER':         'c763e229-f633-468b-bfe4-7f9a4fd21036',\n  'PROMO_AGGRESSIVE':        '87d44ff1-8720-4c1d-92ff-b827970f323f',\n  'NEW_CUSTOMER_ONBOARDING': '8a5ccbfb-500d-4060-ad99-76aa0159bbf2',\n  'REACTIVATION':            '69c84455-d9b8-437f-b249-8325d23798e6'\n};\n\n// Campaigns with no Instantly email campaign (app-only users with placeholder emails)\nconst SKIP_CAMPAIGNS = new Set(['APP_TO_DIRECT']);\n\nconst item = $input.item.json;\n\nif (SKIP_CAMPAIGNS.has(item.to_campaign)) {\n  return {\n    json: {\n      queue_id: item.queue_id,\n      email:    item.contact_email,\n      skip:     true,\n      reason:   item.to_campaign + ' has no Instantly email campaign'\n    }\n  };\n}\n\nconst toCampaignId   = INSTANTLY_IDS[item.to_campaign];\nconst fromCampaignId = item.from_campaign ? INSTANTLY_IDS[item.from_campaign] : null;\n\nif (!toCampaignId) {\n  throw new Error('Unknown campaign name: ' + item.to_campaign);\n}\n\nreturn {\n  json: {\n    queue_id:                   item.queue_id,\n    email:                      item.contact_email,\n    phone:                      item.contact_phone || null,\n    to_campaign:                item.to_campaign,\n    from_campaign:              item.from_campaign || null,\n    instantly_to_campaign_id:   toCampaignId,\n    instantly_from_campaign_id: fromCampaignId,\n    skip:                       false\n  }\n};"
       },
       "id": "prepare-instantly-payload",
       "name": "Prepare Instantly Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1320,
-        240
-      ]
+      "position": [1320, 240]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
           "conditions": [
             {
               "id": "is-skip",
               "leftValue": "={{ $json.skip }}",
               "rightValue": true,
-              "operator": {
-                "type": "boolean",
-                "operation": "true"
-              }
+              "operator": {"type": "boolean", "operation": "true"}
             }
           ],
           "combinator": "and"
@@ -140,10 +106,7 @@
       "name": "Skip or Push?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        1540,
-        240
-      ]
+      "position": [1540, 240]
     },
     {
       "parameters": {
@@ -155,28 +118,18 @@
       "name": "Mark Skip Executed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1760,
-        120
-      ]
+      "position": [1760, 120]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict"
-          },
+          "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict"},
           "conditions": [
             {
               "id": "has-from-campaign",
               "leftValue": "={{ $json.instantly_from_campaign_id }}",
               "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty"
-              }
+              "operator": {"type": "string", "operation": "notEmpty"}
             }
           ],
           "combinator": "and"
@@ -187,10 +140,7 @@
       "name": "Has Old Campaign?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        1760,
-        360
-      ]
+      "position": [1760, 360]
     },
     {
       "parameters": {
@@ -201,34 +151,20 @@
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
-            {
-              "name": "campaign",
-              "value": "={{ $json.instantly_from_campaign_id }}"
-            },
-            {
-              "name": "email",
-              "value": "={{ $json.email }}"
-            }
+            {"name": "campaign_id", "value": "={{ $json.instantly_from_campaign_id }}"},
+            {"name": "email",       "value": "={{ $json.email }}"}
           ]
         },
-        "options": {
-          "allowUnauthorizedCerts": false
-        }
+        "options": {"allowUnauthorizedCerts": false}
       },
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "98RupYRuQa6m9mqh",
-          "name": "Instantly API Key"
-        }
+        "httpHeaderAuth": {"id": "FKw9At5AkLdEmHHi", "name": "Instantly API Key"}
       },
       "id": "remove-from-old-campaign",
       "name": "Remove from Old Campaign",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1980,
-        280
-      ],
+      "position": [1980, 280],
       "onError": "continueRegularOutput"
     },
     {
@@ -239,10 +175,7 @@
       "name": "Restore Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        2180,
-        360
-      ]
+      "position": [2180, 360]
     },
     {
       "parameters": {
@@ -253,48 +186,22 @@
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
-            {
-              "name": "campaign",
-              "value": "={{ $json.instantly_to_campaign_id }}"
-            },
-            {
-              "name": "email",
-              "value": "={{ $json.email }}"
-            },
-            {
-              "name": "first_name",
-              "value": "={{ $json.first_name }}"
-            },
-            {
-              "name": "last_name",
-              "value": "={{ $json.last_name }}"
-            },
-            {
-              "name": "phone",
-              "value": "={{ $json.phone }}"
-            },
-            {
-              "name": "skip_if_in_workspace",
-              "value": "=false"
-            }
+            {"name": "campaign_id",          "value": "={{ $json.instantly_to_campaign_id }}"},
+            {"name": "email",                "value": "={{ $json.email }}"},
+            {"name": "phone",                "value": "={{ $json.phone }}"},
+            {"name": "skip_if_in_workspace", "value": "=false"}
           ]
         },
         "options": {}
       },
       "credentials": {
-        "httpHeaderAuth": {
-          "id": "98RupYRuQa6m9mqh",
-          "name": "Instantly API Key"
-        }
+        "httpHeaderAuth": {"id": "FKw9At5AkLdEmHHi", "name": "Instantly API Key"}
       },
       "id": "add-to-new-campaign",
       "name": "Add Lead to New Campaign",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        2380,
-        360
-      ],
+      "position": [2380, 360],
       "continueOnFail": true
     },
     {
@@ -307,10 +214,7 @@
       "name": "Mark Campaign Executed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        2580,
-        360
-      ]
+      "position": [2580, 360]
     },
     {
       "parameters": {},
@@ -318,195 +222,70 @@
       "name": "No Campaigns \u2014 Done",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [
-        880,
-        400
-      ]
+      "position": [880, 400]
     },
     {
       "id": "fef184ff-9310-403c-abcf-6d5684fa9d9e",
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [
-        220,
-        460
-      ],
+      "position": [220, 460],
       "parameters": {}
     }
   ],
   "connections": {
     "Every Hour": {
-      "main": [
-        [
-          {
-            "node": "Run Lifecycle Cycle",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Run Lifecycle Cycle", "type": "main", "index": 0}]]
     },
     "Run Lifecycle Cycle": {
-      "main": [
-        [
-          {
-            "node": "Campaigns Queued?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Campaigns Queued?", "type": "main", "index": 0}]]
     },
     "Campaigns Queued?": {
       "main": [
-        [
-          {
-            "node": "Fetch Pending Campaigns",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "No Campaigns \u2014 Done",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Fetch Pending Campaigns", "type": "main", "index": 0}],
+        [{"node": "No Campaigns \u2014 Done",   "type": "main", "index": 0}]
       ]
     },
     "Fetch Pending Campaigns": {
-      "main": [
-        [
-          {
-            "node": "Split Campaign Moves",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Split Campaign Moves", "type": "main", "index": 0}]]
     },
     "Split Campaign Moves": {
-      "main": [
-        [
-          {
-            "node": "Prepare Instantly Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Prepare Instantly Payload", "type": "main", "index": 0}]]
     },
     "Prepare Instantly Payload": {
-      "main": [
-        [
-          {
-            "node": "Skip or Push?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Skip or Push?", "type": "main", "index": 0}]]
     },
     "Skip or Push?": {
       "main": [
-        [
-          {
-            "node": "Mark Skip Executed",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Has Old Campaign?",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Mark Skip Executed", "type": "main", "index": 0}],
+        [{"node": "Has Old Campaign?",  "type": "main", "index": 0}]
       ]
     },
     "Has Old Campaign?": {
       "main": [
-        [
-          {
-            "node": "Remove from Old Campaign",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Restore Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Remove from Old Campaign", "type": "main", "index": 0}],
+        [{"node": "Restore Payload",          "type": "main", "index": 0}]
       ]
     },
     "Remove from Old Campaign": {
-      "main": [
-        [
-          {
-            "node": "Restore Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Restore Payload", "type": "main", "index": 0}]]
     },
     "Restore Payload": {
-      "main": [
-        [
-          {
-            "node": "Add Lead to New Campaign",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Add Lead to New Campaign", "type": "main", "index": 0}]]
     },
     "Add Lead to New Campaign": {
-      "main": [
-        [
-          {
-            "node": "Mark Campaign Executed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Mark Campaign Executed", "type": "main", "index": 0}]]
     },
     "Manual Trigger": {
-      "main": [
-        [
-          {
-            "node": "Run Lifecycle Cycle",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Run Lifecycle Cycle", "type": "main", "index": 0}]]
     }
   },
-  "settings": {
-    "executionOrder": "v1"
-  },
+  "settings": {"executionOrder": "v1"},
   "staticData": null,
   "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Claude",
-      "id": "tag-claude"
-    },
-    {
-      "name": "Decision",
-      "id": "tag-decision"
-    }
+    {"name": "DabbahWala", "id": "dabbahwala"},
+    {"name": "Claude",     "id": "tag-claude"},
+    {"name": "Decision",   "id": "tag-decision"}
   ],
   "pinData": {}
 }
