@@ -1044,7 +1044,7 @@ def _g11_orders(suite: TestSuite) -> None:
         today = _date.today().isoformat()
         csv_content = (
             "Order Number,Order Date,Customer Name,Phone,Email,Items,Total\n"
-            f"TH-{today},{today},DWTest Harness,{TEST_PHONE},{TEST_EMAIL},\"Dal Makhani x1\",12.99\n"
+            f"TH-{today},{today},Vivek,{TEST_SMS_TO},{TEST_EMAIL},\"Dal Makhani x1\",12.99\n"
         )
         sc, body = _req(
             "POST",
