@@ -3,76 +3,107 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DabbahWala Intelligence</title>
+<title>DabbahWala Dashboard</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f4f4f7; color: #1a1a2e; }
 
+/* ── Header ── */
 header {
   background: #1a1a2e; color: white;
-  padding: 14px 28px; display: flex; align-items: center; gap: 14px;
+  padding: 12px 28px; display: flex; align-items: center; gap: 14px;
   position: sticky; top: 0; z-index: 100;
 }
-header h1 { font-size: 1.1rem; font-weight: 600; }
-header .sub { font-size: 0.78rem; opacity: 0.6; margin-top: 2px; }
+header .logo { font-size: 1.6rem; line-height: 1; }
+header .title { font-size: 1rem; font-weight: 600; }
+header .user-area { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+header .user-email { font-size: 0.8rem; opacity: 0.7; }
+header .logout-btn {
+  font-size: 0.78rem; padding: 5px 13px;
+  background: transparent; color: white;
+  border: 1px solid rgba(255,255,255,.35); border-radius: 5px;
+  cursor: pointer; text-decoration: none;
+  transition: background 0.15s;
+}
+header .logout-btn:hover { background: rgba(255,255,255,.12); }
 
+/* ── Tabs ── */
 .tabs {
   background: white; border-bottom: 2px solid #e8e8f0;
   display: flex; padding: 0 28px; gap: 4px;
 }
 .tab {
-  padding: 13px 18px; cursor: pointer; font-size: 0.87rem;
+  padding: 13px 20px; cursor: pointer; font-size: 0.88rem;
   color: #888; border-bottom: 3px solid transparent; margin-bottom: -2px;
-  user-select: none; white-space: nowrap;
-  transition: color 0.15s;
+  user-select: none; white-space: nowrap; transition: color 0.15s;
 }
 .tab.active { color: #1a1a2e; border-bottom-color: #e63946; font-weight: 600; }
 .tab:hover:not(.active) { color: #444; }
 
-.panel { display: none; padding: 28px; max-width: 860px; }
+/* ── Panels ── */
+.panel { display: none; padding: 28px; max-width: 900px; }
 .panel.active { display: block; }
 
-.panel-title { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
-.panel-desc { font-size: 0.87rem; color: #666; margin-bottom: 24px; line-height: 1.5; }
-
-.form-group { margin-bottom: 18px; }
-label { display: block; font-size: 0.83rem; font-weight: 600; color: #555; margin-bottom: 6px; }
-label .hint { font-weight: 400; color: #999; }
-
-select, input[type="text"], input[type="email"], input[type="date"], textarea {
-  width: 100%; padding: 10px 13px;
-  border: 1.5px solid #ddd; border-radius: 7px;
-  font-size: 0.9rem; background: white; color: #1a1a2e;
-  transition: border-color 0.15s;
+/* ── Suggestion chip categories ── */
+.chip-section { margin-bottom: 20px; }
+.chip-category {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; margin-bottom: 8px;
 }
-select:focus, input:focus, textarea:focus {
-  outline: none; border-color: #1a1a2e;
+.chip-row { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip {
+  padding: 6px 13px; font-size: 0.8rem; font-weight: 500;
+  background: white; color: #444;
+  border: 1.5px solid #d0d0e0; border-radius: 20px;
+  cursor: pointer; line-height: 1.4;
+  transition: background 0.12s, border-color 0.12s;
 }
-textarea { resize: vertical; min-height: 80px; font-family: inherit; }
+.chip:hover { background: #f0f0f8; border-color: #1a1a2e; color: #1a1a2e; }
+.chip.running { opacity: 0.55; cursor: not-allowed; }
 
+/* ── Search bar ── */
+.search-bar {
+  display: flex; gap: 10px; margin-top: 24px;
+  border-top: 1px solid #e8e8f0; padding-top: 20px;
+}
+.search-bar input {
+  flex: 1; padding: 11px 15px;
+  border: 1.5px solid #ddd; border-radius: 8px;
+  font-size: 0.92rem; background: white; color: #1a1a2e;
+}
+.search-bar input:focus { outline: none; border-color: #1a1a2e; }
 .btn {
-  padding: 10px 26px; background: #1a1a2e; color: white;
-  border: none; border-radius: 7px; cursor: pointer;
+  padding: 10px 24px; background: #1a1a2e; color: white;
+  border: none; border-radius: 8px; cursor: pointer;
   font-size: 0.9rem; font-weight: 600; transition: background 0.15s;
+  white-space: nowrap;
 }
 .btn:hover { background: #2d2d50; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.btn-gray { background: #6c757d; }
-.btn-gray:hover { background: #5a6168; }
+.btn-red { background: #dc3545; }
+.btn-red:hover { background: #b02a37; }
 
-/* Result area */
+/* ── Result box ── */
 .result-box {
   margin-top: 22px; background: white;
   border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 20px;
 }
 .result-box.error { border-color: #f5c2c7; background: #fff5f5; }
 .result-box pre {
-  white-space: pre-wrap; font-family: 'SF Mono', 'Fira Code', 'Menlo', monospace;
+  white-space: pre-wrap; font-family: 'SF Mono', 'Fira Code', monospace;
   font-size: 0.84rem; line-height: 1.65; color: #1a1a2e;
 }
 .result-box.error pre { color: #842029; }
+.spinner {
+  display: inline-block; width: 15px; height: 15px;
+  border: 2px solid #ccc; border-top-color: #1a1a2e;
+  border-radius: 50%; animation: spin 0.7s linear infinite;
+  vertical-align: middle; margin-right: 8px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-msg { margin-top: 16px; color: #888; font-size: 0.88rem; }
 
-/* Contact action cards (who to contact today) */
+/* ── Contact action cards ── */
 .contact-action-grid {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 14px; margin-top: 18px;
@@ -88,88 +119,93 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
   font-size: 0.68rem; font-weight: 700; color: #fff;
   padding: 2px 7px; border-radius: 20px; letter-spacing: 0.04em;
 }
-.contact-action-dest { font-size: 0.8rem; color: #555; font-family: 'SF Mono', monospace; }
+.contact-action-dest { font-size: 0.8rem; color: #555; font-family: monospace; }
 .contact-action-msg { font-size: 0.78rem; color: #444; line-height: 1.45; font-style: italic; }
 .contact-action-btn { margin-top: 6px; font-size: 0.82rem; padding: 6px 14px; }
 
-.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ccc; border-top-color: #1a1a2e; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 8px; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.loading-msg { margin-top: 16px; color: #888; font-size: 0.88rem; }
+/* ── Action accordion cards ── */
+.action-cards { display: flex; flex-direction: column; gap: 14px; }
+.action-card {
+  background: white; border: 1.5px solid #e0e0ea; border-radius: 12px; overflow: hidden;
+}
+.action-card-header {
+  padding: 18px 22px; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  user-select: none; transition: background 0.12s;
+}
+.action-card-header:hover { background: #fafafe; }
+.action-card-header.open { background: #fafafe; border-bottom: 1.5px solid #e0e0ea; }
+.action-card-title { font-size: 0.97rem; font-weight: 700; color: #1a1a2e; }
+.action-card-desc { font-size: 0.82rem; color: #888; margin-top: 3px; }
+.action-card-chevron { font-size: 0.8rem; color: #bbb; transition: transform 0.2s; }
+.action-card-chevron.open { transform: rotate(180deg); }
+.action-card-body { padding: 22px; display: none; }
+.action-card-body.open { display: block; }
 
-/* Agent result */
-.agent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
-.info-card { background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 16px; }
-.info-card .card-label { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #999; margin-bottom: 10px; }
-.kv { display: flex; gap: 10px; margin-bottom: 5px; font-size: 0.875rem; }
-.kv .k { color: #888; min-width: 140px; flex-shrink: 0; }
-.kv .v { font-weight: 500; }
-.action-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 700; }
-.badge-sms { background: #d4f4e2; color: #155724; }
-.badge-email { background: #d1ecf1; color: #0c5460; }
-.badge-escalate { background: #fff3cd; color: #856404; }
-.badge-none { background: #e9ecef; color: #6c757d; }
-
-/* Tone cards */
-.tone-cards { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
-.tone-card { background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 16px; }
-.tone-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.tone-card-header .tone-label { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #888; }
-.copy-btn { padding: 5px 14px; font-size: 0.78rem; background: #f0f0f6; color: #444; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; }
-.copy-btn:hover { background: #e0e0ea; }
-.tone-text { font-size: 0.93rem; line-height: 1.6; color: #1a1a2e; }
-.char-count { font-size: 0.75rem; color: #aaa; margin-top: 6px; }
-
-/* Upload */
-.upload-summary { display: flex; gap: 14px; margin-top: 20px; }
-.stat-box { flex: 1; background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 18px; text-align: center; }
-.stat-box .s-label { font-size: 0.75rem; color: #999; text-transform: uppercase; font-weight: 700; }
-.stat-box .s-val { font-size: 2.2rem; font-weight: 700; margin-top: 4px; }
-.s-val.green { color: #28a745; }
-.s-val.red { color: #dc3545; }
-.s-val.blue { color: #1a1a2e; }
-details { margin-top: 14px; }
-details summary { cursor: pointer; font-size: 0.85rem; color: #888; padding: 6px 0; }
-details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1px solid #e0e0ea; border-radius: 6px; padding: 12px; max-height: 240px; overflow: auto; }
-
-/* Reports */
-.report-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 20px; }
-.r-stat { background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 16px; }
-.r-stat .r-label { font-size: 0.72rem; color: #999; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
-.r-stat .r-val { font-size: 1.7rem; font-weight: 700; color: #1a1a2e; }
-.report-table-wrap { margin-top: 20px; background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; overflow: hidden; }
-.report-table-wrap summary { padding: 14px 18px; cursor: pointer; font-size: 0.87rem; font-weight: 600; background: #fafafe; }
-.report-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-.report-table th { background: #f4f4f7; padding: 10px 14px; text-align: left; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #888; border-bottom: 1px solid #e0e0ea; }
-.report-table td { padding: 10px 14px; border-bottom: 1px solid #f0f0f5; vertical-align: top; }
-.report-table tr:last-child td { border-bottom: none; }
-
+/* ── Form elements ── */
+.form-group { margin-bottom: 16px; }
+label { display: block; font-size: 0.83rem; font-weight: 600; color: #555; margin-bottom: 6px; }
+label .hint { font-weight: 400; color: #999; }
+select, input[type="text"], input[type="email"], input[type="tel"],
+input[type="date"], textarea {
+  width: 100%; padding: 10px 13px;
+  border: 1.5px solid #ddd; border-radius: 7px;
+  font-size: 0.9rem; background: white; color: #1a1a2e;
+  transition: border-color 0.15s;
+}
+select:focus, input:focus, textarea:focus { outline: none; border-color: #1a1a2e; }
+textarea { resize: vertical; min-height: 80px; font-family: inherit; }
 .row2 { display: flex; gap: 12px; }
 .row2 > * { flex: 1; }
 
-/* Chatbot suggestion chips */
-.suggestion-chip {
-  padding: 6px 13px; font-size: 0.8rem; font-weight: 500;
-  background: white; color: #444; border: 1.5px solid #d0d0e0;
-  border-radius: 20px; cursor: pointer; line-height: 1.4;
-  transition: background 0.12s, border-color 0.12s;
+/* ── Upload summary stats ── */
+.upload-summary { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+.stat-box {
+  flex: 1; min-width: 90px;
+  background: white; border: 1.5px solid #e0e0ea; border-radius: 10px;
+  padding: 14px; text-align: center;
 }
-.suggestion-chip:hover { background: #f0f0f8; border-color: #1a1a2e; color: #1a1a2e; }
+.stat-box .s-label { font-size: 0.72rem; color: #999; text-transform: uppercase; font-weight: 700; }
+.stat-box .s-val { font-size: 1.9rem; font-weight: 700; margin-top: 4px; }
+.s-val.green { color: #28a745; }
+.s-val.red { color: #dc3545; }
+.s-val.blue { color: #1a1a2e; }
 
-/* Chatbot */
-.chat-history { max-height: 500px; overflow-y: auto; display: flex; flex-direction: column-reverse; gap: 16px; margin-top: 18px; }
+/* ── Chat ── */
+.chat-layout { display: flex; gap: 24px; align-items: flex-start; }
+.chat-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.chat-sidebar { width: 300px; flex-shrink: 0; overflow-y: auto; max-height: 70vh; }
+.chat-history {
+  max-height: 480px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 14px; margin-top: 18px;
+}
 .chat-bubble { border-radius: 10px; padding: 14px 18px; font-size: 0.88rem; line-height: 1.65; }
-.chat-bubble.user { background: #1a1a2e; color: white; align-self: flex-end; max-width: 75%; border-bottom-right-radius: 3px; }
-.chat-bubble.assistant { background: white; border: 1.5px solid #e0e0ea; color: #1a1a2e; border-bottom-left-radius: 3px; }
+.chat-bubble.user {
+  background: #1a1a2e; color: white; align-self: flex-end;
+  max-width: 75%; border-bottom-right-radius: 3px;
+}
+.chat-bubble.assistant {
+  background: white; border: 1.5px solid #e0e0ea;
+  color: #1a1a2e; border-bottom-left-radius: 3px;
+}
 .chat-sources { font-size: 0.75rem; color: #aaa; margin-top: 6px; }
 .chat-input-row { display: flex; gap: 10px; margin-top: 16px; }
-.chat-input-row textarea { flex: 1; min-height: 56px; max-height: 160px; resize: vertical; }
-.chat-input-row .btn { align-self: flex-end; white-space: nowrap; }
+.chat-input-row textarea { flex: 1; min-height: 54px; max-height: 140px; resize: vertical; }
+.chat-input-row .btn { align-self: flex-end; }
 .cb-suggest-wrap { position: relative; }
-.cb-suggest-drop { position: absolute; left: 0; right: 0; top: calc(100% - 1px); background: #fff; border: 1.5px solid #c0c0d8; border-top: none; border-radius: 0 0 8px 8px; box-shadow: 0 6px 18px rgba(0,0,0,.1); z-index: 300; display: none; max-height: 220px; overflow-y: auto; }
-.cb-suggest-item { padding: 9px 14px; font-size: 0.83rem; color: #333; cursor: pointer; border-bottom: 1px solid #f0f0f4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-suggest-drop {
+  position: absolute; left: 0; right: 0; top: calc(100% - 1px);
+  background: #fff; border: 1.5px solid #c0c0d8; border-top: none;
+  border-radius: 0 0 8px 8px; box-shadow: 0 6px 18px rgba(0,0,0,.1);
+  z-index: 300; display: none; max-height: 200px; overflow-y: auto;
+}
+.cb-suggest-item {
+  padding: 9px 14px; font-size: 0.83rem; color: #333; cursor: pointer;
+  border-bottom: 1px solid #f0f0f4; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
 .cb-suggest-item:last-child { border-bottom: none; }
 .cb-suggest-item:hover, .cb-suggest-item.cb-active { background: #f0f0f8; color: #1a1a2e; }
-/* markdown-like styling inside assistant bubble */
 .chat-bubble.assistant strong { font-weight: 700; }
 .chat-bubble.assistant code { background: #f4f4f7; padding: 1px 5px; border-radius: 4px; font-family: monospace; font-size: 0.82em; }
 .chat-bubble.assistant pre { background: #f4f4f7; padding: 10px; border-radius: 6px; overflow-x: auto; margin: 8px 0; font-size: 0.82em; }
@@ -177,482 +213,233 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
 .chat-bubble.assistant li { margin-bottom: 3px; }
 .chat-bubble.assistant h1,.chat-bubble.assistant h2,.chat-bubble.assistant h3 { margin: 10px 0 4px; font-size: 1em; }
 
-/* Campaign analytics */
-.camp-grid { display: flex; flex-direction: column; gap: 14px; margin-top: 20px; }
-.camp-card { background: white; border: 1.5px solid #e0e0ea; border-radius: 10px; padding: 18px 22px; }
-.camp-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-.camp-name { font-size: 0.9rem; font-weight: 700; color: #1a1a2e; }
-.camp-id { font-size: 0.72rem; color: #bbb; font-family: monospace; }
-.camp-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
-.camp-stat { background: #f7f7fc; border-radius: 7px; padding: 10px 12px; text-align: center; }
-.camp-stat .cs-val { font-size: 1.35rem; font-weight: 700; color: #1a1a2e; line-height: 1.2; }
-.camp-stat .cs-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: #999; margin-top: 3px; font-weight: 600; }
-.camp-stat.highlight-green .cs-val { color: #28a745; }
-.camp-stat.highlight-blue .cs-val { color: #1a6abf; }
-.camp-stat.highlight-red .cs-val { color: #dc3545; }
-.camp-error { color: #842029; font-size: 0.83rem; background: #fff5f5; border: 1px solid #f5c2c7; border-radius: 7px; padding: 10px 14px; }
-.camp-refresh-row { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
-.camp-refresh-row .next-refresh { font-size: 0.78rem; color: #aaa; }
+/* ── Misc ── */
+.char-counter { font-size: 0.75rem; color: #aaa; margin-top: 4px; }
+.info-banner { border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; font-size: 0.85rem; line-height: 1.5; }
+.info-banner.warn { background: #fff5f5; border: 1.5px solid #f5c2c7; color: #842029; }
+.info-banner.info { background: #f0f8ff; border: 1.5px solid #bee5eb; color: #0c5460; }
 </style>
 </head>
 <body>
 
+<!-- ══ Header ═══════════════════════════════════════════════════════════════ -->
 <header>
-  <div style="font-size:1.8rem;line-height:1">🍱</div>
-  <div>
-    <h1>DabbahWala Marketing Intelligence</h1>
-    <div class="sub">Interactive dashboard</div>
+  <div class="logo">🍱</div>
+  <div class="title">DabbahWala</div>
+  <div class="user-area">
+    <span class="user-email" id="user-email"></span>
+    <a href="/auth/logout" class="logout-btn">Sign out</a>
   </div>
 </header>
 
+<!-- ══ Tabs ═════════════════════════════════════════════════════════════════ -->
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('query')">📊 Query</div>
-  <div class="tab" onclick="switchTab('agent')">🤖 Run Agent</div>
-  <div class="tab" onclick="switchTab('upload')">⚡ Actions</div>
-  <div class="tab" onclick="switchTab('reports')">📋 Reports</div>
-  <div class="tab" onclick="switchTab('chatbot')">💬 About Me</div>
+  <div class="tab active" onclick="switchTab('search')">🔍 Search</div>
+  <div class="tab" onclick="switchTab('actions')">⚡ Actions</div>
+  <div class="tab" onclick="switchTab('chat')">💬 Chat</div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════ QUERY -->
-<div id="panel-query" class="panel active">
-  <div class="panel-title">Marketing Query</div>
-  <div class="panel-desc">Ask a question about your contacts, orders, campaigns, or pipeline. Results appear instantly below.</div>
+<!-- ══════════════════════════════════════════════ SEARCH ════════════════ -->
+<div id="panel-search" class="panel active">
 
-  <div class="form-group">
-    <label>Category</label>
-    <select id="q-category" onchange="onCategoryChange()">
-      <optgroup label="📊 Overview">
-        <option value="pipeline_snapshot">Pipeline Snapshot — Lifecycle stage distribution</option>
-        <option value="daily_summary">Daily Summary — Today's orders and activity</option>
-      </optgroup>
-      <optgroup label="📦 Orders &amp; Revenue">
-        <option value="order_summary_by_order_date">Orders by Order Date — Revenue, count &amp; source breakdown for a date range</option>
-        <option value="order_summary_by_delivery_date">Orders by Delivery Date — Who's receiving within a date range</option>
-        <option value="order_analytics">Order Analytics — Top dishes, revenue, trends</option>
-        <option value="revenue_trends">Revenue Trends — Weekly / monthly totals with trend intelligence</option>
-      </optgroup>
-      <optgroup label="👥 Contacts &amp; Outreach">
-        <option value="who_to_contact">Who to Contact Today — Prioritised outreach list</option>
-        <option value="customer_lookup">Customer Lookup — Full contact profile</option>
-        <option value="communication_history">Communication History — SMS / call log</option>
-      </optgroup>
-      <optgroup label="📧 Campaigns &amp; Broadcasts">
-        <option value="campaign_performance">Campaign Performance — Email campaign stats</option>
-        <option value="broadcast_history">Broadcast History — Past blasts, alerts &amp; delivery stats</option>
-      </optgroup>
-      <optgroup label="📋 Team Notes">
-        <option value="team_notes">Team Notes — View field notes or submit a new one</option>
-        <option value="ad_copies">Ad Copies — Social media ad copy library</option>
-      </optgroup>
-      <optgroup label="🧠 AI">
-        <option value="free_form">Ask Anything — This week's operational data + AI analysis</option>
-      </optgroup>
-    </select>
-  </div>
-
-  <div class="form-group" id="q-daterange-group" style="display:none">
-    <label id="q-daterange-label">Date range</label>
-    <div class="row2">
-      <div>
-        <label style="font-size:0.78rem;color:#999;font-weight:400;margin-bottom:4px">From</label>
-        <input id="q-date-from" type="date">
-      </div>
-      <div>
-        <label style="font-size:0.78rem;color:#999;font-weight:400;margin-bottom:4px">To</label>
-        <input id="q-date-to" type="date">
-      </div>
+  <div class="chip-section">
+    <div class="chip-category" style="color:#1a1a2e">📊 Overview</div>
+    <div class="chip-row">
+      <button class="chip" onclick="runChip(this,'pipeline_snapshot')">Pipeline snapshot</button>
+      <button class="chip" onclick="runChip(this,'daily_summary')">Today's summary</button>
+      <button class="chip" onclick="runChip(this,'who_to_contact')">Who to contact today</button>
     </div>
   </div>
 
-  <div class="form-group" id="q-question-group" style="display:none">
-    <label id="q-question-label">Question or details</label>
-    <textarea id="q-question" placeholder="e.g. How many lapsed customers came back this week?"></textarea>
+  <div class="chip-section">
+    <div class="chip-category" style="color:#2a9d8f">📦 Orders &amp; Revenue</div>
+    <div class="chip-row">
+      <button class="chip" onclick="runChip(this,'order_summary_by_order_date')">Today's orders</button>
+      <button class="chip" onclick="runChip(this,'revenue_trends')">Revenue trends</button>
+      <button class="chip" onclick="runChip(this,'order_analytics')">Order analytics</button>
+      <button class="chip" onclick="runChip(this,'order_summary_by_delivery_date')">Delivery schedule</button>
+    </div>
   </div>
 
-  <div class="form-group" id="q-note-type-group" style="display:none">
-    <label>Note type <span class="hint">(select to submit a new note, or leave on Browse to view recent notes)</span></label>
-    <select id="q-note-type">
-      <option value="browse">Browse recent notes</option>
-      <option value="ground_note">Field Observation — driver or kitchen team note</option>
-      <option value="customer_feedback">Customer Feedback — compliment, complaint, request</option>
-      <option value="delivery_issue">Delivery Issue — missed, late, or damaged delivery</option>
-      <option value="observation">General Observation — anything else worth noting</option>
-    </select>
+  <div class="chip-section">
+    <div class="chip-category" style="color:#6f42c1">👥 Contacts &amp; Campaigns</div>
+    <div class="chip-row">
+      <button class="chip" onclick="runChip(this,'communication_history')">Recent communications</button>
+      <button class="chip" onclick="runChip(this,'broadcast_history')">Broadcast history</button>
+      <button class="chip" onclick="runChip(this,'campaign_performance')">Campaign performance</button>
+    </div>
   </div>
 
-  <div class="form-group" id="q-email-group">
-    <label>Customer email <span class="hint" id="q-email-hint">(at least one of: email, phone, or name)</span></label>
-    <input id="q-email" type="email" placeholder="customer@example.com">
+  <div class="chip-section">
+    <div class="chip-category" style="color:#e76f51">📋 Team &amp; Notes</div>
+    <div class="chip-row">
+      <button class="chip" onclick="runChip(this,'team_notes')">Team notes</button>
+      <button class="chip" onclick="runChip(this,'ad_copies')">Ad copies</button>
+    </div>
   </div>
 
-  <div class="form-group" id="q-phone-group">
-    <label>Phone number <span class="hint">(at least one of: email, phone, or name)</span></label>
-    <input id="q-phone" type="tel" placeholder="+1234567890">
+  <div class="search-bar">
+    <input id="s-input" type="text"
+      placeholder="Ask anything — or enter a customer email / phone to look them up…"
+      onkeydown="if(event.key==='Enter') runSearch()">
+    <button class="btn" id="s-btn" onclick="runSearch()">Search</button>
   </div>
 
-  <div class="form-group" id="q-name-group">
-    <label>Customer name <span class="hint">(optional)</span></label>
-    <input id="q-name" type="text" placeholder="e.g. John Smith">
-  </div>
-
-  <button class="btn" onclick="runQuery()">Run Query</button>
-  <div id="q-result"></div>
+  <div id="s-result"></div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════ AGENT -->
-<div id="panel-agent" class="panel">
-  <div class="panel-title">Run Agent Cycle</div>
-  <div class="panel-desc">Run the full inference → decision → orchestrator pipeline for a single contact. Returns their sentiment, intent, engagement score, and the recommended next action. Takes 20–40 seconds.</div>
+<!-- ══════════════════════════════════════════════ ACTIONS ═══════════════ -->
+<div id="panel-actions" class="panel">
+  <div class="action-cards">
 
-  <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:8px;padding:11px 14px;margin-bottom:18px;font-size:0.84rem;color:#555">
-    Provide <strong>at least one</strong> of: email, phone, or name. All three are optional individually.
-  </div>
-  <div class="form-group">
-    <label>Email</label>
-    <input id="a-email" type="email" placeholder="customer@example.com">
-  </div>
-  <div class="form-group">
-    <label>Phone number</label>
-    <input id="a-phone" type="tel" placeholder="+1234567890">
-  </div>
-  <div class="form-group">
-    <label>Name</label>
-    <input id="a-name" type="text" placeholder="e.g. Ayasha Khan">
-  </div>
-
-  <button class="btn" id="a-btn" onclick="runAgent()">Run Inference &amp; Get Recommendation</button>
-  <div id="a-result"></div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════ ACTIONS -->
-<div id="panel-upload" class="panel">
-  <div class="panel-title">Actions</div>
-  <div class="panel-desc">Select an action, fill in the required details, and execute.</div>
-
-  <div class="form-group">
-    <label>Action</label>
-    <select id="ac-action" onchange="onActionChange()">
-      <optgroup label="📁 Data">
-        <option value="upload_orders">📤  Upload Daily Orders — Ingest CSV and run lifecycle analysis</option>
-        <option value="add_prospects">👤  Add Prospects — Upload CSV or enter manually</option>
-      </optgroup>
-      <optgroup label="✉️ Templates">
-        <option value="email_templates">✉️  Email Templates — Edit &amp; push campaign email drafts to Instantly</option>
-        <option value="sms_templates">💬  SMS Templates — View and edit outbound SMS sequences</option>
-      </optgroup>
-      <optgroup label="🤖 Intelligence">
-        <option value="run_agents">🤖  Run Agents on All Contacts — Full inference → decision → orchestration cycle</option>
-      </optgroup>
-      <optgroup label="📣 Communications">
-        <option value="delay_alert">⚡  Delay Alert — Notify today's customers of a delivery delay</option>
-        <option value="promo_blast">🎉  Promotional Blast — Send SMS/email to opted-in customers</option>
-      </optgroup>
-    </select>
-  </div>
-
-  <!-- ─────────────── Upload Daily Orders ─────────────── -->
-  <div id="ac-section-upload_orders">
-    <div class="form-group" style="margin-bottom:20px">
-      <label>Expected columns <span class="hint">(any order, extra columns ignored)</span></label>
-      <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:7px;padding:13px;font-family:monospace;font-size:0.82rem;color:#555;line-height:1.8">
-        email &nbsp;·&nbsp; phone &nbsp;·&nbsp; order_id &nbsp;·&nbsp; order_date &nbsp;·&nbsp; source &nbsp;·&nbsp; total_amount &nbsp;·&nbsp; order_type &nbsp;·&nbsp; delivery_slot &nbsp;·&nbsp; notes
-      </div>
-    </div>
-    <div class="form-group">
-      <label>CSV file</label>
-      <input type="file" id="u-file" accept=".csv" style="padding:8px;background:#fafafe">
-    </div>
-    <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:8px;padding:13px;margin-bottom:18px;display:flex;align-items:flex-start;gap:10px">
-      <input type="checkbox" id="u-shipday-toggle" style="margin-top:3px;flex-shrink:0">
-      <div>
-        <label for="u-shipday-toggle" style="font-size:0.88rem;font-weight:600;color:#0c5460;cursor:pointer;display:inline">
-          Create Shipday delivery orders automatically
-        </label>
-        <div style="font-size:0.8rem;color:#6c757d;margin-top:3px;line-height:1.4">
-          When ticked, new orders are automatically pushed to Shipday. Orders already in the database are skipped — no duplicates will be created.
+    <!-- Upload Daily Orders -->
+    <div class="action-card">
+      <div class="action-card-header" onclick="toggleCard('upload')">
+        <div>
+          <div class="action-card-title">📤 Upload Daily Orders</div>
+          <div class="action-card-desc">Ingest CSV and run lifecycle analysis</div>
         </div>
+        <span class="action-card-chevron" id="chevron-upload">▼</span>
       </div>
-    </div>
-    <button class="btn" id="u-btn" onclick="uploadCSV()">Upload &amp; Process</button>
-    <div id="u-result"></div>
-  </div>
-
-  <!-- ─────────────── Add Prospects ─────────────── -->
-  <div id="ac-section-add_prospects" style="display:none">
-    <div style="display:flex;gap:10px;margin-bottom:20px">
-      <button id="pros-tab-csv" class="btn" onclick="prospectMode('csv')" style="background:#1a1a1a;font-size:0.85rem;padding:8px 18px">📂 CSV Upload</button>
-      <button id="pros-tab-manual" class="btn" onclick="prospectMode('manual')" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem;padding:8px 18px">✏️ Enter Manually</button>
-    </div>
-
-    <!-- CSV sub-section -->
-    <div id="pros-csv-section">
-      <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:8px;padding:13px;margin-bottom:16px;font-size:0.84rem;color:#555;line-height:1.8">
-        Required columns: <strong>FirstName</strong>, LastName, Phone, EmailId, Address<br>
-        <em>Name + at least one of Phone or EmailId are mandatory. Address is optional.</em><br>
-        <a href="/api/prospects/template" download="prospect_template.csv" style="color:#c8581a;font-weight:600">⬇ Download blank template CSV</a>
-      </div>
-      <div class="form-group">
-        <label>CSV file</label>
-        <input type="file" id="pros-file" accept=".csv" style="padding:8px;background:#fafafe">
-      </div>
-      <button class="btn" id="pros-csv-btn" onclick="uploadProspectCSV()">Upload &amp; Ingest</button>
-      <div id="pros-csv-result" style="margin-top:14px"></div>
-    </div>
-
-    <!-- Manual sub-section -->
-    <div id="pros-manual-section" style="display:none">
-      <div class="row2">
+      <div class="action-card-body" id="body-upload">
         <div class="form-group">
-          <label>First Name <span style="color:#dc3545">*</span></label>
-          <input type="text" id="pros-first" placeholder="e.g. Jane">
+          <label>Expected columns <span class="hint">(any order, extra columns ignored)</span></label>
+          <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:7px;padding:12px;font-family:monospace;font-size:0.82rem;color:#555;line-height:1.8">
+            email · phone · order_id · order_date · source · total_amount · order_type · delivery_slot · notes
+          </div>
         </div>
         <div class="form-group">
-          <label>Last Name</label>
-          <input type="text" id="pros-last" placeholder="e.g. Doe">
+          <label>CSV file</label>
+          <input type="file" id="u-file" accept=".csv" style="padding:8px;background:#fafafe">
         </div>
-      </div>
-      <div class="row2">
-        <div class="form-group">
-          <label>Phone <span class="hint">(at least one required)</span></label>
-          <input type="tel" id="pros-phone" placeholder="e.g. 2485550100">
+        <div class="info-banner info" style="display:flex;align-items:flex-start;gap:10px">
+          <input type="checkbox" id="u-shipday-toggle" style="margin-top:3px;flex-shrink:0">
+          <div>
+            <label for="u-shipday-toggle" style="font-size:0.88rem;font-weight:600;cursor:pointer;display:inline;margin-bottom:0">
+              Create Shipday delivery orders automatically
+            </label>
+            <div style="font-size:0.8rem;margin-top:3px;line-height:1.4;color:#555">
+              New orders are pushed to Shipday. Already-existing orders are skipped.
+            </div>
+          </div>
         </div>
-        <div class="form-group">
-          <label>Email ID <span class="hint">(at least one required)</span></label>
-          <input type="email" id="pros-email" placeholder="e.g. jane@example.com">
-        </div>
+        <button class="btn" id="u-btn" onclick="uploadCSV()">Upload &amp; Process</button>
+        <div id="u-result"></div>
       </div>
-      <div class="form-group">
-        <label>Address <span class="hint">(optional)</span></label>
-        <input type="text" id="pros-addr" placeholder="e.g. 123 Main St, Troy MI 48084">
-      </div>
-      <button class="btn" id="pros-add-btn" onclick="addProspectManually()">Add Prospect</button>
-      <div id="pros-add-result" style="margin-top:14px"></div>
     </div>
-  </div>
 
-  <!-- ─────────────── Email Templates ─────────────── -->
-  <div id="ac-section-email_templates" style="display:none">
-    <div class="panel-desc" style="margin-bottom:16px">Select a campaign scenario, review the current email draft, rewrite it (manually or with Claude), then push directly to Instantly.</div>
-    <div class="form-group">
-      <label>1. Select campaign scenario</label>
-      <select id="t-campaign" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;background:#fff">
-        <option value="">— pick a campaign —</option>
-        <option value="NURTURE_SLOW">Nurture Slow — Cold contacts (7 emails)</option>
-        <option value="PROMO_STANDARD">Promo Standard — Engaged &amp; active</option>
-        <option value="PROMO_AGGRESSIVE">Promo Aggressive — Lapsed customers</option>
-        <option value="NEW_CUSTOMER_ONBOARDING">New Customer Onboarding</option>
-        <option value="REACTIVATION">Reactivation — Long-dormant</option>
-      </select>
-    </div>
-    <button class="btn" id="t-load-btn" onclick="loadCampaignTemplate()">Load Template</button>
-    <div id="t-load-result"></div>
-    <div id="t-editor" style="display:none;margin-top:20px">
-      <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
-        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">2. Select email step &amp; A/B variant</div>
+    <!-- Delay Alert -->
+    <div class="action-card">
+      <div class="action-card-header" onclick="toggleCard('delay')">
+        <div>
+          <div class="action-card-title">⚡ Delay Alert</div>
+          <div class="action-card-desc">Notify today's customers of a delivery delay via SMS &amp; email</div>
+        </div>
+        <span class="action-card-chevron" id="chevron-delay">▼</span>
+      </div>
+      <div class="action-card-body" id="body-delay">
+        <div class="info-banner warn">
+          Sends SMS <strong>and</strong> email to every customer with an order on the selected date.
+        </div>
         <div class="row2">
-          <div class="form-group" style="margin:0">
-            <label>Email step</label>
-            <select id="t-step" onchange="switchStepVariant()" style="width:100%;padding:8px 10px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.85rem;background:#fff"></select>
+          <div class="form-group">
+            <label>Delivery date affected <span class="hint">(defaults to today)</span></label>
+            <input type="date" id="bc-delay-date" onchange="loadDelayDatePreview()">
           </div>
-          <div class="form-group" style="margin:0">
-            <label>A/B variant</label>
-            <select id="t-variant" onchange="switchStepVariant()" style="width:100%;padding:8px 10px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.85rem;background:#fff"></select>
+          <div class="form-group">
+            <label>Your name <span class="hint">(optional)</span></label>
+            <input type="text" id="bc-delay-author" placeholder="e.g. Vivek">
           </div>
         </div>
+        <div id="bc-delay-preview" style="display:none;background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:0.87rem;color:#0c5460"></div>
+        <div class="form-group">
+          <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
+          <textarea id="bc-delay-sms" rows="3" placeholder="Hi! Your DabbahWala delivery for today is running 45–60 min late. We appreciate your patience!"></textarea>
+          <div class="char-counter" id="bc-delay-sms-count">0 / 160</div>
+        </div>
+        <div class="form-group">
+          <label>Email subject</label>
+          <input type="text" id="bc-delay-subject" placeholder="Delivery update — your order is on its way">
+        </div>
+        <div class="form-group">
+          <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
+          <textarea id="bc-delay-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;Your DabbahWala order is running a little late. Our drivers are on the way. Thank you for your patience!&lt;/p&gt;&lt;p&gt;— Team DabbahWala&lt;/p&gt;"></textarea>
+        </div>
+        <button class="btn btn-red" id="bc-delay-btn" onclick="sendDelayAlert()">Send Delay Alert Now</button>
+        <div id="bc-delay-result" style="margin-top:14px"></div>
       </div>
-      <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:10px">3. Review &amp; rewrite</div>
-      <div class="form-group">
-        <label>Subject line</label>
-        <input id="t-subject" type="text" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;box-sizing:border-box">
-      </div>
-      <div class="form-group">
-        <label>Body <span class="hint">(Instantly HTML — &lt;div&gt; tags + {{firstName|there}} tokens)</span></label>
-        <textarea id="t-body" rows="12" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.82rem;font-family:monospace;box-sizing:border-box;resize:vertical"></textarea>
-      </div>
-      <div class="form-group">
-        <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem;padding:8px 16px" onclick="toggleBodyPreview()">Toggle HTML Preview</button>
-        <div id="t-preview" style="display:none;margin-top:10px;border:1.5px solid #e0e0ea;border-radius:8px;padding:16px;background:#fff;font-family:sans-serif;font-size:0.9rem;line-height:1.6"></div>
-      </div>
-      <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
-        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:8px">Ask Claude to rewrite</div>
-        <input id="t-instruction" type="text" placeholder="e.g. Make it shorter, add urgency, focus on fresh ingredients…" style="width:100%;padding:9px 12px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">
-        <button class="btn" id="t-rewrite-btn" onclick="askClaudeRewrite()" style="background:#6f42c1;font-size:0.88rem;padding:9px 18px">✨ Ask Claude to Rewrite</button>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <button class="btn" id="t-save-btn" onclick="saveAndPush()" style="background:#28a745">💾 Save &amp; Push to Instantly</button>
-        <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem" onclick="resetToneEditor()">← New scenario</button>
-      </div>
-      <div id="t-save-result" style="margin-top:12px"></div>
     </div>
-  </div>
 
-  <!-- ─────────────── SMS Templates ─────────────── -->
-  <div id="ac-section-sms_templates" style="display:none">
-    <div class="panel-desc" style="margin-bottom:16px">Edit the SMS message for each scenario, rewrite with Claude, and save. These templates are used by the agent when dispatching SMS actions.</div>
-    <div class="form-group">
-      <label>1. Select SMS scenario</label>
-      <select id="sms-scenario" onchange="loadSmsTemplate()" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;background:#fff">
-        <option value="">— pick a scenario —</option>
-        <option value="WELCOME">Welcome — First order thank-you</option>
-        <option value="REORDER_NUDGE">Reorder Nudge — Gentle prompt to order again</option>
-        <option value="REACTIVATION">Reactivation — Lapsed customer re-engagement</option>
-        <option value="PROMO_OFFER">Promo Offer — Discount or limited-time deal</option>
-        <option value="DELIVERY_CONFIRMATION">Delivery Confirmation — Order on its way</option>
-        <option value="DELAY_ALERT">Delay Alert — Running late notification</option>
-      </select>
+    <!-- Promo Blast -->
+    <div class="action-card">
+      <div class="action-card-header" onclick="toggleCard('promo')">
+        <div>
+          <div class="action-card-title">🎉 Promotional Blast</div>
+          <div class="action-card-desc">Send SMS / email to all opted-in customers</div>
+        </div>
+        <span class="action-card-chevron" id="chevron-promo">▼</span>
+      </div>
+      <div class="action-card-body" id="body-promo">
+        <div class="info-banner info">
+          Only contacts with <code>sms_promo_enabled</code> or <code>email_promo_enabled</code> receive messages on their respective channels.
+        </div>
+        <div class="row2">
+          <div class="form-group">
+            <label>Campaign title <span class="hint">(internal label)</span></label>
+            <input type="text" id="bc-promo-title" placeholder="e.g. Eid Special — 20% Off">
+          </div>
+          <div class="form-group">
+            <label>Your name <span class="hint">(optional)</span></label>
+            <input type="text" id="bc-promo-author" placeholder="e.g. Vivek">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Channels</label>
+          <div style="display:flex;gap:20px;margin-top:4px">
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-sms" checked onchange="updatePromoFields()"> SMS</label>
+            <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-email" checked onchange="updatePromoFields()"> Email</label>
+          </div>
+        </div>
+        <div id="bc-promo-sms-group">
+          <div class="form-group">
+            <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
+            <textarea id="bc-promo-sms" rows="3" placeholder="DabbahWala Eid special: 20% off today! Use code EID20. Reply STOP to opt out."></textarea>
+            <div class="char-counter" id="bc-promo-sms-count">0 / 160</div>
+          </div>
+        </div>
+        <div id="bc-promo-email-group">
+          <div class="form-group">
+            <label>Email subject</label>
+            <input type="text" id="bc-promo-subject" placeholder="Eid Mubarak! 20% off just for you 🎉">
+          </div>
+          <div class="form-group">
+            <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
+            <textarea id="bc-promo-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;Enjoy 20% off your next order. Use code &lt;strong&gt;EID20&lt;/strong&gt; at checkout.&lt;/p&gt;"></textarea>
+          </div>
+        </div>
+        <button class="btn" id="bc-promo-btn" onclick="sendPromo()">Queue Promotional Blast</button>
+        <div id="bc-promo-result" style="margin-top:14px"></div>
+      </div>
     </div>
-    <div id="sms-editor" style="display:none;margin-top:4px">
-      <div class="form-group">
-        <label>Message <span class="hint">(keep under 160 chars · use {{first_name}} for personalisation)</span></label>
-        <textarea id="sms-body" rows="4" oninput="smsUpdateCount()" style="width:100%;padding:10px;border:1.5px solid #dde2ee;border-radius:8px;font-size:0.93rem;font-family:inherit;box-sizing:border-box;resize:vertical"></textarea>
-        <div id="sms-char-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
-      </div>
-      <div style="background:#f4f4f7;border-radius:10px;padding:14px;margin-bottom:16px">
-        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#888;margin-bottom:8px">Ask Claude to rewrite</div>
-        <input id="sms-instruction" type="text" placeholder="e.g. More friendly, add urgency, mention fresh ingredients…" style="width:100%;padding:9px 12px;border:1.5px solid #dde2ee;border-radius:7px;font-size:0.88rem;box-sizing:border-box;margin-bottom:10px">
-        <button class="btn" id="sms-rewrite-btn" onclick="askSmsRewrite()" style="background:#6f42c1;font-size:0.88rem;padding:9px 18px">✨ Ask Claude to Rewrite</button>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-        <button class="btn" id="sms-save-btn" onclick="saveSmsTemplate()" style="background:#28a745">💾 Save Template</button>
-        <button class="btn" style="background:#f4f4f7;color:#555;border:1.5px solid #dde2ee;font-size:0.85rem" onclick="resetSmsEditor()">← New scenario</button>
-      </div>
-      <div id="sms-save-result" style="margin-top:12px"></div>
-    </div>
-  </div>
 
-  <!-- ─────────────── Run Agents on All Contacts ─────────────── -->
-  <div id="ac-section-run_agents" style="display:none">
-    <div class="panel-desc" style="margin-bottom:14px">Run the full inference → decision → orchestration cycle on every non-opted-out contact and immediately dispatch each decision: leads assigned to an Instantly campaign are pushed now, escalations are created as Airtable tasks now — no waiting for the hourly n8n cycle.</div>
-    <button class="btn" id="ra-btn" onclick="runAllAgents()" style="background:#6f42c1">Run Agents on All Contacts</button>
-    <div id="ra-result" style="margin-top:14px"></div>
-  </div>
-
-  <!-- ─────────────── Delay Alert ─────────────── -->
-  <div id="ac-section-delay_alert" style="display:none">
-    <div style="background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:14px;margin-bottom:20px;font-size:0.87rem;color:#842029">
-      Sends SMS <strong>and</strong> email to every customer with an order on the selected date. Reaches all active-order contacts regardless of promo flags — this is an operational notification.
-    </div>
-    <div class="row2">
-      <div class="form-group">
-        <label>Delivery date affected <span class="hint">(defaults to today)</span></label>
-        <input type="date" id="bc-delay-date" onchange="loadDelayDatePreview()">
-      </div>
-      <div class="form-group">
-        <label>Your name <span class="hint">(optional)</span></label>
-        <input type="text" id="bc-delay-author" placeholder="e.g. Vivek">
-      </div>
-    </div>
-    <div id="bc-delay-preview" style="display:none;background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:8px;padding:12px 16px;margin-bottom:18px;font-size:0.88rem;color:#0c5460"></div>
-    <div class="form-group">
-      <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
-      <textarea id="bc-delay-sms" rows="3" placeholder="Hi! Your DabbahWala delivery for today is running 45–60 min late due to heavy rain. We appreciate your patience!"></textarea>
-      <div id="bc-delay-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
-    </div>
-    <div class="form-group">
-      <label>Email subject</label>
-      <input type="text" id="bc-delay-subject" placeholder="Delivery update — your order is on its way">
-    </div>
-    <div class="form-group">
-      <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
-      <textarea id="bc-delay-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;We wanted to let you know that your order is running a little late today due to heavy rain. Our drivers are on the way and your food will arrive as soon as possible. Thank you for your patience!&lt;/p&gt;&lt;p&gt;— Team DabbahWala&lt;/p&gt;"></textarea>
-    </div>
-    <button class="btn" id="bc-delay-btn" onclick="sendDelayAlert()" style="background:#dc3545">Send Delay Alert Now</button>
-    <div id="bc-delay-result" style="margin-top:14px"></div>
-  </div>
-
-  <!-- ─────────────── Promotional Blast ─────────────── -->
-  <div id="ac-section-promo_blast" style="display:none">
-    <div style="background:#f0f8ff;border:1.5px solid #bee5eb;border-radius:10px;padding:14px;margin-bottom:20px;font-size:0.87rem;color:#0c5460">
-      Sends to all customers opted in to promotional messaging. Only contacts with <code>sms_promo_enabled</code> or <code>email_promo_enabled</code> receive messages on their respective channels.
-    </div>
-    <div class="row2">
-      <div class="form-group">
-        <label>Title <span class="hint">(internal label)</span></label>
-        <input type="text" id="bc-promo-title" placeholder="e.g. Eid Special — 20% Off">
-      </div>
-      <div class="form-group">
-        <label>Your name <span class="hint">(optional)</span></label>
-        <input type="text" id="bc-promo-author" placeholder="e.g. Vivek">
-      </div>
-    </div>
-    <div class="form-group">
-      <label>Channels</label>
-      <div style="display:flex;gap:20px;margin-top:4px">
-        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-sms" checked> SMS</label>
-        <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:0.9rem"><input type="checkbox" id="bc-promo-ch-email" checked> Email</label>
-      </div>
-    </div>
-    <div class="form-group" id="bc-promo-sms-group">
-      <label>SMS message <span class="hint">(keep under 160 chars)</span></label>
-      <textarea id="bc-promo-sms" rows="3" placeholder="DabbahWala Eid special: 20% off all orders today! Use code EID20 at checkout. Reply STOP to opt out."></textarea>
-      <div id="bc-promo-sms-count" style="font-size:0.75rem;color:#aaa;margin-top:4px">0 / 160</div>
-    </div>
-    <div class="form-group" id="bc-promo-email-group">
-      <label>Email subject</label>
-      <input type="text" id="bc-promo-subject" placeholder="Eid Mubarak! 20% off just for you 🎉">
-    </div>
-    <div class="form-group" id="bc-promo-body-group">
-      <label>Email body <span class="hint">(HTML ok · use {{first_name}} for personalisation)</span></label>
-      <textarea id="bc-promo-body" rows="5" placeholder="&lt;p&gt;Hi {{first_name}},&lt;/p&gt;&lt;p&gt;Eid Mubarak from all of us at DabbahWala! To celebrate, enjoy 20% off your next order. Use code &lt;strong&gt;EID20&lt;/strong&gt; at checkout.&lt;/p&gt;"></textarea>
-    </div>
-    <button class="btn" id="bc-promo-btn" onclick="sendPromo()">Queue Promotional Blast</button>
-    <div id="bc-promo-result" style="margin-top:14px"></div>
-  </div>
-
+  </div><!-- /action-cards -->
 </div>
 
-<!-- ══════════════════════════════════════════════════════ REPORTS -->
-<div id="panel-reports" class="panel">
-  <div class="panel-title">Reports</div>
-  <div class="panel-desc">Select a report type to view.</div>
+<!-- ══════════════════════════════════════════════ CHAT ══════════════════ -->
+<div id="panel-chat" class="panel">
+  <div class="chat-layout">
 
-  <div class="form-group">
-    <label>Report type</label>
-    <select id="r-type" onchange="onReportTypeChange()">
-      <optgroup label="📅 Daily">
-        <option value="activity">Activity Report — Daily operations summary</option>
-        <option value="outcome">Outcome Report — Daily results summary</option>
-      </optgroup>
-      <optgroup label="📧 Campaigns">
-        <option value="campaign_analytics">Campaign Analytics — Live Instantly stats for all 5 campaigns</option>
-      </optgroup>
-    </select>
-  </div>
-
-  <div id="r-section-date">
-    <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-      <div class="form-group" style="flex:1;min-width:180px;margin-bottom:0">
-        <label>Report date</label>
-        <input type="date" id="r-date">
+    <!-- Left: input + history -->
+    <div class="chat-main">
+      <div style="font-size:0.87rem;color:#666;margin-bottom:4px;line-height:1.5">
+        Ask anything about <strong>how this system works</strong> — business logic, lifecycle rules,
+        agent pipeline, n8n workflows, integrations.
+        <span style="color:#e63946;font-weight:600"> For live data, use the Search tab.</span>
       </div>
-      <button class="btn" id="r-run-btn" onclick="loadReport(document.getElementById('r-type').value)">Load Report</button>
-    </div>
-  </div>
-
-  <div id="r-section-campaign_analytics" style="display:none">
-    <div class="camp-refresh-row">
-      <button class="btn" id="camp-refresh-btn" onclick="loadCampaignAnalytics()">Refresh</button>
-      <span class="next-refresh" id="camp-next-refresh"></span>
-    </div>
-    <div id="camp-result"></div>
-  </div>
-
-  <div id="r-result"></div>
-</div>
-
-<!-- ══════════════════════════════════════════════════════ ABOUT ME -->
-<div id="panel-chatbot" class="panel">
-  <div class="panel-title">About Me — How This System Works</div>
-  <div class="panel-desc">Ask anything about <strong>how this system works</strong> — from high-level business purpose and marketing strategy, to functional processes (lifecycle rules, re-engagement flows, escalation logic), to technical details (agent pipeline, n8n workflows, integrations).<br><span style="color:#e63946;font-size:0.82rem;font-weight:600">Not for live data lookups — use the Query tab for specific customer, order, or campaign records.</span></div>
-
-  <div style="display:flex;gap:24px;align-items:flex-start">
-
-    <!-- LEFT: chat input + history -->
-    <div style="flex:1;min-width:0;display:flex;flex-direction:column">
       <div class="cb-suggest-wrap">
         <div class="chat-input-row">
           <textarea id="cb-question"
-            placeholder="Type your question about the system and press Enter or click Ask…"
+            placeholder="Ask about the system…"
             oninput="_cbInput(this)"
             onkeydown="_cbKeyDown(event)"
             onblur="setTimeout(_hideSuggest, 150)"></textarea>
@@ -664,1280 +451,388 @@ details pre { margin-top: 8px; font-size: 0.8rem; background: #f9f9fc; border: 1
       <div id="cb-history" class="chat-history"></div>
     </div>
 
-    <!-- RIGHT: categorised chips -->
-    <div style="width:320px;flex-shrink:0;overflow-y:auto;max-height:600px">
+    <!-- Right: categorised chips -->
+    <div class="chat-sidebar">
 
-      <div style="margin-bottom:18px">
-        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#6c63ff;letter-spacing:0.05em;margin-bottom:7px">Functionality</div>
-        <div style="display:flex;flex-direction:column;gap:5px">
-          <button class="suggestion-chip" onclick="askSuggestion(this)">Why is a 4-layer AI pipeline better than a single AI call?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the FastAPI router layer decide which agent or handler to invoke?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the MCP layer work and what tools does it expose?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How are natural-language queries translated into safe SQL and executed?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the RAG / vector-store layer retrieve context for the chatbot?</button>
+      <div class="chip-section">
+        <div class="chip-category" style="color:#6c63ff">Functionality</div>
+        <div class="chip-row" style="flex-direction:column">
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">Why is a 4-layer AI pipeline better than a single AI call?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the FastAPI router layer decide which agent to invoke?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the RAG layer retrieve context for the chatbot?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the MCP layer work and what tools does it expose?</button>
         </div>
       </div>
 
-      <div style="margin-bottom:18px">
-        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#2a9d8f;letter-spacing:0.05em;margin-bottom:7px">Business Process</div>
-        <div style="display:flex;flex-direction:column;gap:5px">
-          <button class="suggestion-chip" onclick="askSuggestion(this)">What happens end-to-end when a new order is placed?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">What happens when a delivery fails or is delayed?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How do contacts progress through lifecycle stages?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system re-engage lapsed customers?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">What triggers an escalation to Airtable?</button>
+      <div class="chip-section">
+        <div class="chip-category" style="color:#2a9d8f">Business Process</div>
+        <div class="chip-row" style="flex-direction:column">
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What happens end-to-end when a new order is placed?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How do contacts progress through lifecycle stages?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the system re-engage lapsed customers?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What triggers an escalation to Airtable?</button>
         </div>
       </div>
 
-      <div style="margin-bottom:18px">
-        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#e76f51;letter-spacing:0.05em;margin-bottom:7px">Goal Oriented</div>
-        <div style="display:flex;flex-direction:column;gap:5px">
-          <button class="suggestion-chip" onclick="askSuggestion(this)">What is the purpose of this system and how does it achieve it?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">What is the offer strategy and how are offers personalised?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system decide whether to send SMS vs email?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the system prevent over-messaging contacts?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How are daily reports generated and what do they cover?</button>
+      <div class="chip-section">
+        <div class="chip-category" style="color:#e76f51">Goal Oriented</div>
+        <div class="chip-row" style="flex-direction:column">
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What is the purpose of this system and how does it achieve it?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the system decide whether to send SMS vs email?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How are daily reports generated and what do they cover?</button>
         </div>
       </div>
 
-      <div style="margin-bottom:18px">
-        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#457b9d;letter-spacing:0.05em;margin-bottom:7px">Technical</div>
-        <div style="display:flex;flex-direction:column;gap:5px">
-          <button class="suggestion-chip" onclick="askSuggestion(this)">What is the overall system architecture — monolith, microservices, or event-driven?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">What database tables power the lifecycle engine and how are they structured?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">Which PostgreSQL indexes are used and why were they chosen?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How are API endpoints authenticated and what security controls are in place?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How are agent tool calls logged, traced, and debugged in production?</button>
+      <div class="chip-section">
+        <div class="chip-category" style="color:#457b9d">Technical</div>
+        <div class="chip-row" style="flex-direction:column">
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What is the overall system architecture?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What database tables power the lifecycle engine?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How are API endpoints authenticated?</button>
         </div>
       </div>
 
-      <div style="margin-bottom:18px">
-        <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;color:#c77dff;letter-spacing:0.05em;margin-bottom:7px">Agents &amp; MCP</div>
-        <div style="display:flex;flex-direction:column;gap:5px">
-          <button class="suggestion-chip" onclick="askSuggestion(this)">What agents exist in this system and what is each one responsible for?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How do agents communicate — shared state, queues, or direct calls?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How does the orchestrator agent decide which specialist agent to delegate to?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How is agent memory or context maintained across multiple turns or sessions?</button>
-          <button class="suggestion-chip" onclick="askSuggestion(this)">How would you add a new agent or MCP tool to this system?</button>
+      <div class="chip-section">
+        <div class="chip-category" style="color:#c77dff">Agents &amp; MCP</div>
+        <div class="chip-row" style="flex-direction:column">
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What agents exist and what is each one responsible for?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the orchestrator decide which specialist agent to use?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How would you add a new agent or MCP tool to this system?</button>
         </div>
       </div>
 
-    </div><!-- /right -->
-  </div><!-- /flex row -->
+    </div><!-- /chat-sidebar -->
+  </div><!-- /chat-layout -->
 </div>
 
 <script>
-// ─── state ───────────────────────────────────────────────────────────────────
-let _toneDrafts = {};
-
-// ─── tabs ────────────────────────────────────────────────────────────────────
-const TAB_NAMES = ['query','agent','upload','reports','chatbot'];
+// ─── Tabs ─────────────────────────────────────────────────────────────────────
+const TAB_NAMES = ['search','actions','chat'];
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', TAB_NAMES[i] === name));
-  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + name));
+  document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', TAB_NAMES[i]===name));
+  document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id==='panel-'+name));
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 function esc(s) {
-  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-function setLoading(id, msg) {
-  document.getElementById(id).innerHTML = `<div class="loading-msg"><span class="spinner"></span>${esc(msg)}</div>`;
-}
-function setError(id, msg) {
-  document.getElementById(id).innerHTML = `<div class="result-box error"><pre>${esc(msg)}</pre></div>`;
-}
-function setPreResult(id, text) {
-  document.getElementById(id).innerHTML = `<div class="result-box"><pre>${esc(text)}</pre></div>`;
-}
-function setBtn(id, disabled, label) {
-  const b = document.getElementById(id);
-  if (b) { b.disabled = disabled; if (label) b.textContent = label; }
+function setLoading(id,msg) { document.getElementById(id).innerHTML=`<div class="loading-msg"><span class="spinner"></span>${esc(msg)}</div>`; }
+function setError(id,msg)   { document.getElementById(id).innerHTML=`<div class="result-box error"><pre>${esc(msg)}</pre></div>`; }
+function setPreResult(id,text){ document.getElementById(id).innerHTML=`<div class="result-box"><pre>${esc(text)}</pre></div>`; }
+function setBtn(id,disabled,label){ const b=document.getElementById(id); if(b){b.disabled=disabled; if(label)b.textContent=label;} }
+
+// ─── Load user email ──────────────────────────────────────────────────────────
+fetch('/auth/me').then(r=>r.json()).then(d=>{ if(d.email) document.getElementById('user-email').textContent=d.email; }).catch(()=>{});
+
+// ─── Accordion cards ──────────────────────────────────────────────────────────
+function toggleCard(id) {
+  const body=document.getElementById('body-'+id);
+  const header=body.previousElementSibling;
+  const chevron=document.getElementById('chevron-'+id);
+  const isOpen=body.classList.contains('open');
+  body.classList.toggle('open',!isOpen);
+  header.classList.toggle('open',!isOpen);
+  chevron.classList.toggle('open',!isOpen);
 }
 
-// ─── actions ─────────────────────────────────────────────────────────────────
-const AC_SECTIONS = ['upload_orders','add_prospects','email_templates','sms_templates','run_agents','delay_alert','promo_blast'];
-function onActionChange() {
-  const val = document.getElementById('ac-action').value;
-  AC_SECTIONS.forEach(s => {
-    document.getElementById('ac-section-' + s).style.display = s === val ? 'block' : 'none';
-  });
+// ─── Search tab ───────────────────────────────────────────────────────────────
+const ACTION_COLOR = { send_sms:'#28a745', move_campaign:'#17a2b8', escalate_airtable:'#dc3545', none:'#aaa' };
+const _today = new Date();
+const _d = n => { const x=new Date(_today); x.setDate(x.getDate()+n); return x.toISOString().slice(0,10); };
+
+function _chipPayload(cat) {
+  const base = { category: cat };
+  if (['order_summary_by_order_date','order_analytics'].includes(cat))  { base.date_from=_d(-30); base.date_to=_d(0); }
+  if (cat==='order_summary_by_delivery_date')                           { base.date_from=_d(0);  base.date_to=_d(7); }
+  if (cat==='revenue_trends')                                           { base.date_from=_d(-84);base.date_to=_d(0); }
+  if (cat==='broadcast_history')                                        { base.date_from=_d(-30);base.date_to=_d(0); }
+  if (cat==='team_notes')                                               { base.input_type='browse'; }
+  return base;
 }
 
-// ─── sms templates ────────────────────────────────────────────────────────────
-let _smsScenario = '';
-const SMS_DEFAULTS = {
-  WELCOME:               'Hi {{first_name}}, thanks for your first DabbahWala order! We can\'t wait for you to enjoy it. — Team DabbahWala',
-  REORDER_NUDGE:         'Hi {{first_name}}, it\'s been a while! Your favourite DabbahWala meals are ready to order again. Reply STOP to opt out.',
-  REACTIVATION:          'Hi {{first_name}}, we miss you at DabbahWala! Come back and enjoy 10% off your next order. Reply STOP to opt out.',
-  PROMO_OFFER:           'Hi {{first_name}}, DabbahWala special today: use code SAVE15 for 15% off. Limited time! Reply STOP to opt out.',
-  DELIVERY_CONFIRMATION: 'Hi {{first_name}}, your DabbahWala order is on its way! Expected in 30–45 min. — Team DabbahWala',
-  DELAY_ALERT:           'Hi {{first_name}}, your DabbahWala delivery is running 30–45 min late today. Thank you for your patience! — Team DabbahWala',
-};
-async function loadSmsTemplate() {
-  const scenario = document.getElementById('sms-scenario').value;
-  if (!scenario) { document.getElementById('sms-editor').style.display = 'none'; return; }
-  _smsScenario = scenario;
-  document.getElementById('sms-save-result').innerHTML = '';
+async function runChip(btn, cat) {
+  if (btn.classList.contains('running')) return;
+  btn.classList.add('running');
+  setLoading('s-result','Loading…');
   try {
-    const res = await fetch(`/api/sms-templates/${scenario}`);
-    document.getElementById('sms-body').value = res.ok ? (await res.json()).message : (SMS_DEFAULTS[scenario] || '');
-  } catch { document.getElementById('sms-body').value = SMS_DEFAULTS[scenario] || ''; }
-  smsUpdateCount();
-  document.getElementById('sms-editor').style.display = 'block';
-}
-function smsUpdateCount() {
-  const len = (document.getElementById('sms-body').value || '').length;
-  const el  = document.getElementById('sms-char-count');
-  if (el) { el.textContent = `${len} / 160`; el.style.color = len > 160 ? '#dc3545' : '#aaa'; }
-}
-async function askSmsRewrite() {
-  const instruction = document.getElementById('sms-instruction').value.trim();
-  setBtn('sms-rewrite-btn', true, '✨ Rewriting…');
-  document.getElementById('sms-save-result').innerHTML = '';
-  try {
-    const res  = await fetch('/api/sms-templates/rewrite', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ scenario: _smsScenario, message: document.getElementById('sms-body').value, instruction }),
-    });
+    const res  = await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(_chipPayload(cat))});
     const data = await res.json();
-    setBtn('sms-rewrite-btn', false, '✨ Ask Claude to Rewrite');
-    if (!res.ok) { setError('sms-save-result', data.detail || JSON.stringify(data)); return; }
-    document.getElementById('sms-body').value = data.message;
-    smsUpdateCount();
-    document.getElementById('sms-save-result').innerHTML =
-      '<p style="color:#6f42c1;font-size:0.85rem">✓ Claude rewrote the draft — review above, then Save when ready.</p>';
-  } catch(e) { setBtn('sms-rewrite-btn', false, '✨ Ask Claude to Rewrite'); setError('sms-save-result', 'Network error: ' + e.message); }
+    if (!res.ok) { setError('s-result', data.detail||JSON.stringify(data)); return; }
+    if (cat==='who_to_contact' && data.data?.actionable_contacts?.length) renderContactActions('s-result',data.answer,data.data.actionable_contacts);
+    else setPreResult('s-result', data.answer);
+  } catch(e) { setError('s-result','Network error: '+e.message); }
+  finally { btn.classList.remove('running'); }
 }
-async function saveSmsTemplate() {
-  if (!_smsScenario) return;
-  setBtn('sms-save-btn', true, 'Saving…');
+
+async function runSearch() {
+  const q = document.getElementById('s-input').value.trim();
+  if (!q) return;
+  setBtn('s-btn',true,'…');
+  setLoading('s-result','Searching…');
+  const emailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/;
+  const phoneRe = /^\+?[\d\s\-(). ]{7,20}$/;
+  let payload;
+  if (emailRe.test(q))         payload = { category:'customer_lookup', contact_email: q.match(emailRe)[0] };
+  else if (phoneRe.test(q.trim())) payload = { category:'customer_lookup', contact_phone: q.trim() };
+  else                         payload = { category:'free_form', question: q };
   try {
-    const res  = await fetch(`/api/sms-templates/${_smsScenario}`, {
-      method: 'PUT', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ message: document.getElementById('sms-body').value }),
-    });
+    const res  = await fetch('/api/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
     const data = await res.json();
-    setBtn('sms-save-btn', false, '💾 Save Template');
-    if (!res.ok) { setError('sms-save-result', data.detail || JSON.stringify(data)); return; }
-    document.getElementById('sms-save-result').innerHTML = '<p style="color:#28a745;font-size:0.85rem">✓ Template saved.</p>';
-  } catch(e) { setBtn('sms-save-btn', false, '💾 Save Template'); setError('sms-save-result', 'Network error: ' + e.message); }
-}
-function resetSmsEditor() {
-  _smsScenario = '';
-  document.getElementById('sms-scenario').value = '';
-  document.getElementById('sms-editor').style.display = 'none';
-  document.getElementById('sms-save-result').innerHTML = '';
-  document.getElementById('sms-instruction').value = '';
+    if (!res.ok) { setError('s-result',data.detail||JSON.stringify(data)); return; }
+    if (data.data?.actionable_contacts?.length) renderContactActions('s-result',data.answer,data.data.actionable_contacts);
+    else setPreResult('s-result',data.answer);
+  } catch(e) { setError('s-result','Network error: '+e.message); }
+  finally { setBtn('s-btn',false,'Search'); }
 }
 
-// ─── query ───────────────────────────────────────────────────────────────────
-const Q_DATE_CATS     = ['order_summary_by_order_date','order_summary_by_delivery_date','revenue_trends','broadcast_history','order_analytics'];
-const Q_CONTACT_CATS  = ['customer_lookup','communication_history'];
-const Q_QUESTION_CATS = ['team_notes','free_form','customer_lookup','ad_copies'];
-const Q_NOTE_TYPE_CATS= ['team_notes'];
-const Q_HIDE_CONTACT  = ['pipeline_snapshot','daily_summary','order_summary_by_order_date',
-                         'order_summary_by_delivery_date','order_analytics','revenue_trends',
-                         'campaign_performance','broadcast_history','team_notes','ad_copies',
-                         'who_to_contact','free_form'];
-const Q_DATE_LABELS   = {
-  order_summary_by_order_date:    'Order date range',
-  order_summary_by_delivery_date: 'Delivery date range',
-  revenue_trends:                 'Period (leave blank for last 12 weeks)',
-  order_analytics:                'Order date range (leave blank for last 30 days)',
-};
-const Q_QUESTION_LABELS = {
-  team_notes:      'Note content or search keyword',
-  free_form:       'Your question',
-  customer_lookup: 'Customer name (if not entering email or phone)',
-  ad_copies:       'Search keyword (optional)',
-};
-const Q_PLACEHOLDERS = {
-  team_notes:     'Write a note to submit, or enter a keyword to search existing notes…',
-  free_form:      'e.g. Which customers are most at risk this week? What drove revenue today?',
-  customer_lookup:'e.g. John Smith (only needed if not providing email or phone)',
-  ad_copies:      'Search keyword (optional — leave blank for recent copies)',
-};
-
-function onCategoryChange() {
-  const cat         = document.getElementById('q-category').value;
-  const needsDate   = Q_DATE_CATS.includes(cat);
-  const hideContact = Q_HIDE_CONTACT.includes(cat);
-  const needsEmail  = Q_CONTACT_CATS.includes(cat);
-  const showQuestion= Q_QUESTION_CATS.includes(cat);
-  const showNoteType= Q_NOTE_TYPE_CATS.includes(cat);
-
-  document.getElementById('q-daterange-group').style.display  = needsDate    ? 'block' : 'none';
-  document.getElementById('q-email-group').style.display      = hideContact  ? 'none'  : 'block';
-  document.getElementById('q-phone-group').style.display      = hideContact  ? 'none'  : 'block';
-  document.getElementById('q-name-group').style.display       = hideContact  ? 'none'  : 'block';
-  document.getElementById('q-question-group').style.display   = showQuestion ? 'block' : 'none';
-  document.getElementById('q-note-type-group').style.display  = showNoteType ? 'block' : 'none';
-  document.getElementById('q-email-hint').textContent         = needsEmail   ? '(at least one of: email, phone, or name)' : '(optional)';
-  if (needsDate) document.getElementById('q-daterange-label').textContent = Q_DATE_LABELS[cat] || 'Date range';
-
-  const qLabel = document.getElementById('q-question-label');
-  if (qLabel) qLabel.innerHTML = (Q_QUESTION_LABELS[cat] || 'Question or details') +
-    (cat === 'free_form' ? ' <span class="hint">(required)</span>' : ' <span class="hint">(optional)</span>');
-
-  document.getElementById('q-question').placeholder = Q_PLACEHOLDERS[cat] || '';
-}
-
-async function runQuery() {
-  const cat      = document.getElementById('q-category').value;
-  const q        = document.getElementById('q-question').value.trim();
-  const email    = document.getElementById('q-email').value.trim();
-  const phone    = document.getElementById('q-phone').value.trim();
-  const name     = document.getElementById('q-name').value.trim();
-  const dateFrom = document.getElementById('q-date-from').value;
-  const dateTo   = document.getElementById('q-date-to').value;
-  setLoading('q-result', 'Running query…');
-  try {
-    const res  = await fetch('/api/query', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ category: cat, question: q, contact_email: email || null, contact_phone: phone || null, contact_name: name || null, date_from: dateFrom || null, date_to: dateTo || null, author: name || null, input_type: cat === 'team_notes' ? document.getElementById('q-note-type').value : null }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setError('q-result', data.detail || JSON.stringify(data)); return; }
-    if (cat === 'who_to_contact' && data.data && data.data.actionable_contacts && data.data.actionable_contacts.length) {
-      renderContactActions('q-result', data.answer, data.data.actionable_contacts);
-    } else {
-      setPreResult('q-result', data.answer);
-    }
-  } catch(e) { setError('q-result', 'Network error: ' + e.message); }
-}
-
-function renderContactActions(id, answerText, contacts) {
-  const ACTION_LABEL = { send_sms: '📱 Send SMS', send_email: '✉️ Send Email' };
-  const PRIORITY_COLOR = { hot: '#e53e3e', warm: '#dd6b20' };
-  let cards = contacts.map(c => {
-    const color = PRIORITY_COLOR[c.priority] || '#718096';
-    const label = ACTION_LABEL[c.action_type] || c.action_type;
-    const dest = c.action_type === 'send_sms' ? (c.phone || '') : (c.email || '');
-    const msgPreview = c.message ? esc(c.message.slice(0, 100)) + (c.message.length > 100 ? '…' : '') : '';
+function renderContactActions(id,answerText,contacts) {
+  const ACTION_LABEL = {send_sms:'📱 Send SMS',send_email:'✉️ Send Email'};
+  const PRIORITY_COLOR = {hot:'#e53e3e',warm:'#dd6b20'};
+  const cards = contacts.map(c => {
+    const color=PRIORITY_COLOR[c.priority]||'#718096';
+    const label=ACTION_LABEL[c.action_type]||c.action_type;
+    const dest=c.action_type==='send_sms'?(c.phone||''):(c.email||'');
+    const msgPreview=c.message?esc(c.message.slice(0,100))+(c.message.length>100?'…':''):'';
     return `<div class="contact-action-card" id="opp-card-${c.opportunity_id}">
       <div class="contact-action-header">
         <span class="contact-action-name">${esc(c.name)}</span>
         <span class="contact-action-priority" style="background:${color}">${c.priority.toUpperCase()}</span>
       </div>
       <div class="contact-action-dest">${esc(dest)}</div>
-      ${msgPreview ? `<div class="contact-action-msg">${msgPreview}</div>` : ''}
-      <button class="btn contact-action-btn" id="opp-btn-${c.opportunity_id}"
-        onclick="executeOpportunity(${c.opportunity_id})">${label}</button>
+      ${msgPreview?`<div class="contact-action-msg">${msgPreview}</div>`:''}
+      <button class="btn contact-action-btn" id="opp-btn-${c.opportunity_id}" onclick="executeOpportunity(${c.opportunity_id})">${label}</button>
     </div>`;
   }).join('');
-  document.getElementById(id).innerHTML =
-    `<div class="result-box"><pre>${esc(answerText)}</pre></div>` +
-    `<div class="contact-action-grid">${cards}</div>`;
+  document.getElementById(id).innerHTML=`<div class="result-box"><pre>${esc(answerText)}</pre></div><div class="contact-action-grid">${cards}</div>`;
 }
 
 async function executeOpportunity(oppId) {
-  const btn = document.getElementById(`opp-btn-${oppId}`);
-  const card = document.getElementById(`opp-card-${oppId}`);
-  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  const btn=document.getElementById(`opp-btn-${oppId}`);
+  const card=document.getElementById(`opp-card-${oppId}`);
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
   try {
-    const res = await fetch(`/api/query/execute-opportunity/${oppId}`, { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) {
-      if (btn) { btn.disabled = false; btn.textContent = '⚠ Error — retry'; }
-      return;
-    }
-    if (card) card.style.opacity = '0.5';
-    if (btn) { btn.textContent = '✓ Queued'; btn.style.background = '#38a169'; }
-  } catch(e) {
-    if (btn) { btn.disabled = false; btn.textContent = '⚠ Network error'; }
-  }
+    const res=await fetch(`/api/query/execute-opportunity/${oppId}`,{method:'POST'});
+    if(!res.ok){if(btn){btn.disabled=false;btn.textContent='⚠ Error — retry';}return;}
+    if(card)card.style.opacity='0.5';
+    if(btn){btn.textContent='✓ Queued';btn.style.background='#38a169';}
+  } catch(e){if(btn){btn.disabled=false;btn.textContent='⚠ Network error';}}
 }
 
-// ─── agent ───────────────────────────────────────────────────────────────────
-async function runAgent() {
-  const email = document.getElementById('a-email').value.trim();
-  const phone = document.getElementById('a-phone').value.trim();
-  const name  = document.getElementById('a-name').value.trim();
-  if (!email && !phone && !name) { setError('a-result', 'Please enter at least one of: email, phone, or name.'); return; }
-  setLoading('a-result', 'Running inference → decision → orchestration… (20–40 s)');
-  setBtn('a-btn', true, 'Running…');
-  try {
-    const res  = await fetch('/api/agents/cycle/run-for-contact', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ email: email || null, phone: phone || null, name: name || null }),
-    });
-    const data = await res.json();
-    setBtn('a-btn', false, 'Run Inference & Get Recommendation');
-
-    if (!res.ok || data.status === 'error') {
-      setError('a-result', data.detail || data.error || JSON.stringify(data)); return;
-    }
-    if (data.status === 'skipped') {
-      setError('a-result', `Contact not found for: ${email || phone || name}`); return;
-    }
-
-    const action  = data.chosen_action || 'none';
-    const badgeClass = {send_sms:'badge-sms', move_campaign:'badge-email', escalate_airtable:'badge-escalate'}[action] || 'badge-none';
-
-    document.getElementById('a-result').innerHTML = `
-    <div class="agent-grid">
-      <div class="info-card">
-        <div class="card-label">Contact</div>
-        <div class="kv"><span class="k">Name</span><span class="v">${esc(data.contact_name || email)}</span></div>
-        <div class="kv"><span class="k">Inference ID</span><span class="v">${data.inference_id ?? '—'}</span></div>
-        <div class="kv"><span class="k">Decision ID</span><span class="v">${data.decision_id ?? '—'}</span></div>
-        <div class="kv"><span class="k">Orch log ID</span><span class="v">${data.orchestrator_log_id ?? '—'}</span></div>
-      </div>
-      <div class="info-card">
-        <div class="card-label">Recommended action</div>
-        <div style="margin-bottom:10px"><span class="action-badge ${badgeClass}">${esc(action)}</span></div>
-        <div class="kv"><span class="k">Channel</span><span class="v">${esc(data.chosen_channel || 'none')}</span></div>
-      </div>
-    </div>
-    <div class="info-card" style="margin-top:12px">
-      <div class="card-label">Reasoning (excerpt)</div>
-      <p style="font-size:0.9rem;line-height:1.6;margin-top:4px">${esc(data.reasoning_snippet || '—')}</p>
-    </div>`;
-  } catch(e) {
-    setBtn('a-btn', false, 'Run Inference & Get Recommendation');
-    setError('a-result', 'Network error: ' + e.message);
-  }
-}
-
-// ─── campaign email template editor ──────────────────────────────────────────
-let _tCampaign = '';
-let _tStep = 0;
-let _tVariant = 0;
-let _tVariantCounts = [];
-
-async function loadCampaignTemplate() {
-  const campaign = document.getElementById('t-campaign').value;
-  if (!campaign) { setError('t-load-result', 'Please select a campaign scenario.'); return; }
-  setLoading('t-load-result', 'Loading current template from local JSON…');
-  setBtn('t-load-btn', true, 'Loading…');
-  try {
-    const res  = await fetch(`/api/campaigns/templates/${campaign}?step=0&variant=0`);
-    const data = await res.json();
-    setBtn('t-load-btn', false, 'Load Template');
-    if (!res.ok) { setError('t-load-result', data.detail || JSON.stringify(data)); return; }
-
-    _tCampaign = campaign;
-    _tVariantCounts = data.step_summaries.map(s => s.variant_count);
-
-    // Populate step dropdown
-    const stepSel = document.getElementById('t-step');
-    stepSel.innerHTML = '';
-    for (const s of data.step_summaries) {
-      const opt = document.createElement('option');
-      opt.value = s.index;
-      opt.textContent = `Email ${s.index + 1}  (+${s.delay_days ?? '?'} days)  — ${s.first_subject.slice(0, 48)}…`;
-      stepSel.appendChild(opt);
-    }
-
-    _populateVariants(data.total_variants);
-
-    document.getElementById('t-subject').value = data.subject;
-    document.getElementById('t-body').value    = data.body;
-    document.getElementById('t-preview').style.display = 'none';
-    document.getElementById('t-editor').style.display  = 'block';
-    document.getElementById('t-save-result').innerHTML  = '';
-    document.getElementById('t-load-result').innerHTML  =
-      `<p style="color:#28a745;font-size:0.85rem;margin-top:8px">✓ Loaded <strong>${esc(data.label)}</strong> — ${data.total_steps} email steps</p>`;
-    _tStep    = 0;
-    _tVariant = 0;
-  } catch(e) {
-    setBtn('t-load-btn', false, 'Load Template');
-    setError('t-load-result', 'Network error: ' + e.message);
-  }
-}
-
-function _populateVariants(count) {
-  const varSel = document.getElementById('t-variant');
-  varSel.innerHTML = '';
-  for (let i = 0; i < count; i++) {
-    const opt = document.createElement('option');
-    opt.value = i;
-    opt.textContent = `Variant ${String.fromCharCode(65 + i)}`;   // A, B, C…
-    varSel.appendChild(opt);
-  }
-}
-
-async function switchStepVariant() {
-  const newStep    = parseInt(document.getElementById('t-step').value);
-  const newVariant = parseInt(document.getElementById('t-variant').value);
-
-  // If step changed, repopulate variant dropdown
-  if (newStep !== _tStep) {
-    _populateVariants(_tVariantCounts[newStep] || 1);
-  }
-  _tStep    = newStep;
-  _tVariant = parseInt(document.getElementById('t-variant').value);
-
-  document.getElementById('t-save-result').innerHTML = '<span style="color:#888;font-size:0.83rem">Loading…</span>';
-  try {
-    const res  = await fetch(`/api/campaigns/templates/${_tCampaign}?step=${_tStep}&variant=${_tVariant}`);
-    const data = await res.json();
-    if (!res.ok) { setError('t-save-result', data.detail); return; }
-    document.getElementById('t-subject').value = data.subject;
-    document.getElementById('t-body').value    = data.body;
-    document.getElementById('t-preview').style.display = 'none';
-    document.getElementById('t-save-result').innerHTML = '';
-  } catch(e) {
-    setError('t-save-result', 'Network error: ' + e.message);
-  }
-}
-
-function toggleBodyPreview() {
-  const box = document.getElementById('t-preview');
-  if (box.style.display === 'none') {
-    box.innerHTML     = document.getElementById('t-body').value;
-    box.style.display = 'block';
-  } else {
-    box.style.display = 'none';
-  }
-}
-
-async function askClaudeRewrite() {
-  if (!_tCampaign) return;
-  const instruction = document.getElementById('t-instruction').value.trim();
-  setBtn('t-rewrite-btn', true, '✨ Rewriting…');
-  document.getElementById('t-save-result').innerHTML = '';
-  try {
-    const res  = await fetch(`/api/campaigns/templates/${_tCampaign}/rewrite`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        step_index:    _tStep,
-        variant_index: _tVariant,
-        subject:       document.getElementById('t-subject').value,
-        body:          document.getElementById('t-body').value,
-        instruction,
-      }),
-    });
-    const data = await res.json();
-    setBtn('t-rewrite-btn', false, '✨ Ask Claude to Rewrite');
-    if (!res.ok) { setError('t-save-result', data.detail || JSON.stringify(data)); return; }
-    document.getElementById('t-subject').value = data.subject;
-    document.getElementById('t-body').value    = data.body;
-    document.getElementById('t-preview').style.display = 'none';
-    document.getElementById('t-save-result').innerHTML =
-      '<p style="color:#6f42c1;font-size:0.85rem">✓ Claude rewrote the draft — review above, then click Save &amp; Push when ready.</p>';
-  } catch(e) {
-    setBtn('t-rewrite-btn', false, '✨ Ask Claude to Rewrite');
-    setError('t-save-result', 'Network error: ' + e.message);
-  }
-}
-
-async function saveAndPush() {
-  if (!_tCampaign) return;
-  setBtn('t-save-btn', true, 'Saving…');
-  document.getElementById('t-save-result').innerHTML = '';
-  try {
-    const res  = await fetch(`/api/campaigns/templates/${_tCampaign}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        step_index:    _tStep,
-        variant_index: _tVariant,
-        subject:       document.getElementById('t-subject').value,
-        body:          document.getElementById('t-body').value,
-      }),
-    });
-    const data = await res.json();
-    setBtn('t-save-btn', false, '💾 Save & Push to Instantly');
-    if (!res.ok) { setError('t-save-result', data.detail || JSON.stringify(data)); return; }
-
-    const pushed = data.instantly_status === 'pushed';
-    const icon   = pushed ? '✅' : '⚠️';
-    const color  = pushed ? '#28a745' : '#e67e00';
-    let msg = `${icon} Saved locally. Instantly: <strong>${data.instantly_status}</strong>`;
-    if (data.instantly_error) msg += ` — ${esc(data.instantly_error)}`;
-    document.getElementById('t-save-result').innerHTML =
-      `<p style="color:${color};font-size:0.85rem">${msg}</p>`;
-  } catch(e) {
-    setBtn('t-save-btn', false, '💾 Save & Push to Instantly');
-    setError('t-save-result', 'Network error: ' + e.message);
-  }
-}
-
-function resetToneEditor() {
-  _tCampaign = '';
-  _tStep = 0;
-  _tVariant = 0;
-  document.getElementById('t-campaign').value         = '';
-  document.getElementById('t-editor').style.display   = 'none';
-  document.getElementById('t-load-result').innerHTML  = '';
-  document.getElementById('t-save-result').innerHTML  = '';
-  document.getElementById('t-instruction').value      = '';
-}
-
-// ─── prospects ────────────────────────────────────────────────────────────────
-function prospectMode(mode) {
-  document.getElementById('pros-csv-section').style.display    = mode === 'csv'    ? 'block' : 'none';
-  document.getElementById('pros-manual-section').style.display = mode === 'manual' ? 'block' : 'none';
-  const active   = mode === 'csv' ? '#1a1a1a' : '#f4f4f7';
-  const inactive = mode === 'csv' ? '#f4f4f7' : '#1a1a1a';
-  const ac = mode === 'csv' ? '#fff' : '#555';
-  const ic = mode === 'csv' ? '#555' : '#fff';
-  document.getElementById('pros-tab-csv').style.background    = active;
-  document.getElementById('pros-tab-csv').style.color         = ac;
-  document.getElementById('pros-tab-manual').style.background = inactive;
-  document.getElementById('pros-tab-manual').style.color      = ic;
-}
-async function uploadProspectCSV() {
-  const file = document.getElementById('pros-file').files[0];
-  if (!file) { setError('pros-csv-result', 'Please select a CSV file.'); return; }
-  setBtn('pros-csv-btn', true, 'Uploading…');
-  document.getElementById('pros-csv-result').innerHTML = '';
-  try {
-    const fd = new FormData();
-    fd.append('file', file);
-    const res  = await fetch('/api/prospects/upload-csv', { method: 'POST', body: fd });
-    const data = await res.json();
-    if (!res.ok) { setError('pros-csv-result', data.detail || 'Upload failed'); return; }
-    const lc = data.lifecycle || {};
-    let html = `<div class="upload-summary" style="margin-top:12px">
-      <div class="stat-box"><div class="s-label">Processed</div><div class="s-val">${data.rows_processed}</div></div>
-      <div class="stat-box"><div class="s-label">Added</div><div class="s-val" style="color:#28a745">${data.added}</div></div>
-      <div class="stat-box"><div class="s-label">Updated</div><div class="s-val" style="color:#17a2b8">${data.updated}</div></div>
-      <div class="stat-box"><div class="s-label">Skipped</div><div class="s-val" style="color:#f59e0b">${data.skipped}</div></div>
-    </div>`;
-    if (lc.campaigns_queued > 0) html += `<p style="color:#28a745;font-size:0.85rem;margin-top:8px">✓ Lifecycle ran — ${lc.campaigns_queued} campaign(s) queued for new contacts.</p>`;
-    if (data.errors && data.errors.length) {
-      html += `<div style="margin-top:10px;font-size:0.8rem;color:#dc3545">${data.errors.map(e=>`<div>⚠ ${e}</div>`).join('')}</div>`;
-    }
-    document.getElementById('pros-csv-result').innerHTML = html;
-  } catch(e) {
-    setError('pros-csv-result', 'Network error: ' + e.message);
-  } finally {
-    setBtn('pros-csv-btn', false, 'Upload & Ingest');
-  }
-}
-async function addProspectManually() {
-  const first = document.getElementById('pros-first').value.trim();
-  const last  = document.getElementById('pros-last').value.trim();
-  const phone = document.getElementById('pros-phone').value.trim();
-  const email = document.getElementById('pros-email').value.trim();
-  const addr  = document.getElementById('pros-addr').value.trim();
-  if (!first) { setError('pros-add-result', 'First Name is required.'); return; }
-  if (!phone && !email) { setError('pros-add-result', 'Enter at least a Phone or Email.'); return; }
-  setBtn('pros-add-btn', true, 'Adding…');
-  document.getElementById('pros-add-result').innerHTML = '';
-  try {
-    const res  = await fetch('/api/prospects/add', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ first_name: first, last_name: last, phone, email, address: addr }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setError('pros-add-result', data.detail || 'Failed'); return; }
-    const lc = data.lifecycle || {};
-    const label = data.status === 'added' ? '✓ New prospect added' : '✓ Existing contact updated';
-    const color = data.status === 'added' ? '#28a745' : '#17a2b8';
-    let msg = `<p style="color:${color};font-size:0.88rem">${label} (id: ${data.contact_id})`;
-    if (lc.campaigns_queued > 0) msg += ` — ${lc.campaigns_queued} campaign(s) queued.`;
-    msg += '</p>';
-    document.getElementById('pros-add-result').innerHTML = msg;
-    // Clear form on success
-    ['pros-first','pros-last','pros-phone','pros-email','pros-addr'].forEach(id => document.getElementById(id).value = '');
-  } catch(e) {
-    setError('pros-add-result', 'Network error: ' + e.message);
-  } finally {
-    setBtn('pros-add-btn', false, 'Add Prospect');
-  }
-}
-
-// ─── upload ───────────────────────────────────────────────────────────────────
-const ACTION_COLOR = {
-  send_sms:         '#28a745',
-  move_campaign:    '#17a2b8',
-  escalate_airtable:'#dc3545',
-  none:             '#aaa',
-};
-const CAMPAIGN_COLOR = {
-  NURTURE_SLOW:             '#6c757d',
-  PROMO_STANDARD:           '#0d6efd',
-  PROMO_AGGRESSIVE:         '#fd7e14',
-  NEW_CUSTOMER_ONBOARDING:  '#28a745',
-  REACTIVATION:             '#dc3545',
-};
-
+// ─── Upload daily orders ──────────────────────────────────────────────────────
 async function uploadCSV() {
-  const fileInput = document.getElementById('u-file');
-  if (!fileInput.files.length) { setError('u-result', 'Please select a CSV file.'); return; }
-  const pushShipday = document.getElementById('u-shipday-toggle').checked;
-  const loadMsg = pushShipday
-    ? 'Uploading, ingesting orders, pushing to Shipday, and running agent analysis… (may take 30–60 s)'
-    : 'Uploading and ingesting orders… (may take 30–60 s)';
-  setLoading('u-result', loadMsg);
-  setBtn('u-btn', true, 'Processing…');
-  const formData = new FormData();
-  formData.append('file', fileInput.files[0]);
-  formData.append('push_to_shipday', pushShipday ? 'true' : 'false');
+  const fi=document.getElementById('u-file');
+  if(!fi.files.length){setError('u-result','Please select a CSV file.');return;}
+  const pushShipday=document.getElementById('u-shipday-toggle').checked;
+  setLoading('u-result',pushShipday?'Uploading, ingesting, pushing to Shipday… (30–60 s)':'Uploading and ingesting orders… (30–60 s)');
+  setBtn('u-btn',true,'Processing…');
+  const fd=new FormData(); fd.append('file',fi.files[0]); fd.append('push_to_shipday',pushShipday?'true':'false');
   try {
-    const res  = await fetch('/api/daily-orders/upload-csv', { method: 'POST', body: formData });
-    const data = await res.json();
-    setBtn('u-btn', false, 'Upload & Process');
-    if (!res.ok) { setError('u-result', data.detail || JSON.stringify(data)); return; }
-
-    const s = data.upload_summary || {};
-
-    // ── Stat row ──────────────────────────────────────────────────────────────
-    let html = `<div class="upload-summary" style="margin-top:20px">
+    const res=await fetch('/api/daily-orders/upload-csv',{method:'POST',body:fd});
+    const data=await res.json();
+    setBtn('u-btn',false,'Upload & Process');
+    if(!res.ok){setError('u-result',data.detail||JSON.stringify(data));return;}
+    const s=data.upload_summary||{};
+    let html=`<div class="upload-summary">
       <div class="stat-box"><div class="s-label">Ingested</div><div class="s-val green">${data.total_orders}</div></div>
       <div class="stat-box"><div class="s-label">Duplicates</div><div class="s-val" style="color:#f59e0b">${data.duplicate_orders_skipped||0}</div></div>
       <div class="stat-box"><div class="s-label">Skipped</div><div class="s-val red">${data.rows_skipped}</div></div>
-      <div class="stat-box"><div class="s-label">Revenue</div><div class="s-val blue" style="font-size:1.4rem">USD $${(data.total_revenue||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
-      <div class="stat-box"><div class="s-label">New customers</div><div class="s-val" style="color:#6f42c1">${data.new_contacts||0}</div></div>
+      <div class="stat-box"><div class="s-label">Revenue</div><div class="s-val blue" style="font-size:1.3rem">$${(data.total_revenue||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
+      <div class="stat-box"><div class="s-label">New contacts</div><div class="s-val" style="color:#6f42c1">${data.new_contacts||0}</div></div>
       <div class="stat-box"><div class="s-label">Returning</div><div class="s-val blue">${data.existing_contacts||0}</div></div>
-      <div class="stat-box"><div class="s-label">Airtable tasks</div><div class="s-val" style="color:#e67e22">${data.airtable_synced||0}</div></div>
     </div>`;
-
-    // ── Source breakdown ──────────────────────────────────────────────────────
-    if (s.by_source && Object.keys(s.by_source).length) {
-      html += `<div style="margin-top:14px;background:white;border:1.5px solid #e0e0ea;border-radius:10px;padding:16px">
-        <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:10px">Orders by source</div>
-        <div style="display:flex;gap:20px;flex-wrap:wrap">`;
-      for (const [src, cnt] of Object.entries(s.by_source)) {
-        html += `<div><span style="font-weight:600">${esc(src)}</span> <span style="color:#888">${cnt} orders</span></div>`;
+    if(s.by_source&&Object.keys(s.by_source).length){
+      html+=`<div style="margin-top:14px;background:white;border:1.5px solid #e0e0ea;border-radius:10px;padding:16px"><div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;color:#999;margin-bottom:8px">Orders by source</div><div style="display:flex;gap:20px;flex-wrap:wrap">`;
+      for(const[src,cnt]of Object.entries(s.by_source))html+=`<div><span style="font-weight:600">${esc(src)}</span> <span style="color:#888">${cnt} orders</span></div>`;
+      html+=`</div></div>`;
+    }
+    const analysis=data.agent_analysis||[];
+    if(analysis.length){
+      html+=`<div style="margin-top:16px"><div style="font-size:0.9rem;font-weight:700;margin-bottom:10px">Agent Recommendations (${analysis.length})</div><div style="background:white;border:1.5px solid #e0e0ea;border-radius:10px;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:0.84rem"><thead><tr style="background:#f4f4f7"><th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888">Contact</th><th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888">Action</th><th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888">Channel</th><th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888">Reasoning</th></tr></thead><tbody>`;
+      for(const r of analysis){
+        if(r.error){html+=`<tr><td colspan="4" style="padding:10px 14px;color:#dc3545">Error: ${esc(r.error)}</td></tr>`;continue;}
+        const action=r.chosen_action||'none';const color=ACTION_COLOR[action]||'#aaa';
+        html+=`<tr style="border-top:1px solid #f0f0f5"><td style="padding:10px 14px;font-weight:500">${esc(r.contact_name||'—')}</td><td style="padding:10px 14px"><span style="background:${color}22;color:${color};padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:700">${esc(action)}</span></td><td style="padding:10px 14px;color:#666">${esc(r.chosen_channel||'—')}</td><td style="padding:10px 14px;color:#555;font-size:0.82rem">${esc((r.reasoning_snippet||'').slice(0,140))}${(r.reasoning_snippet||'').length>140?'…':''}</td></tr>`;
       }
-      html += `</div></div>`;
+      html+=`</tbody></table></div></div>`;
     }
-
-    // ── Agent analysis table ──────────────────────────────────────────────────
-    const analysis = data.agent_analysis || [];
-    if (analysis.length) {
-      html += `<div style="margin-top:16px">
-        <div style="font-size:0.9rem;font-weight:700;margin-bottom:10px">Agent Recommendations (${analysis.length} contact${analysis.length>1?'s':''})</div>
-        <div style="background:white;border:1.5px solid #e0e0ea;border-radius:10px;overflow:hidden">
-        <table style="width:100%;border-collapse:collapse;font-size:0.84rem">
-          <thead><tr style="background:#f4f4f7">
-            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Contact</th>
-            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Action</th>
-            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Channel</th>
-            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Reasoning</th>
-          </tr></thead>
-          <tbody>`;
-      for (const r of analysis) {
-        if (r.error) {
-          html += `<tr><td colspan="4" style="padding:10px 14px;color:#dc3545;font-size:0.82rem">Error: ${esc(r.error)}</td></tr>`;
-          continue;
-        }
-        const action = r.chosen_action || 'none';
-        const color  = ACTION_COLOR[action] || '#aaa';
-        html += `<tr style="border-top:1px solid #f0f0f5">
-          <td style="padding:10px 14px;font-weight:500">${esc(r.contact_name||'—')}</td>
-          <td style="padding:10px 14px"><span style="background:${color}22;color:${color};padding:3px 10px;border-radius:12px;font-size:0.78rem;font-weight:700">${esc(action)}</span></td>
-          <td style="padding:10px 14px;color:#666">${esc(r.chosen_channel||'—')}</td>
-          <td style="padding:10px 14px;color:#555;font-size:0.82rem;max-width:280px">${esc((r.reasoning_snippet||'').slice(0,140))}${(r.reasoning_snippet||'').length>140?'…':''}</td>
-        </tr>`;
-      }
-      html += `</tbody></table></div></div>`;
+    const sd=data.shipday_result||{};
+    if(sd.submitted>0){
+      const allOk=sd.failed===0;
+      html+=`<div style="margin-top:16px;background:${allOk?'#f0fff4':'#fff9ed'};border:1.5px solid ${allOk?'#b7ebc0':'#ffc107'};border-radius:10px;padding:16px"><div style="font-weight:700;color:${allOk?'#155724':'#7d4e00'};margin-bottom:10px">🚚 Shipday — ${sd.succeeded} of ${sd.submitted} orders created</div><div style="display:flex;gap:10px"><div class="stat-box" style="padding:10px"><div class="s-label">Created</div><div class="s-val green" style="font-size:1.5rem">${sd.succeeded}</div></div><div class="stat-box" style="padding:10px"><div class="s-label">Failed</div><div class="s-val red" style="font-size:1.5rem">${sd.failed||0}</div></div></div></div>`;
+    } else if(sd.skipped){
+      html+=`<div class="info-banner warn" style="margin-top:14px">⚠️ Shipday push skipped: ${esc(sd.reason||'API key not configured')}</div>`;
     }
-
-    // ── Field opportunities (escalations) ─────────────────────────────────────
-    const opps = data.field_opportunities || [];
-    if (opps.length) {
-      html += `<div style="margin-top:16px;background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:16px">
-        <div style="font-size:0.85rem;font-weight:700;color:#842029;margin-bottom:10px">🚨 Field Agent Opportunities (${opps.length})</div>`;
-      for (const o of opps) {
-        const color = ACTION_COLOR[o.action] || '#aaa';
-        html += `<div style="margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid #f5c2c7">
-          <span style="font-weight:600">${esc(o.contact_name)}</span>
-          <span style="background:${color}22;color:${color};padding:2px 8px;border-radius:10px;font-size:0.75rem;font-weight:700;margin-left:8px">${esc(o.action)}</span>
-          <div style="font-size:0.83rem;color:#666;margin-top:4px">${esc(o.reasoning)}</div>
-        </div>`;
-      }
-      html += `</div>`;
+    if(data.shipday_csv_download_url){
+      html+=`<div style="margin-top:14px;background:#f8f9ff;border:1.5px solid #c7d2fe;border-radius:10px;padding:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px"><div style="font-size:0.88rem;font-weight:700;color:#3730a3">📥 Shipday Import File Ready</div><a href="${esc(data.shipday_csv_download_url)}" download="shipday_orders.csv" style="font-size:0.84rem;font-weight:600;color:#4f46e5;text-decoration:none;border:1.5px solid #4f46e5;padding:7px 16px;border-radius:7px;background:white">Download CSV ↓</a></div>`;
     }
-
-    // ── Campaign moves (automatic lifecycle decisions) ────────────────────────
-    const moves = data.campaign_moves || [];
-    if (moves.length) {
-      html += `<div style="margin-top:16px">
-        <div style="font-size:0.9rem;font-weight:700;margin-bottom:10px">Campaign Moves — Automatic (${moves.length} contact${moves.length>1?'s':''})</div>
-        <div style="background:white;border:1.5px solid #e0e0ea;border-radius:10px;overflow:hidden">
-        <table style="width:100%;border-collapse:collapse;font-size:0.84rem">
-          <thead><tr style="background:#f4f4f7">
-            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Contact</th>
-            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">Segment</th>
-            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">From</th>
-            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700"></th>
-            <th style="padding:10px 14px;text-align:left;font-size:0.73rem;text-transform:uppercase;color:#888;font-weight:700">To</th>
-          </tr></thead>
-          <tbody>`;
-      for (const m of moves) {
-        const fromColor = CAMPAIGN_COLOR[m.from_campaign] || '#aaa';
-        const toColor   = CAMPAIGN_COLOR[m.to_campaign]   || '#aaa';
-        html += `<tr style="border-top:1px solid #f0f0f5">
-          <td style="padding:10px 14px;font-weight:500">${esc(m.contact_name||'—')}</td>
-          <td style="padding:10px 14px;color:#666;font-size:0.8rem">${esc(m.segment||'—')}</td>
-          <td style="padding:10px 14px"><span style="background:${fromColor}22;color:${fromColor};padding:3px 8px;border-radius:10px;font-size:0.75rem;font-weight:700">${esc(m.from_campaign||'none')}</span></td>
-          <td style="padding:6px 4px;color:#999;font-size:1rem">→</td>
-          <td style="padding:10px 14px"><span style="background:${toColor}22;color:${toColor};padding:3px 8px;border-radius:10px;font-size:0.75rem;font-weight:700">${esc(m.to_campaign)}</span></td>
-        </tr>`;
-      }
-      html += `</tbody></table></div></div>`;
-    } else if (data.campaigns_queued === 0 && data.lifecycle_updated > 0) {
-      html += `<p style="margin-top:12px;color:#888;font-size:0.83rem">Lifecycle evaluated for ${data.lifecycle_updated} contacts — no campaign changes needed.</p>`;
-    }
-
-    // ── Note + collapsible details ─────────────────────────────────────────────
-    if (data.note) html += `<p style="margin-top:12px;color:#888;font-size:0.83rem">ℹ️ ${esc(data.note)}</p>`;
-    if (data.skipped_detail?.length) html += `<details style="margin-top:10px"><summary style="cursor:pointer;font-size:0.83rem;color:#888">${data.skipped_detail.length} skipped rows</summary><pre style="font-size:0.78rem;margin-top:6px">${esc(JSON.stringify(data.skipped_detail,null,2))}</pre></details>`;
-    if (data.parse_errors?.length)   html += `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:0.83rem;color:#888">${data.parse_errors.length} parse warnings</summary><pre style="font-size:0.78rem;margin-top:6px">${esc(JSON.stringify(data.parse_errors,null,2))}</pre></details>`;
-
-    // ── Shipday delivery push results ─────────────────────────────────────────
-    const sd = data.shipday_result || {};
-    if (sd.skipped) {
-      html += `<div style="margin-top:18px;background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:10px;padding:14px;font-size:0.87rem;color:#842029">
-        ⚠️ <strong>Shipday push skipped:</strong> ${esc(sd.reason || 'API key not configured')}
-      </div>`;
-    } else if (sd.submitted > 0) {
-      const allOk   = sd.failed === 0;
-      const sdBg    = allOk ? '#f0fff4' : '#fff9ed';
-      const sdBord  = allOk ? '#b7ebc0' : '#ffc107';
-      const sdTitle = allOk ? '#155724' : '#7d4e00';
-      html += `<div style="margin-top:18px;background:${sdBg};border:1.5px solid ${sdBord};border-radius:10px;padding:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-          <div style="font-size:0.9rem;font-weight:700;color:${sdTitle}">
-            🚚 Shipday — ${sd.succeeded} of ${sd.submitted} orders created
-          </div>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <a href="${esc(sd.dashboard_url || 'https://dispatch.shipday.com')}" target="_blank"
-               style="font-size:0.82rem;font-weight:600;color:#0d6efd;text-decoration:none;border:1px solid #0d6efd;padding:5px 12px;border-radius:6px">
-              Open Shipday Dashboard ↗
-            </a>
-            <a href="https://dispatch.shipday.com/live-tracking" target="_blank"
-               style="font-size:0.82rem;font-weight:600;color:#6f42c1;text-decoration:none;border:1px solid #6f42c1;padding:5px 12px;border-radius:6px">
-              Live Tracking ↗
-            </a>
-          </div>
-        </div>
-        <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
-          <div class="stat-box" style="flex:1;min-width:80px;padding:10px"><div class="s-label">Submitted</div><div class="s-val" style="color:#555">${sd.submitted}</div></div>
-          <div class="stat-box" style="flex:1;min-width:80px;padding:10px"><div class="s-label">Created</div><div class="s-val green">${sd.succeeded}</div></div>
-          <div class="stat-box" style="flex:1;min-width:80px;padding:10px"><div class="s-label">Failed</div><div class="s-val red">${sd.failed || 0}</div></div>
-        </div>`;
-      const sdOrders = sd.orders || [];
-      if (sdOrders.length) {
-        html += `<div style="background:white;border:1px solid #dee2e6;border-radius:8px;overflow:auto;max-height:320px">
-          <table style="width:100%;border-collapse:collapse;font-size:0.82rem">
-            <thead><tr style="background:#f4f4f7;position:sticky;top:0">
-              <th style="padding:8px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;color:#888;font-weight:700">#</th>
-              <th style="padding:8px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;color:#888;font-weight:700">Order</th>
-              <th style="padding:8px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;color:#888;font-weight:700">Customer</th>
-              <th style="padding:8px 12px;text-align:left;font-size:0.72rem;text-transform:uppercase;color:#888;font-weight:700">Status</th>
-            </tr></thead>
-            <tbody>`;
-        let sdIdx = 1;
-        for (const o of sdOrders) {
-          const ok = o.status === 'created';
-          const stColor = ok ? '#28a745' : '#dc3545';
-          const stLabel = ok
-            ? `✓ Created${o.shipday_order_id ? ' <span style="color:#888;font-weight:400">(ID: ' + esc(String(o.shipday_order_id)) + ')</span>' : ''}`
-            : `✗ ${esc(o.error || 'Failed')}`;
-          html += `<tr style="border-top:1px solid #f0f0f5">
-            <td style="padding:7px 12px;color:#bbb;font-size:0.78rem">${sdIdx++}</td>
-            <td style="padding:7px 12px;font-family:monospace;font-size:0.79rem;color:#555">${esc(o.order_number || '—')}</td>
-            <td style="padding:7px 12px;font-weight:500">${esc(o.customer_name || '—')}</td>
-            <td style="padding:7px 12px;color:${stColor};font-size:0.81rem">${stLabel}</td>
-          </tr>`;
-        }
-        html += `</tbody></table></div>`;
-      }
-      html += `</div>`;
-    }
-
-    // ── Shipday CSV download (always shown as fallback) ──────────────────────
-    if (data.shipday_csv_download_url) {
-      const driveBtn = data.shipday_drive_url
-        ? `<a href="${esc(data.shipday_drive_url)}" target="_blank"
-             style="font-size:0.84rem;font-weight:600;color:#1a73e8;text-decoration:none;border:1.5px solid #1a73e8;padding:7px 16px;border-radius:7px;white-space:nowrap;background:white">
-             Open in Drive ↗
-           </a>`
-        : '';
-      const driveNote = data.shipday_drive_url ? 'Also saved to Google Drive.' : '';
-      html += `<div style="margin-top:16px;background:#f8f9ff;border:1.5px solid #c7d2fe;border-radius:10px;padding:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-        <div>
-          <div style="font-size:0.88rem;font-weight:700;color:#3730a3">📥 Shipday Import File Ready</div>
-          <div style="font-size:0.78rem;color:#6b7280;margin-top:3px">Use this CSV to manually import orders into Shipday if the automatic push was skipped or had errors. ${driveNote}</div>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          ${driveBtn}
-          <a href="${esc(data.shipday_csv_download_url)}" download="shipday_orders.csv"
-             style="font-size:0.84rem;font-weight:600;color:#4f46e5;text-decoration:none;border:1.5px solid #4f46e5;padding:7px 16px;border-radius:7px;white-space:nowrap;background:white">
-            Download CSV ↓
-          </a>
-        </div>
-      </div>`;
-    }
-
-    document.getElementById('u-result').innerHTML = html;
-  } catch(e) {
-    setBtn('u-btn', false, 'Upload & Process');
-    setError('u-result', 'Network error: ' + e.message);
-  }
+    if(data.note)html+=`<p style="margin-top:12px;color:#888;font-size:0.83rem">ℹ️ ${esc(data.note)}</p>`;
+    document.getElementById('u-result').innerHTML=html;
+  } catch(e){setBtn('u-btn',false,'Upload & Process');setError('u-result','Network error: '+e.message);}
 }
 
-// ─── run agents on all contacts ───────────────────────────────────────────────
-async function runAllAgents() {
-  setLoading('ra-result', 'Running inference + decision + orchestration on all contacts… this can take several minutes.');
-  setBtn('ra-btn', true, 'Running…');
+// ─── Delay alert ─────────────────────────────────────────────────────────────
+async function loadDelayDatePreview() {
+  const d=document.getElementById('bc-delay-date').value;
+  const box=document.getElementById('bc-delay-preview');
+  if(!d){box.style.display='none';return;}
+  box.style.display='block'; box.textContent='Loading…';
   try {
-    const res  = await fetch('/api/agents/cycle/run-all-contacts', { method: 'POST' });
-    const data = await res.json();
-    setBtn('ra-btn', false, 'Run Agents on All Contacts');
-    if (!res.ok) { setError('ra-result', data.detail || JSON.stringify(data)); return; }
-
-    const actions = {};
-    (data.results || []).forEach(r => {
-      const a = r.chosen_action || 'none';
-      actions[a] = (actions[a] || 0) + 1;
-    });
-    const actionBreakdown = Object.entries(actions)
-      .map(([a, n]) => `<span style="background:${ACTION_COLOR[a]||'#888'}22;color:${ACTION_COLOR[a]||'#888'};padding:3px 10px;border-radius:10px;font-size:0.8rem;font-weight:700;margin:2px">${a}: ${n}</span>`)
-      .join(' ');
-
-    let html = `<div class="upload-summary" style="margin-top:16px">
-      <div class="stat-box"><div class="s-label">Contacts processed</div><div class="s-val green">${data.processed}</div></div>
-      <div class="stat-box"><div class="s-label">Instantly campaigns</div><div class="s-val" style="color:#17a2b8">${data.campaigns_pushed}</div></div>
-      <div class="stat-box"><div class="s-label">Airtable tasks</div><div class="s-val" style="color:#e67e22">${data.airtable_pushed}</div></div>
-      <div class="stat-box"><div class="s-label">Errors</div><div class="s-val red">${(data.errors||[]).length}</div></div>
-      <div class="stat-box"><div class="s-label">Elapsed</div><div class="s-val">${data.elapsed_seconds||'—'}s</div></div>
-    </div>`;
-
-    if (actionBreakdown) {
-      html += `<div style="margin-top:12px">${actionBreakdown}</div>`;
-    }
-
-    if ((data.errors||[]).length > 0) {
-      html += `<details style="margin-top:12px"><summary style="cursor:pointer;font-size:0.85rem;color:#888">${data.errors.length} error(s)</summary>
-        <pre style="font-size:0.78rem;color:#842029;margin-top:6px">${esc(JSON.stringify(data.errors, null, 2))}</pre></details>`;
-    }
-
-    document.getElementById('ra-result').innerHTML = html;
-  } catch(e) {
-    setBtn('ra-btn', false, 'Run Agents on All Contacts');
-    setError('ra-result', 'Network error: ' + e.message);
-  }
+    const res=await fetch(`/api/daily-orders/summary/${d}`);
+    const data=await res.json();
+    if(!res.ok){box.textContent='Could not load order data for this date.';return;}
+    const orders=data.total_orders||0, customers=data.unique_customers||0;
+    box.innerHTML=`<strong>${orders}</strong> order${orders!==1?'s':''} · <strong>${customers}</strong> unique customer${customers!==1?'s':''} will receive this alert on <strong>${d}</strong>`;
+  } catch(e){box.textContent='Could not load preview.';}
 }
 
-// ─── reports ──────────────────────────────────────────────────────────────────
-async function loadReport(type) {
-  const date = document.getElementById('r-date').value || new Date().toISOString().slice(0,10);
-  setLoading('r-result', `Loading ${type} report for ${date}…`);
+async function sendDelayAlert() {
+  const date=document.getElementById('bc-delay-date').value;
+  const sms=document.getElementById('bc-delay-sms').value.trim();
+  const subject=document.getElementById('bc-delay-subject').value.trim();
+  const body=document.getElementById('bc-delay-body').value.trim();
+  const author=document.getElementById('bc-delay-author').value.trim();
+  if(!sms)    {setError('bc-delay-result','Please enter an SMS message.');return;}
+  if(!subject){setError('bc-delay-result','Please enter an email subject.');return;}
+  if(!body)   {setError('bc-delay-result','Please enter an email body.');return;}
+  setLoading('bc-delay-result','Creating delay alert broadcast…');
+  setBtn('bc-delay-btn',true,'Sending…');
   try {
-    const res  = await fetch(`/api/agents/report/${type}-data?report_date=${date}`);
-    const data = await res.json();
-    if (!res.ok) { setError('r-result', data.detail || JSON.stringify(data)); return; }
-
-    const summary = data.summary || {};
-    const rows    = data.detail_rows || [];
-    const title   = type === 'activity' ? '📊 Activity Report' : '✅ Outcome Report';
-
-    let html = `<div style="margin-top:20px">
-      <h2 style="font-size:0.95rem;font-weight:700;margin-bottom:12px">${title} — ${esc(date)}</h2>
-      <div class="report-stats">`;
-
-    for (const [k, v] of Object.entries(summary)) {
-      if (typeof v === 'number') {
-        html += `<div class="r-stat"><div class="r-label">${esc(k.replace(/_/g,' '))}</div>
-          <div class="r-val">${Number.isInteger(v) ? v : v.toFixed(2)}</div></div>`;
-      }
-    }
-    html += '</div>';
-
-    if (rows.length > 0) {
-      const cols = Object.keys(rows[0]);
-      html += `<div class="report-table-wrap" style="margin-top:16px">
-        <details open><summary>Detail — ${rows.length} rows</summary>
-        <div style="overflow-x:auto">
-        <table class="report-table">
-          <thead><tr>${cols.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
-          <tbody>${rows.slice(0, 100).map(r =>
-            `<tr>${cols.map(c => `<td>${esc(r[c] ?? '')}</td>`).join('')}</tr>`
-          ).join('')}</tbody>
-        </table></div>
-        ${rows.length > 100 ? `<p style="padding:10px 14px;color:#999;font-size:0.8rem">Showing first 100 of ${rows.length} rows.</p>` : ''}
-        </details></div>`;
-    } else {
-      html += `<p style="margin-top:12px;color:#888;font-size:0.87rem">No detail rows for this date.</p>`;
-    }
-
-    html += '</div>';
-    document.getElementById('r-result').innerHTML = html;
-  } catch(e) { setError('r-result', 'Network error: ' + e.message); }
+    const res=await fetch('/api/broadcasts/delay-alert',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sms_message:sms,email_subject:subject,email_body:body,target_date:date||null,created_by:author||null})});
+    const data=await res.json();
+    setBtn('bc-delay-btn',false,'Send Delay Alert Now');
+    if(!res.ok){setError('bc-delay-result',data.detail||JSON.stringify(data));return;}
+    setPreResult('bc-delay-result',`Delay alert queued!\n\nJob ID: ${data.id}\nRecipients: ${data.total_recipients||'(queuing…)'}\nStatus: ${data.status}`);
+  } catch(e){setBtn('bc-delay-btn',false,'Send Delay Alert Now');setError('bc-delay-result','Network error: '+e.message);}
 }
 
-// ─── chatbot ──────────────────────────────────────────────────────────────────
-const _cbMessages = [];  // [{role:'user'|'assistant', text, sources}]
+// ─── Promo blast ──────────────────────────────────────────────────────────────
+function updatePromoFields() {
+  const hasSms=document.getElementById('bc-promo-ch-sms').checked;
+  const hasEmail=document.getElementById('bc-promo-ch-email').checked;
+  document.getElementById('bc-promo-sms-group').style.display=hasSms?'block':'none';
+  document.getElementById('bc-promo-email-group').style.display=hasEmail?'block':'none';
+}
 
-// ── Autocomplete ──────────────────────────────────────────────────────────────
-let _suggestTimer = null;
-let _suggestIdx   = -1;
+async function sendPromo() {
+  const title=document.getElementById('bc-promo-title').value.trim();
+  const author=document.getElementById('bc-promo-author').value.trim();
+  const hasSms=document.getElementById('bc-promo-ch-sms').checked;
+  const hasEmail=document.getElementById('bc-promo-ch-email').checked;
+  const sms=hasSms?document.getElementById('bc-promo-sms').value.trim():null;
+  const subject=hasEmail?document.getElementById('bc-promo-subject').value.trim():null;
+  const body=hasEmail?document.getElementById('bc-promo-body').value.trim():null;
+  if(!title)              {setError('bc-promo-result','Please enter a campaign title.');return;}
+  if(!hasSms&&!hasEmail)  {setError('bc-promo-result','Please select at least one channel.');return;}
+  if(hasSms&&!sms)        {setError('bc-promo-result','Please enter an SMS message.');return;}
+  if(hasEmail&&!subject)  {setError('bc-promo-result','Please enter an email subject.');return;}
+  if(hasEmail&&!body)     {setError('bc-promo-result','Please enter an email body.');return;}
+  const channels=[];if(hasSms)channels.push('sms');if(hasEmail)channels.push('email');
+  setLoading('bc-promo-result','Queuing promotional blast…');
+  setBtn('bc-promo-btn',true,'Queuing…');
+  try {
+    const res=await fetch('/api/broadcasts/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,broadcast_type:'promotional',channels,sms_message:sms,email_subject:subject,email_body:body,target_type:'all_customers',created_by:author||null})});
+    const data=await res.json();
+    if(!res.ok){setBtn('bc-promo-btn',false,'Queue Promotional Blast');setError('bc-promo-result',data.detail||JSON.stringify(data));return;}
+    const qRes=await fetch(`/api/broadcasts/${data.id}/queue`,{method:'POST'});
+    const qData=await qRes.json();
+    setBtn('bc-promo-btn',false,'Queue Promotional Blast');
+    if(!qRes.ok){setError('bc-promo-result',qData.detail||JSON.stringify(qData));return;}
+    setPreResult('bc-promo-result',`Blast queued!\n\nJob ID: ${qData.id}\nRecipients: ${qData.total_recipients||0}\nStatus: ${qData.status}`);
+  } catch(e){setBtn('bc-promo-btn',false,'Queue Promotional Blast');setError('bc-promo-result','Network error: '+e.message);}
+}
+
+// ─── Chat ─────────────────────────────────────────────────────────────────────
+let _suggestTimer=null, _suggestIdx=-1;
 
 function _cbInput(ta) {
   clearTimeout(_suggestTimer);
-  const q = ta.value.trim();
-  if (q.length < 2) { _hideSuggest(); return; }
-  _suggestTimer = setTimeout(async () => {
-    try {
-      const res  = await fetch('/api/chatbot/suggest?q=' + encodeURIComponent(q) + '&limit=6');
-      const data = await res.json();
-      _showSuggest(data.suggestions || []);
-    } catch(e) { _hideSuggest(); }
-  }, 250);
+  const q=ta.value.trim();
+  if(q.length<2){_hideSuggest();return;}
+  _suggestTimer=setTimeout(async()=>{
+    try{const res=await fetch('/api/chatbot/suggest?q='+encodeURIComponent(q)+'&limit=6');_showSuggest((await res.json()).suggestions||[]);}
+    catch(e){_hideSuggest();}
+  },250);
 }
 
 function _showSuggest(items) {
-  const drop = document.getElementById('cb-suggest');
-  if (!items.length) { _hideSuggest(); return; }
-  drop.innerHTML = '';
-  _suggestIdx = -1;
-  items.forEach(text => {
-    const el = document.createElement('div');
-    el.className = 'cb-suggest-item';
-    el.textContent = text;
-    el.onmousedown = e => { e.preventDefault(); _pickSuggest(text); };
-    drop.appendChild(el);
-  });
-  drop.style.display = 'block';
+  const drop=document.getElementById('cb-suggest');
+  if(!items.length){_hideSuggest();return;}
+  drop.innerHTML='';_suggestIdx=-1;
+  items.forEach(text=>{const el=document.createElement('div');el.className='cb-suggest-item';el.textContent=text;el.onmousedown=e=>{e.preventDefault();_pickSuggest(text);};drop.appendChild(el);});
+  drop.style.display='block';
 }
-
-function _hideSuggest() {
-  const drop = document.getElementById('cb-suggest');
-  if (drop) drop.style.display = 'none';
-  _suggestIdx = -1;
-}
-
-function _pickSuggest(text) {
-  document.getElementById('cb-question').value = text;
-  _hideSuggest();
-}
+function _hideSuggest(){ const d=document.getElementById('cb-suggest'); if(d)d.style.display='none'; _suggestIdx=-1; }
+function _pickSuggest(text){ document.getElementById('cb-question').value=text; _hideSuggest(); }
 
 function _cbKeyDown(e) {
-  const drop  = document.getElementById('cb-suggest');
-  const open  = drop && drop.style.display !== 'none';
-  const items = open ? drop.querySelectorAll('.cb-suggest-item') : [];
-
-  if (e.key === 'ArrowDown') {
-    if (!open) return;
+  const drop=document.getElementById('cb-suggest');
+  const open=drop&&drop.style.display!=='none';
+  const items=open?drop.querySelectorAll('.cb-suggest-item'):[];
+  if(e.key==='ArrowDown'){if(!open)return;e.preventDefault();_suggestIdx=Math.min(_suggestIdx+1,items.length-1);items.forEach((el,i)=>el.classList.toggle('cb-active',i===_suggestIdx));return;}
+  if(e.key==='ArrowUp')  {if(!open)return;e.preventDefault();_suggestIdx=Math.max(_suggestIdx-1,-1);items.forEach((el,i)=>el.classList.toggle('cb-active',i===_suggestIdx));return;}
+  if(e.key==='Escape'){_hideSuggest();return;}
+  if(e.key==='Enter'&&!e.shiftKey){
     e.preventDefault();
-    _suggestIdx = Math.min(_suggestIdx + 1, items.length - 1);
-    items.forEach((el, i) => el.classList.toggle('cb-active', i === _suggestIdx));
-    return;
-  }
-  if (e.key === 'ArrowUp') {
-    if (!open) return;
-    e.preventDefault();
-    _suggestIdx = Math.max(_suggestIdx - 1, -1);
-    items.forEach((el, i) => el.classList.toggle('cb-active', i === _suggestIdx));
-    return;
-  }
-  if (e.key === 'Escape') { _hideSuggest(); return; }
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    if (open && _suggestIdx >= 0 && items[_suggestIdx]) {
-      _pickSuggest(items[_suggestIdx].textContent);
-    } else {
-      _hideSuggest();
-      sendChat();
-    }
+    if(open&&_suggestIdx>=0&&items[_suggestIdx])_pickSuggest(items[_suggestIdx].textContent);
+    else{_hideSuggest();sendChat();}
   }
 }
 
-function askSuggestion(btn) {
-  document.getElementById('cb-question').value = btn.textContent.trim();
-  sendChat();
+function askSuggestion(btn){document.getElementById('cb-question').value=btn.textContent.trim();sendChat();}
+
+function _renderMd(t){
+  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/```([\s\S]*?)```/g,'<pre><code>$1</code></pre>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/^#{1,3} (.+)$/gm,'<h3>$1</h3>')
+    .replace(/^\* (.+)$/gm,'<li>$1</li>')
+    .replace(/^- (.+)$/gm,'<li>$1</li>')
+    .replace(/(<li>[\s\S]*?<\/li>)/g,'<ul>$1</ul>')
+    .replace(/\n\n/g,'</p><p>').replace(/\n/g,'<br>');
 }
 
-function _renderMd(text) {
-  // Minimal markdown rendering: bold, inline code, code blocks, lists, headers
-  return text
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/^#{1,3} (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^\* (.+)$/gm, '<li>$1</li>')
-    .replace(/^- (.+)$/gm, '<li>$1</li>')
-    .replace(/(<li>[\s\S]*?<\/li>)/g, '<ul>$1</ul>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\n/g, '<br>');
+function _appendBubble(role,text,sources){
+  const container=document.getElementById('cb-history');
+  const savedY=window.scrollY;
+  const div=document.createElement('div'); div.className='chat-bubble '+role;
+  if(role==='assistant'){
+    div.innerHTML=_renderMd(text);
+    if(sources&&sources.length){const src=document.createElement('div');src.className='chat-sources';src.textContent='Sources: '+sources.join(', ');div.appendChild(src);}
+  } else { div.textContent=text; }
+  container.appendChild(div); container.scrollTop=container.scrollHeight; window.scrollTo(0,savedY);
 }
 
-function _appendBubble(role, text, sources) {
-  const container = document.getElementById('cb-history');
-  const savedY = window.scrollY;
-  const div = document.createElement('div');
-  div.className = 'chat-bubble ' + role;
-  if (role === 'assistant') {
-    div.innerHTML = _renderMd(text);
-    if (sources && sources.length) {
-      const src = document.createElement('div');
-      src.className = 'chat-sources';
-      src.textContent = 'Sources: ' + sources.join(', ');
-      div.appendChild(src);
-    }
-  } else {
-    div.textContent = text;
-  }
-  container.appendChild(div);
-  container.scrollTop = container.scrollHeight;
-  window.scrollTo(0, savedY);
-}
-
-async function sendChat() {
-  const ta = document.getElementById('cb-question');
-  const question = ta.value.trim();
-  if (!question) return;
-
-  document.getElementById('cb-error').innerHTML = '';
-  _appendBubble('user', question, null);
-  ta.value = '';
-
-  setBtn('cb-btn', true, '…');
-
-  // Placeholder bubble
-  const container = document.getElementById('cb-history');
-  const savedY = window.scrollY;
-  const placeholder = document.createElement('div');
-  placeholder.className = 'chat-bubble assistant';
-  placeholder.innerHTML = '<span class="spinner"></span> Thinking…';
-  container.appendChild(placeholder);
-  container.scrollTop = container.scrollHeight;
-  window.scrollTo(0, savedY);
-
+async function sendChat(){
+  const ta=document.getElementById('cb-question');
+  const question=ta.value.trim(); if(!question)return;
+  document.getElementById('cb-error').innerHTML='';
+  _appendBubble('user',question,null); ta.value='';
+  setBtn('cb-btn',true,'…');
+  const container=document.getElementById('cb-history');
+  const savedY=window.scrollY;
+  const ph=document.createElement('div'); ph.className='chat-bubble assistant'; ph.innerHTML='<span class="spinner"></span> Thinking…';
+  container.appendChild(ph); container.scrollTop=container.scrollHeight; window.scrollTo(0,savedY);
   try {
-    const res  = await fetch('/api/chatbot/ask', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ question }),
-    });
-    const data = await res.json();
-    container.removeChild(placeholder);
-    setBtn('cb-btn', false, 'Ask');
-    if (!res.ok) {
-      document.getElementById('cb-error').innerHTML = `<div class="result-box error"><pre>${esc(data.detail || JSON.stringify(data))}</pre></div>`;
-      return;
-    }
-    _appendBubble('assistant', data.answer, data.sources);
-  } catch(e) {
-    container.removeChild(placeholder);
-    setBtn('cb-btn', false, 'Ask');
-    document.getElementById('cb-error').innerHTML = `<div class="result-box error"><pre>${esc('Network error: ' + e.message)}</pre></div>`;
-  }
+    const res=await fetch('/api/chatbot/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question})});
+    const data=await res.json(); container.removeChild(ph); setBtn('cb-btn',false,'Ask');
+    if(!res.ok){document.getElementById('cb-error').innerHTML=`<div class="result-box error"><pre>${esc(data.detail||JSON.stringify(data))}</pre></div>`;return;}
+    _appendBubble('assistant',data.answer,data.sources);
+  } catch(e){ container.removeChild(ph); setBtn('cb-btn',false,'Ask'); document.getElementById('cb-error').innerHTML=`<div class="result-box error"><pre>${esc('Network error: '+e.message)}</pre></div>`; }
 }
 
-// ─── reports type switcher ────────────────────────────────────────────────────
-function onReportTypeChange() {
-  const val = document.getElementById('r-type').value;
-  document.getElementById('r-section-date').style.display =
-    (val === 'activity' || val === 'outcome') ? 'block' : 'none';
-  document.getElementById('r-section-campaign_analytics').style.display =
-    val === 'campaign_analytics' ? 'block' : 'none';
-  document.getElementById('r-result').innerHTML = '';
-  if (val === 'campaign_analytics' && !document.getElementById('camp-result').dataset.loaded) {
-    loadCampaignAnalytics();
-  }
+// ─── SMS char counters ────────────────────────────────────────────────────────
+function _attachCounter(inputId,counterId){
+  const el=document.getElementById(inputId); const counter=document.getElementById(counterId); if(!el||!counter)return;
+  el.addEventListener('input',()=>{ const len=el.value.length; counter.textContent=`${len} / 160`; counter.style.color=len>160?'#dc3545':'#aaa'; });
 }
 
-// ─── campaign analytics ───────────────────────────────────────────────────────
-let _campRefreshTimer = null;
-let _campRefreshCountdown = null;
-const CAMP_REFRESH_MS = 5 * 60 * 1000; // 5 minutes
-
-function loadCampaignAnalytics() {
-  const resultEl = document.getElementById('camp-result');
-  setLoading('camp-result', 'Fetching campaign analytics from Instantly…');
-  setBtn('camp-refresh-btn', true, 'Refreshing…');
-  clearInterval(_campRefreshTimer);
-  clearInterval(_campRefreshCountdown);
-
-  fetch('/api/campaigns/analytics')
-    .then(r => r.json())
-    .then(data => {
-      resultEl.dataset.loaded = '1';
-      setBtn('camp-refresh-btn', false, 'Refresh');
-      if (!Array.isArray(data)) {
-        setError('camp-result', JSON.stringify(data));
-        return;
-      }
-      let html = '<div class="camp-grid">';
-      data.forEach(c => {
-        if (c.error) {
-          html += `<div class="camp-card">
-            <div class="camp-card-header">
-              <span class="camp-name">${esc(c.label)}</span>
-              <span class="camp-id">${esc(c.instantly_id)}</span>
-            </div>
-            <div class="camp-error">Error fetching stats: ${esc(c.error)}</div>
-          </div>`;
-          return;
-        }
-        const openPct  = (c.open_rate  ?? 0).toFixed(1);
-        const replyPct = (c.reply_rate ?? 0).toFixed(1);
-        html += `<div class="camp-card">
-          <div class="camp-card-header">
-            <span class="camp-name">${esc(c.label)}</span>
-            <span class="camp-id">${esc(c.instantly_id)}</span>
-          </div>
-          <div class="camp-stats">
-            <div class="camp-stat">
-              <div class="cs-val">${c.total_leads ?? 0}</div>
-              <div class="cs-label">Contacts</div>
-            </div>
-            <div class="camp-stat highlight-blue">
-              <div class="cs-val">${c.emails_sent ?? 0}</div>
-              <div class="cs-label">Sent</div>
-            </div>
-            <div class="camp-stat highlight-green">
-              <div class="cs-val">${openPct}%</div>
-              <div class="cs-label">Open Rate</div>
-            </div>
-            <div class="camp-stat highlight-green">
-              <div class="cs-val">${replyPct}%</div>
-              <div class="cs-label">Reply Rate</div>
-            </div>
-            <div class="camp-stat highlight-red">
-              <div class="cs-val">${c.bounces ?? 0}</div>
-              <div class="cs-label">Bounces</div>
-            </div>
-            <div class="camp-stat">
-              <div class="cs-val">${c.unsubscribed ?? 0}</div>
-              <div class="cs-label">Unsubs</div>
-            </div>
-          </div>
-        </div>`;
-      });
-      html += '</div>';
-      resultEl.innerHTML = html;
-
-      // Schedule next auto-refresh
-      let secsLeft = CAMP_REFRESH_MS / 1000;
-      _campRefreshCountdown = setInterval(() => {
-        secsLeft--;
-        const m = Math.floor(secsLeft / 60), s = secsLeft % 60;
-        const el = document.getElementById('camp-next-refresh');
-        if (el) el.textContent = `Next refresh in ${m}:${String(s).padStart(2,'0')}`;
-        if (secsLeft <= 0) clearInterval(_campRefreshCountdown);
-      }, 1000);
-      _campRefreshTimer = setTimeout(() => {
-        if (document.getElementById('panel-reports').classList.contains('active') &&
-            document.getElementById('r-type').value === 'campaign_analytics') {
-          loadCampaignAnalytics();
-        }
-      }, CAMP_REFRESH_MS);
-    })
-    .catch(e => {
-      setBtn('camp-refresh-btn', false, 'Refresh');
-      setError('camp-result', 'Network error: ' + e.message);
-    });
-}
-
-// ─── delay alert preview ──────────────────────────────────────────────────────
-async function loadDelayDatePreview() {
-  const d   = document.getElementById('bc-delay-date').value;
-  const box = document.getElementById('bc-delay-preview');
-  if (!d) { box.style.display = 'none'; return; }
-  box.style.display = 'block';
-  box.textContent = 'Loading…';
-  try {
-    const res  = await fetch(`/api/daily-orders/summary/${d}`);
-    const data = await res.json();
-    if (!res.ok) { box.textContent = 'Could not load order data for this date.'; return; }
-    const orders    = data.total_orders   || 0;
-    const customers = data.unique_customers || 0;
-    box.innerHTML = `<strong>${orders}</strong> order${orders !== 1 ? 's' : ''} · <strong>${customers}</strong> unique customer${customers !== 1 ? 's' : ''} will receive this alert on <strong>${d}</strong>`;
-  } catch(e) { box.textContent = 'Could not load preview.'; }
-}
-
-// ─── send delay alert ────────────────────────────────────────────────────────
-async function sendDelayAlert() {
-  const date    = document.getElementById('bc-delay-date').value;
-  const sms     = document.getElementById('bc-delay-sms').value.trim();
-  const subject = document.getElementById('bc-delay-subject').value.trim();
-  const body    = document.getElementById('bc-delay-body').value.trim();
-  const author  = document.getElementById('bc-delay-author').value.trim();
-
-  if (!sms)     { setError('bc-delay-result', 'Please enter an SMS message.'); return; }
-  if (!subject) { setError('bc-delay-result', 'Please enter an email subject.'); return; }
-  if (!body)    { setError('bc-delay-result', 'Please enter an email body.'); return; }
-
-  setLoading('bc-delay-result', 'Creating delay alert broadcast…');
-  setBtn('bc-delay-btn', true, 'Sending…');
-  try {
-    const res  = await fetch('/api/broadcasts/delay-alert', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ sms_message: sms, email_subject: subject, email_body: body, target_date: date || null, created_by: author || null }),
-    });
-    const data = await res.json();
-    setBtn('bc-delay-btn', false, 'Send Delay Alert Now');
-    if (!res.ok) { setError('bc-delay-result', data.detail || JSON.stringify(data)); return; }
-    setPreResult('bc-delay-result',
-      `Delay alert queued!\n\nJob ID: ${data.id}\nRecipients: ${data.total_recipients || '(queuing…)'}\nStatus: ${data.status}`
-    );
-  } catch(e) {
-    setBtn('bc-delay-btn', false, 'Send Delay Alert Now');
-    setError('bc-delay-result', 'Network error: ' + e.message);
-  }
-}
-
-// ─── send promotional blast ───────────────────────────────────────────────────
-async function sendPromo() {
-  const title   = document.getElementById('bc-promo-title').value.trim();
-  const author  = document.getElementById('bc-promo-author').value.trim();
-  const hasSms  = document.getElementById('bc-promo-ch-sms').checked;
-  const hasEmail= document.getElementById('bc-promo-ch-email').checked;
-  const sms     = hasSms  ? document.getElementById('bc-promo-sms').value.trim()     : null;
-  const subject = hasEmail? document.getElementById('bc-promo-subject').value.trim() : null;
-  const body    = hasEmail? document.getElementById('bc-promo-body').value.trim()    : null;
-
-  if (!title)              { setError('bc-promo-result', 'Please enter a campaign title.'); return; }
-  if (!hasSms && !hasEmail){ setError('bc-promo-result', 'Please select at least one channel.'); return; }
-  if (hasSms  && !sms)     { setError('bc-promo-result', 'Please enter an SMS message.'); return; }
-  if (hasEmail && !subject){ setError('bc-promo-result', 'Please enter an email subject.'); return; }
-  if (hasEmail && !body)   { setError('bc-promo-result', 'Please enter an email body.'); return; }
-
-  const channels = [];
-  if (hasSms)  channels.push('sms');
-  if (hasEmail) channels.push('email');
-
-  setLoading('bc-promo-result', 'Queuing promotional blast…');
-  setBtn('bc-promo-btn', true, 'Queuing…');
-  try {
-    const res  = await fetch('/api/broadcasts/', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({
-        title, broadcast_type: 'promotional', channels,
-        sms_message: sms, email_subject: subject, email_body: body,
-        target_type: 'all_customers', created_by: author || null,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) { setBtn('bc-promo-btn', false, 'Queue Promotional Blast'); setError('bc-promo-result', data.detail || JSON.stringify(data)); return; }
-    // Queue it
-    const qRes  = await fetch(`/api/broadcasts/${data.id}/queue`, { method: 'POST' });
-    const qData = await qRes.json();
-    setBtn('bc-promo-btn', false, 'Queue Promotional Blast');
-    if (!qRes.ok) { setError('bc-promo-result', qData.detail || JSON.stringify(qData)); return; }
-    setPreResult('bc-promo-result',
-      `Blast queued!\n\nJob ID: ${qData.id}\nRecipients: ${qData.total_recipients || 0}\nStatus: ${qData.status}`
-    );
-  } catch(e) {
-    setBtn('bc-promo-btn', false, 'Queue Promotional Blast');
-    setError('bc-promo-result', 'Network error: ' + e.message);
-  }
-}
-
-// ─── init ─────────────────────────────────────────────────────────────────────
-const _today = new Date();
-const _d = d => { const x = new Date(_today); x.setDate(x.getDate() + d); return x.toISOString().slice(0,10); };
-document.getElementById('r-date').value        = _d(0);
+// ─── Init ─────────────────────────────────────────────────────────────────────
 document.getElementById('bc-delay-date').value = _d(0);
 loadDelayDatePreview();
-document.getElementById('q-date-from').value   = _d(-30);
-document.getElementById('q-date-to').value     = _d(0);
-bcAttachCounter('bc-delay-sms', 'bc-delay-sms-count');
-bcAttachCounter('bc-promo-sms', 'bc-promo-sms-count');
-document.getElementById('bc-promo-ch-sms').addEventListener('change', bcUpdatePromoFields);
-document.getElementById('bc-promo-ch-email').addEventListener('change', bcUpdatePromoFields);
+_attachCounter('bc-delay-sms','bc-delay-sms-count');
+_attachCounter('bc-promo-sms','bc-promo-sms-count');
 </script>
 </body>
 </html>

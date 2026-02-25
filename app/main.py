@@ -6,7 +6,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, airtable_menu, campaigns, broadcasts, chatbot, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, menu_sync, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, test_harness, webhooks
+from app.routers import agents, agent, airtable_menu, auth, campaigns, broadcasts, chatbot, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, menu_sync, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, test_harness, webhooks
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
@@ -162,6 +162,7 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": str(exc), "type": type(exc).__name__},
     )
 
+app.include_router(auth.router, tags=["auth"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(lifecycle.router, prefix="/api/lifecycle", tags=["lifecycle"])
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["campaigns"])
@@ -192,16 +193,24 @@ app.include_router(airtable_menu.router, prefix="/api/menu", tags=["menu"])
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
-def dashboard():
-    """Interactive marketing intelligence dashboard."""
+def dashboard(request: Request):
+    """Interactive marketing intelligence dashboard — requires @dabbahwala.com login."""
+    from app.routers.auth import get_current_user
+    from fastapi.responses import RedirectResponse
+    if not get_current_user(request):
+        return RedirectResponse(url="/login")
     html_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
     with open(html_path) as f:
         return f.read()
 
 
 @app.get("/menu-dashboard", response_class=HTMLResponse)
-def menu_dashboard():
-    """Menu management dashboard — view, add, edit, and delete menu items."""
+def menu_dashboard(request: Request):
+    """Menu management dashboard — requires @dabbahwala.com login."""
+    from app.routers.auth import get_current_user
+    from fastapi.responses import RedirectResponse
+    if not get_current_user(request):
+        return RedirectResponse(url="/login")
     html_path = os.path.join(os.path.dirname(__file__), "menu_dashboard.html")
     with open(html_path) as f:
         return f.read()
