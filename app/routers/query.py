@@ -41,6 +41,10 @@ CATEGORIES = {
     "ad_copies": "Browse recent social media ad copies",
     "submit_input": "Submit a new observation, note, or question",
     "broadcast_history": "View past broadcasts — blasts, alerts, and delivery stats",
+    "sms_performance": "SMS broadcast campaign performance for a date range",
+    "email_performance": "Email broadcast campaign performance for a date range",
+    "activity_report": "Marketing activity (opens, clicks, SMS, orders) over a date range",
+    "outcome_report": "Marketing outcomes: lifecycle transitions and attributed orders over a date range",
     "free_form": "Ask any question about the marketing system",
 }
 
@@ -1283,6 +1287,351 @@ def tone_drafts(req: ToneRequest):
     return result
 
 
+def _handle_sms_performance(date_from: str | None, date_to: str | None) -> tuple[str, dict]:
+    """Return SMS broadcast performance stats for the given date range."""
+    with get_cursor(commit=False) as cur:
+        params: list = []
+        where_clauses = ["'sms' = ANY(channels)"]
+
+        if date_from:
+            where_clauses.append("created_at >= %s")
+            params.append(date_from)
+        if date_to:
+            where_clauses.append("created_at <= %s::date + interval '1 day'")
+            params.append(date_to)
+
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+        params.append(50)
+
+        cur.execute(
+            f"""
+            SELECT id, title, broadcast_type, target_type, target_date,
+                   status, total_recipients, sent_sms, failed_count,
+                   created_by, created_at, completed_at
+            FROM broadcast_jobs
+            {where_sql}
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            params,
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+
+    if not rows:
+        return "No SMS broadcasts found for the selected period.", {"broadcasts": []}
+
+    total_sent = sum(r.get("sent_sms") or 0 for r in rows)
+    total_failed = sum(r.get("failed_count") or 0 for r in rows if r.get("status") == "completed")
+    total_recipients = sum(r.get("total_recipients") or 0 for r in rows)
+    delivery_rate = f"{(total_sent / total_recipients * 100):.1f}%" if total_recipients else "N/A"
+
+    lines = [
+        f"**SMS Campaign Performance** — {len(rows)} campaign(s)",
+        f"Total recipients: {total_recipients} | Sent: {total_sent} | Failed: {total_failed} | Delivery rate: {delivery_rate}",
+        "",
+    ]
+    for r in rows:
+        ts = str(r.get("created_at", ""))[:10]
+        sent = r.get("sent_sms") or 0
+        recip = r.get("total_recipients") or 0
+        rate = f"{(sent / recip * 100):.0f}%" if recip else "—"
+        lines.append(f"- **{r.get('title', 'Untitled')}** [{r.get('status')}] {ts} — {recip} recipients, {sent} sent ({rate})")
+
+    return "\n".join(lines), {
+        "broadcasts": rows,
+        "summary": {"total_sent": total_sent, "total_recipients": total_recipients, "total_failed": total_failed},
+    }
+
+
+def _handle_email_performance(date_from: str | None, date_to: str | None) -> tuple[str, dict]:
+    """Return email broadcast performance stats for the given date range."""
+    with get_cursor(commit=False) as cur:
+        params: list = []
+        where_clauses = ["'email' = ANY(channels)"]
+
+        if date_from:
+            where_clauses.append("created_at >= %s")
+            params.append(date_from)
+        if date_to:
+            where_clauses.append("created_at <= %s::date + interval '1 day'")
+            params.append(date_to)
+
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+        params.append(50)
+
+        cur.execute(
+            f"""
+            SELECT id, title, broadcast_type, email_subject, target_type, target_date,
+                   status, total_recipients, sent_email, failed_count,
+                   created_by, created_at, completed_at
+            FROM broadcast_jobs
+            {where_sql}
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            params,
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+
+    if not rows:
+        return "No email broadcasts found for the selected period.", {"broadcasts": []}
+
+    total_sent = sum(r.get("sent_email") or 0 for r in rows)
+    total_failed = sum(r.get("failed_count") or 0 for r in rows if r.get("status") == "completed")
+    total_recipients = sum(r.get("total_recipients") or 0 for r in rows)
+    delivery_rate = f"{(total_sent / total_recipients * 100):.1f}%" if total_recipients else "N/A"
+
+    lines = [
+        f"**Email Campaign Performance** — {len(rows)} campaign(s)",
+        f"Total recipients: {total_recipients} | Sent: {total_sent} | Failed: {total_failed} | Delivery rate: {delivery_rate}",
+        "",
+    ]
+    for r in rows:
+        ts = str(r.get("created_at", ""))[:10]
+        sent = r.get("sent_email") or 0
+        recip = r.get("total_recipients") or 0
+        rate = f"{(sent / recip * 100):.0f}%" if recip else "—"
+        lines.append(f"- **{r.get('title', 'Untitled')}** [{r.get('status')}] {ts} — {recip} recipients, {sent} sent ({rate})")
+        subj = r.get("email_subject") or ""
+        if subj:
+            lines.append(f"  Subject: *{subj}*")
+
+    return "\n".join(lines), {
+        "broadcasts": rows,
+        "summary": {"total_sent": total_sent, "total_recipients": total_recipients, "total_failed": total_failed},
+    }
+
+
+def _handle_activity_report(date_from: str | None, date_to: str | None) -> tuple[str, dict]:
+    """Return marketing activity (events) aggregated over the date range."""
+    _EVENT_LABELS = {
+        "email_open": "Email Opens",
+        "email_click": "Email Clicks",
+        "sms_sent": "SMS Sent",
+        "sms_click": "SMS Clicks",
+        "order_placed": "Orders Placed",
+        "unsubscribe": "Unsubscribes",
+    }
+    with get_cursor(commit=False) as cur:
+        params: list = []
+        where_clauses = [
+            "event_type IN ('email_open','email_click','sms_sent','sms_click','order_placed','unsubscribe')"
+        ]
+        if date_from:
+            where_clauses.append("occurred_at >= %s")
+            params.append(date_from)
+        if date_to:
+            where_clauses.append("occurred_at <= %s::date + interval '1 day'")
+            params.append(date_to)
+
+        where_sql = "WHERE " + " AND ".join(where_clauses)
+
+        cur.execute(
+            f"""
+            SELECT event_type, COUNT(*) AS count
+            FROM events {where_sql}
+            GROUP BY event_type ORDER BY count DESC
+            """,
+            params,
+        )
+        by_type = [dict(r) for r in cur.fetchall()]
+
+        cur.execute(
+            f"""
+            SELECT occurred_at::date AS day, event_type, COUNT(*) AS count
+            FROM events {where_sql}
+            GROUP BY day, event_type ORDER BY day DESC, count DESC
+            """,
+            params,
+        )
+        by_day = [dict(r) for r in cur.fetchall()]
+
+    if not by_type:
+        return "No activity found for the selected period.", {"by_type": [], "by_day": []}
+
+    lines = ["**Activity Report**", ""]
+    for row in by_type:
+        label = _EVENT_LABELS.get(row["event_type"], row["event_type"])
+        lines.append(f"- {label}: **{row['count']}**")
+
+    total = sum(r["count"] for r in by_type)
+    lines.append(f"\nTotal events: **{total}**")
+
+    days = sorted({str(r["day"]) for r in by_day}, reverse=True)[:7]
+    if days:
+        lines.append("\n**Daily Breakdown** (up to last 7 days):")
+        for day in days:
+            day_rows = [r for r in by_day if str(r["day"]) == day]
+            day_total = sum(r["count"] for r in day_rows)
+            parts = ", ".join(
+                f"{_EVENT_LABELS.get(r['event_type'], r['event_type'])}: {r['count']}"
+                for r in day_rows
+            )
+            lines.append(f"- {day} ({day_total} total): {parts}")
+
+    return "\n".join(lines), {"by_type": by_type, "by_day": by_day}
+
+
+def _handle_outcome_report(date_from: str | None, date_to: str | None) -> tuple[str, dict]:
+    """Return marketing outcomes: lifecycle transitions, attributed orders, and winback stats."""
+    with get_cursor(commit=False) as cur:
+        # ── Date params reused across queries ──────────────────────────────
+        date_params: list = []
+        date_where_parts: list[str] = []
+        if date_from:
+            date_where_parts.append("%s")
+            date_params.append(date_from)
+        if date_to:
+            date_where_parts.append("%s::date + interval '1 day'")
+            date_params.append(date_to)
+
+        # ── Lifecycle transitions ──────────────────────────────────────────
+        trans_where = []
+        trans_params: list = []
+        if date_from:
+            trans_where.append("decided_at >= %s")
+            trans_params.append(date_from)
+        if date_to:
+            trans_where.append("decided_at <= %s::date + interval '1 day'")
+            trans_params.append(date_to)
+        trans_where_sql = ("WHERE " + " AND ".join(trans_where)) if trans_where else ""
+
+        cur.execute(
+            f"""
+            SELECT prev_lifecycle::text, new_lifecycle::text, COUNT(*) AS count
+            FROM decision_log {trans_where_sql}
+            GROUP BY prev_lifecycle, new_lifecycle
+            ORDER BY count DESC LIMIT 20
+            """,
+            trans_params,
+        )
+        transitions = [dict(r) for r in cur.fetchall()]
+
+        # ── Orders in period + marketing-attributed orders ─────────────────
+        ord_params: list = []
+        ord_where = ["e_order.event_type = 'order_placed'"]
+        if date_from:
+            ord_where.append("e_order.occurred_at >= %s")
+            ord_params.append(date_from)
+        if date_to:
+            ord_where.append("e_order.occurred_at <= %s::date + interval '1 day'")
+            ord_params.append(date_to)
+        ord_where_sql = "WHERE " + " AND ".join(ord_where)
+
+        cur.execute(
+            f"SELECT COUNT(*) AS total FROM events e_order {ord_where_sql}",
+            ord_params,
+        )
+        total_orders = (cur.fetchone() or {}).get("total") or 0
+
+        cur.execute(
+            f"""
+            SELECT COUNT(DISTINCT e_order.id) AS attributed
+            FROM events e_order {ord_where_sql}
+            AND EXISTS (
+                SELECT 1 FROM events e_touch
+                WHERE e_touch.contact_id = e_order.contact_id
+                  AND e_touch.event_type IN ('email_open','email_click','sms_click')
+                  AND e_touch.occurred_at BETWEEN e_order.occurred_at - interval '7 days'
+                                               AND e_order.occurred_at
+            )
+            """,
+            ord_params,
+        )
+        attributed_orders = (cur.fetchone() or {}).get("attributed") or 0
+
+        # ── Winback: lapsed/reactivation_candidate → active_customer ──────
+        wb_params: list = []
+        wb_where = [
+            "prev_lifecycle IN ('lapsed_customer','reactivation_candidate')",
+            "new_lifecycle = 'active_customer'",
+        ]
+        if date_from:
+            wb_where.append("decided_at >= %s")
+            wb_params.append(date_from)
+        if date_to:
+            wb_where.append("decided_at <= %s::date + interval '1 day'")
+            wb_params.append(date_to)
+        wb_where_sql = "WHERE " + " AND ".join(wb_where)
+
+        cur.execute(
+            f"""
+            SELECT COUNT(DISTINCT contact_id) AS winback_count
+            FROM decision_log {wb_where_sql}
+            """,
+            wb_params,
+        )
+        winback_count = (cur.fetchone() or {}).get("winback_count") or 0
+
+        # Revenue from winback customers in the same period
+        rev_params: list = list(wb_params)  # same date filters for decided_at
+        ord_date_parts: list[str] = []
+        if date_from:
+            ord_date_parts.append("o.order_date >= %s")
+            rev_params.append(date_from)
+        if date_to:
+            ord_date_parts.append("o.order_date <= %s::date + interval '1 day'")
+            rev_params.append(date_to)
+        ord_date_sql = ("AND " + " AND ".join(ord_date_parts)) if ord_date_parts else ""
+
+        cur.execute(
+            f"""
+            SELECT COALESCE(SUM(o.total_amount), 0) AS winback_revenue
+            FROM orders o
+            WHERE o.contact_id IN (
+                SELECT DISTINCT contact_id
+                FROM decision_log {wb_where_sql}
+            )
+            {ord_date_sql}
+            """,
+            rev_params,
+        )
+        winback_revenue = float((cur.fetchone() or {}).get("winback_revenue") or 0)
+
+        # ── Current pipeline snapshot ──────────────────────────────────────
+        cur.execute(
+            "SELECT lifecycle_segment::text, COUNT(*) AS count FROM contacts GROUP BY lifecycle_segment ORDER BY count DESC"
+        )
+        pipeline = [dict(r) for r in cur.fetchall()]
+
+    lines = ["**Outcome Report**", ""]
+
+    # Winback section
+    lines.append(f"Customers brought back: **{winback_count}**")
+    if winback_count:
+        lines.append(f"Revenue from winbacks: **${winback_revenue:,.2f}**")
+        if winback_count > 0:
+            avg = winback_revenue / winback_count
+            lines.append(f"Avg order value (winbacks): **${avg:,.2f}**")
+
+    lines.append("")
+    lines.append(f"Orders in period: **{total_orders}** | Marketing-attributed: **{attributed_orders}**")
+    if total_orders:
+        pct = f"{(attributed_orders / total_orders * 100):.1f}%"
+        lines.append(f"Attribution rate: {pct}")
+
+    if transitions:
+        lines.append("\n**Lifecycle Transitions:**")
+        for t in transitions:
+            lines.append(f"- {t['prev_lifecycle']} → {t['new_lifecycle']}: {t['count']}")
+    else:
+        lines.append("\nNo lifecycle transitions recorded in this period.")
+
+    if pipeline:
+        lines.append("\n**Current Pipeline Snapshot:**")
+        for p in pipeline:
+            lines.append(f"- {p['lifecycle_segment']}: {p['count']}")
+
+    return "\n".join(lines), {
+        "transitions": transitions,
+        "pipeline": pipeline,
+        "attributed_orders": int(attributed_orders),
+        "total_orders": int(total_orders),
+        "winback_count": int(winback_count),
+        "winback_revenue": winback_revenue,
+    }
+
+
 def _handle_broadcast_history(question: str, date_from: str | None, date_to: str | None) -> tuple[str, dict]:
     """Return recent broadcast jobs with key stats."""
     with get_cursor(commit=False) as cur:
@@ -1380,6 +1729,14 @@ async def handle_query(req: QueryRequest):
             answer, data = _handle_ad_copies(question)
         elif category == "submit_input":
             answer, data = _handle_submit_input(question, req.author, req.input_type)
+        elif category == "sms_performance":
+            answer, data = _handle_sms_performance(date_from, date_to)
+        elif category == "email_performance":
+            answer, data = _handle_email_performance(date_from, date_to)
+        elif category == "activity_report":
+            answer, data = _handle_activity_report(date_from, date_to)
+        elif category == "outcome_report":
+            answer, data = _handle_outcome_report(date_from, date_to)
         elif category == "broadcast_history":
             try:
                 answer, data = _handle_broadcast_history(question, date_from, date_to)
