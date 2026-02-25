@@ -220,6 +220,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `airtable_menu.py` | `/api/menu` | `GET /items`, `POST /sync` (Airtable → Postgres) |
 | `menu_sync.py` | `/api/menu-sync` | Menu suggestion agent endpoints |
 | `growth_agent.py` | `/api/growth` | Growth hacker agent endpoints |
+| `chatbot.py` | `/api/chatbot` | `POST /ask`, `GET /suggest`, `GET /history`, `POST /reindex` — RAG Q&A over project docs |
 
 ### Admin Endpoints
 

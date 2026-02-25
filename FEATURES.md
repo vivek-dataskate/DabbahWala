@@ -193,6 +193,32 @@ The marketing team can ask instant data questions via a web form without writing
 
 **1 Tier-2 Claude category** (`free_form`, ~$0.02/query): Claude receives lifecycle distribution, order stats, top dishes, recent transitions, playbook rules, and team content — responds with actionable insights.
 
+### AskMe Dashboard (RAG Chatbot)
+
+A documentation-grounded Q&A assistant embedded in the dashboard. Answers questions about system design, business processes, agent pipeline, and n8n workflows — not live data lookups (those go to the Query tab).
+
+**Answer flow:**
+1. **Fast path 1 — exact chip cache** (`chatbot_canned_qa`): 25 pre-generated answers for common questions. Returned instantly, zero API cost.
+2. **Fast path 2 — semantic similarity cache** (`chatbot_interactions` + pg_trgm GiST index): If a past answered question has trigram similarity ≥ 0.72, return its cached answer. Zero API cost.
+3. **RAG → Haiku** (cache miss only): Retrieve top-8 relevant chunks from `chatbot_doc_chunks` via PostgreSQL FTS + up to 3 keyword-matched past Q&A pairs → call `claude-haiku-4-5-20251001` (max 1500 tokens) → save to `chatbot_interactions`.
+
+**Autocomplete:** `GET /api/chatbot/suggest?q=...` searches past interactions + chip questions with `ILIKE` as the user types.
+
+**Doc indexing:** All project text files are chunked (900 chars, 120 overlap) into `chatbot_doc_chunks`. A SHA-256 hash of all file contents is stored in `chatbot_doc_meta`; chips are only re-generated when the hash changes (saves API cost on quiet weeks).
+
+**Cost:** ~$0.0011/question (Haiku). ~$0.028 per chip rebuild (25 chips × Haiku). ~98% of questions served from cache once the system warms up.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `routers/chatbot.py` | `POST /api/chatbot/ask`, `GET /suggest`, `GET /history`, `POST /reindex` |
+| `chatbot_doc_chunks` table | FTS-indexed project file chunks (900-char, overlap 120) |
+| `chatbot_interactions` table | Every answered Q&A pair; GiST trigram index for similarity cache |
+| `chatbot_canned_qa` table | Pre-generated answers for 25 chip questions |
+| `chatbot_doc_meta` table | Key/value store: `last_indexed_at`, `docs_hash` |
+| `[System] Chatbot Docs Reindex` n8n | Weekly Monday 2 AM — triggers `POST /api/chatbot/reindex` |
+
 ---
 
 ## 9. Growth Hacker Agent
