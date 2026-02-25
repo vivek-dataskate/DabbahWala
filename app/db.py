@@ -87,9 +87,13 @@ def get_cursor(commit=True):
             conn.commit()
             logger.debug("Transaction committed on conn_id=%s", id(conn))
     except Exception as e:
-        logger.error(
-            "DB error on conn_id=%s — rolling back: %s", id(conn), e, exc_info=True
-        )
+        # HTTPException is a business-logic signal (e.g. 404 Not Found), not a DB error.
+        # Roll back to reset connection state, but don't pollute logs with a false alarm.
+        from fastapi import HTTPException as _HTTPException
+        if not isinstance(e, _HTTPException):
+            logger.error(
+                "DB error on conn_id=%s — rolling back: %s", id(conn), e, exc_info=True
+            )
         conn.rollback()
         raise
     finally:
