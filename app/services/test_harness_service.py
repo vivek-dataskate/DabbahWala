@@ -923,6 +923,35 @@ def _g8_instantly(suite: TestSuite) -> None:
         return {"status": sc, "email": TEST_EMAIL}
     _run(suite, "instantly_lead_remove", G, lead_remove)
 
+    def push_log_endpoint():
+        """POST /api/campaigns/log-push records a push attempt and GET /api/campaigns/push-log returns it."""
+        sc, body = _local("POST", "/api/campaigns/log-push", json_body={
+            "queue_id": None,
+            "email": "test@harness.local",
+            "to_campaign": "TEST",
+            "success": True,
+            "status_code": 200,
+            "error_message": None,
+            "response_body": '{"test": true}'
+        })
+        assert sc in (200, 201), f"log-push returned {sc}: {body}"
+        sc2, body2 = _local("GET", "/api/campaigns/push-log?limit=5&success=true")
+        assert sc2 == 200, f"push-log GET returned {sc2}: {body2}"
+        rows = body2 if isinstance(body2, list) else []
+        return {"log_write": sc, "log_read": sc2, "rows_returned": len(rows)}
+    _run(suite, "campaigns_push_log", G, push_log_endpoint)
+
+    def campaigns_pending_has_names():
+        """GET /api/campaigns/pending returns contact_first_name and contact_last_name fields."""
+        sc, body = _local("GET", "/api/campaigns/pending")
+        assert sc == 200, f"campaigns/pending returned {sc}: {body}"
+        rows = body if isinstance(body, list) else []
+        if rows:
+            first = rows[0]
+            assert "contact_first_name" in first, f"contact_first_name missing from pending row: {first.keys()}"
+        return {"status": sc, "pending_count": len(rows)}
+    _run(suite, "campaigns_pending_has_names", G, campaigns_pending_has_names)
+
 
 # ─── GROUP 9: Airtable Integration ───────────────────────────────────────────
 

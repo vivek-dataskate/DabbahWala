@@ -21,6 +21,16 @@ class BulkExecutedRequest(BaseModel):
     queue_ids: list[int]
 
 
+class PushLogEntry(BaseModel):
+    queue_id: Optional[int] = None
+    email: Optional[str] = None
+    to_campaign: Optional[str] = None
+    success: bool
+    status_code: Optional[int] = None
+    error_message: Optional[str] = None
+    response_body: Optional[str] = None
+
+
 @router.get("/pending", response_model=list[CampaignMove])
 def get_pending_campaigns():
     with get_cursor(commit=False) as cur:
@@ -40,6 +50,47 @@ def get_pending_campaigns():
     ]
     logger.info("get_pending_campaigns — returned %d pending moves", len(moves))
     return moves
+
+
+@router.post("/log-push")
+def log_push(entry: PushLogEntry):
+    """Record the result of a single Instantly lead-push attempt from n8n."""
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO campaign_push_log
+                (queue_id, email, to_campaign, success, status_code, error_message, response_body)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                entry.queue_id,
+                entry.email,
+                entry.to_campaign,
+                entry.success,
+                entry.status_code,
+                entry.error_message,
+                entry.response_body,
+            ),
+        )
+    return {"status": "ok"}
+
+
+@router.get("/push-log")
+def get_push_log(limit: int = 100, success: Optional[bool] = None):
+    """Return recent campaign push log entries for debugging."""
+    with get_cursor(commit=False) as cur:
+        if success is None:
+            cur.execute(
+                "SELECT * FROM campaign_push_log ORDER BY created_at DESC LIMIT %s",
+                (limit,),
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM campaign_push_log WHERE success = %s ORDER BY created_at DESC LIMIT %s",
+                (success, limit),
+            )
+        rows = cur.fetchall()
+        return [dict(r) for r in rows]
 
 
 @router.post("/bulk-executed")

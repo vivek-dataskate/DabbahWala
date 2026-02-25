@@ -129,6 +129,8 @@ Tests Instantly email campaign operations end-to-end.
 | `instantly_analytics` | `GET /analytics/campaign/summary` returns data |
 | `instantly_campaign_sync_endpoint` | `POST /api/webhooks/sync-campaigns` accepts payload |
 | `instantly_lead_remove` | Removes test email from campaign (cleanup) |
+| `campaigns_push_log` | `POST /api/campaigns/log-push` writes a row; `GET /api/campaigns/push-log` returns it |
+| `campaigns_pending_has_names` | `GET /api/campaigns/pending` includes `contact_first_name` / `contact_last_name` fields |
 
 **Expected campaigns:** `DW-NurtureSlow-ColdContacts`, `DW-PromoStandard-ActiveEngaged`, `DW-NewCustomerOnboarding`, `DW-PromoAggressive-LapsedCustomers`, `DW-Reactivation-LongDormant`
 
