@@ -93,7 +93,9 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 ### Instantly
 - API key (Bearer): stored in Render env as `INSTANTLY_API_KEY`
-- The base64 string `OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOkJVbkNMdkRjVW5zWQ==` is the **Instantly** credential (not n8n)
+- Value: `OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOmVwbU1CSFRWa3ZiaQ==` (base64 `workspace_id:secret` — used as `Authorization: Bearer` for all Instantly v2 calls including lead writes)
+- **Never use `X-API-Key` header** — the base64 credential only works as a Bearer token
+- Old deprecated key `c7kf84j4c54vhjpcc5yv7k35tgs5` must NOT be used — it is read-only and rejects POST /leads
 
 ### GitHub
 - Token: `GITHUB_TOKEN` env var — used for PR creation/merge via GitHub API
