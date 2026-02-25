@@ -347,7 +347,7 @@ The `agent_playbook` table (synced from Airtable every 15 min) injects user-conf
 
 ## 8. n8n Workflow Layer
 
-**25 workflows on `digitalworker.dataskate.io` — all active except `[Shipday — Evidence] Historical Import` (manual one-shot)**
+**26 workflows on `digitalworker.dataskate.io` — all active except `[Shipday — Evidence] Historical Import` (manual one-shot)**
 
 Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/`.
 
@@ -381,6 +381,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Claude** | Growth Agent Cycle | Daily 9 AM | Growth hacker 4-phase experiment loop |
 | **System** | Action Queue Executor | Every 30 min | Route action_queue rows to Telnyx / Instantly / Airtable / Drive / SMTP |
 | **System** | Chatbot Docs Reindex | Every Monday 2 AM | Refresh chatbot document index |
+| **System** | Daily E2E Test Suite | Daily 5:00 AM ET | Run 55+ end-to-end tests across 14 groups → email results to vivek@dabbahwala.com |
 
 ### n8n API Notes
 
@@ -499,7 +500,7 @@ On every merge to `main`:
 2. `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
 **Migration rules:**
-- Files in `migrations/` numbered sequentially (next: **056**)
+- Files in `migrations/` numbered sequentially (next: **057**)
 - Always use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`
 - Never modify existing migrations — always create a new one
 - Schema: `dabbahwala`
@@ -528,13 +529,14 @@ Requires `N8N_API_KEY` GitHub secret.
 
 | Metric | Count |
 |--------|-------|
-| API endpoints | ~85+ |
-| Database migrations | 55+ |
-| Database tables | 21+ |
+| API endpoints | ~88+ |
+| Database migrations | 56 |
+| Database tables | 22+ |
 | Stored functions | 15+ |
-| n8n workflows | 25 |
+| n8n workflows | 26 |
 | MCP tools | 35+ |
 | Claude calls per contact cycle | 8 (3 + 4 + 1) |
 | Signal types detected | 7 |
 | Lifecycle segments | 8 |
 | Email campaigns | 5 |
+| E2E test cases | 55+ |
