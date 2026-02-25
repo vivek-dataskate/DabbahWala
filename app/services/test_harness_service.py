@@ -1173,6 +1173,44 @@ def _g11_orders(suite: TestSuite) -> None:
         return {"status": sc, "date": today}
     _run(suite, "order_summary_endpoint", G, order_summary_endpoint)
 
+    def order_csv_no_premature_airtable():
+        """Verify CSV upload response no longer contains airtable_synced field
+        (premature Airtable outreach was removed — agent cycle handles it post-delivery)."""
+        import io
+        today = _date.today().isoformat()
+        csv_rows = (
+            "Order Number,Order Date,Customer Name,Phone,Email\n"
+            f"TH-NOAT-{today},{today},{TEST_FIRST_NAME} {TEST_LAST_NAME},{TEST_PHONE},{TEST_EMAIL}\n"
+        )
+        with httpx.Client(timeout=60) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_no_airtable.csv", io.BytesIO(csv_rows.encode()), "text/csv")},
+            )
+        assert r.status_code in (200, 201), f"CSV upload returned {r.status_code}"
+        body = r.json()
+        # airtable_synced field should not be present in the response (removed with premature outreach)
+        assert "airtable_synced" not in body, (
+            f"airtable_synced still in response — premature Airtable push may not be fully removed"
+        )
+        return {"status": r.status_code, "has_no_airtable_synced": "airtable_synced" not in body}
+    _run(suite, "order_csv_no_premature_airtable", G, order_csv_no_premature_airtable)
+
+    def field_agent_pending_calls_has_script():
+        """Verify GET /api/field-agent/pending-calls returns suggested_message (call script)."""
+        sc, body = _local("GET", "/api/field-agent/pending-calls")
+        assert sc == 200, f"pending-calls returned {sc}"
+        calls = body.get("calls", [])
+        # If there are any pending calls, verify each has a suggested_message (brief script)
+        for call in calls[:3]:
+            assert "suggested_message" in call, f"pending call missing suggested_message: {call}"
+            assert "phone" in call, f"pending call missing phone: {call}"
+            assert "first_name" in call, f"pending call missing first_name: {call}"
+        return {"status": sc, "pending_calls": len(calls), "has_scripts": all(
+            bool(c.get("suggested_message")) for c in calls[:3]
+        )}
+    _run(suite, "field_agent_pending_calls_has_script", G, field_agent_pending_calls_has_script)
+
 
 # ─── GROUP 12: Reports ────────────────────────────────────────────────────────
 

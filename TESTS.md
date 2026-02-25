@@ -172,6 +172,8 @@ Tests CSV order ingestion and menu resolution.
 | `order_csv_first_name_backfill` | Nulls test contact's first_name, uploads CSV, verifies `COALESCE` backfill sets it |
 | `menu_items_present` | `menu_items` table has >0 rows (Airtable sync worked) |
 | `order_summary_endpoint` | `GET /api/daily-orders/summary/{today}` returns 200 or 404 |
+| `order_csv_no_premature_airtable` | CSV upload response has no `airtable_synced` field — premature Airtable outreach removed |
+| `field_agent_pending_calls_has_script` | `GET /api/field-agent/pending-calls` returns calls with `suggested_message` (brief script) |
 
 ---
 

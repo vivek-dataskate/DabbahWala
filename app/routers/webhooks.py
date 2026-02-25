@@ -508,16 +508,28 @@ async def shipday_webhook(request: Request):
             except Exception as e:
                 logger.warning("Shipday webhook: could not ingest delivery_update event (non-fatal): %s", e)
 
-    # For DELIVERED and FAILED only, fire agent immediately — these have real time windows:
-    # DELIVERED = prime reorder window (~1-2h), FAILED = same-day escalation needed
+    # For DELIVERED: delay 4 hours so the customer has time to eat, experience the food,
+    # and potentially leave feedback before any outreach decision is made.
+    # For FAILED: fire immediately — same-day escalation is still time-sensitive.
     agent_cycle = "skipped"
-    if contact_id and our_status in {"delivered", "failed"}:
+    if contact_id and our_status == "failed":
         threading.Thread(
             target=_fire_agent_cycle,
             args=(contact_id, f"shipday_{raw_status.lower()}"),
             daemon=True,
         ).start()
         agent_cycle = "triggered"
+    elif contact_id and our_status == "delivered":
+        delay_seconds = 4 * 3600  # 4 hours post-delivery
+        threading.Timer(
+            delay_seconds,
+            _fire_agent_cycle,
+            args=(contact_id, "shipday_delivered_delayed"),
+        ).start()
+        agent_cycle = "scheduled_4h"
+        logger.info(
+            "Agent cycle scheduled in 4h for contact_id=%s after delivery", contact_id
+        )
 
     return {
         "status":         "ok",

@@ -20,7 +20,6 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.db import get_cursor
-from app.services.airtable_sync import create_field_sales_task
 from app.services.drive import upload_csv as _drive_upload_csv
 
 logger = logging.getLogger(__name__)
@@ -256,7 +255,6 @@ class DailyOrderResult(BaseModel):
     agent_analysis: list = []
     field_opportunities: list = []
     campaign_moves: list = []
-    airtable_synced: int = 0
     shipday_csv_download_url: str = ""
     drive_upload_enqueued: bool = False
 
@@ -366,7 +364,6 @@ async def process_daily_orders(
     order_date_str = datetime.now().strftime('%Y-%m-%d')
     agent_analysis: list = []
     field_opportunities: list = []
-    airtable_tasks: list = []
 
     # Pre-fetch existing order_id_externals so we can skip duplicates efficiently
     _batch_nums = [n for n in orders_grouped if n]
@@ -501,14 +498,6 @@ async def process_daily_orders(
                             f"Personal follow-up call recommended to lock in loyalty."
                         ),
                     })
-                    airtable_tasks.append({
-                        'first_name': first_name, 'last_name': _last_name,
-                        'phone': phone or '', 'email': _email,
-                        'priority': 'Hot', 'action_type': 'winback_follow_up',
-                        'reason': _reason, 'suggested_message': _reason,
-                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
-                        'last_order_at': _last_order_at,
-                    })
                 elif contact.get('primary_source') == 'Food Delivery Apps':
                     _reason = (
                         f"{first_name} previously ordered via a delivery app. Reinforce direct ordering "
@@ -527,14 +516,6 @@ async def process_daily_orders(
                             "App-sourced customer ordering direct — offer a direct-order discount or "
                             "subscription to prevent churn back to app platforms."
                         ),
-                    })
-                    airtable_tasks.append({
-                        'first_name': first_name, 'last_name': _last_name,
-                        'phone': phone or '', 'email': _email,
-                        'priority': 'Hot', 'action_type': 'direct_order_pitch',
-                        'reason': _reason, 'suggested_message': _reason,
-                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
-                        'last_order_at': _last_order_at,
                     })
                 elif prev_orders == 0:
                     _reason = (
@@ -555,14 +536,6 @@ async def process_daily_orders(
                             f"to maximise lifetime value."
                         ),
                     })
-                    airtable_tasks.append({
-                        'first_name': first_name, 'last_name': _last_name,
-                        'phone': phone or '', 'email': _email,
-                        'priority': 'Warm', 'action_type': 'subscription_pitch',
-                        'reason': _reason, 'suggested_message': _reason,
-                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
-                        'last_order_at': _last_order_at,
-                    })
                 elif order_total > 0 and order_total < 15:
                     _reason = (
                         f"Order value ${order_total:.2f} — suggest add-ons (drinks, desserts) or "
@@ -574,14 +547,6 @@ async def process_daily_orders(
                         'chosen_channel': 'sms',
                         'reasoning_snippet': _reason,
                     })
-                    airtable_tasks.append({
-                        'first_name': first_name, 'last_name': _last_name,
-                        'phone': phone or '', 'email': _email,
-                        'priority': 'Warm', 'action_type': 'upsell',
-                        'reason': _reason, 'suggested_message': _reason,
-                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
-                        'last_order_at': _last_order_at,
-                    })
                 else:
                     _reason = (
                         f"Regular customer with {prev_orders} prior order(s). Thank {first_name} "
@@ -592,14 +557,6 @@ async def process_daily_orders(
                         'chosen_action': 'loyalty_nurture',
                         'chosen_channel': 'sms',
                         'reasoning_snippet': _reason,
-                    })
-                    airtable_tasks.append({
-                        'first_name': first_name, 'last_name': _last_name,
-                        'phone': phone or '', 'email': _email,
-                        'priority': 'Cold', 'action_type': 'loyalty_nurture',
-                        'reason': _reason, 'suggested_message': _reason,
-                        'lifecycle_segment': lifecycle, 'total_orders': prev_orders,
-                        'last_order_at': _last_order_at,
                     })
             else:
                 # Create new contact
@@ -641,14 +598,6 @@ async def process_daily_orders(
                         f"First-ever order from {first_name}. High conversion window — reach out "
                         f"within 2 hours to welcome and offer a subscription trial."
                     ),
-                })
-                airtable_tasks.append({
-                    'first_name': first_n, 'last_name': last_n,
-                    'phone': phone or '', 'email': '',
-                    'priority': 'Warm', 'action_type': 'welcome_and_subscribe',
-                    'reason': _new_reason, 'suggested_message': _new_reason,
-                    'lifecycle_segment': 'new_customer', 'total_orders': 0,
-                    'last_order_at': None,
                 })
 
             # Insert order — resolve dish names against master menu
@@ -781,27 +730,6 @@ async def process_daily_orders(
             exc_info=True,
         )
 
-    # Push all field agent tasks to Airtable immediately
-    airtable_synced = 0
-    if airtable_tasks:
-        logger.info("Pushing %d tasks to Airtable", len(airtable_tasks))
-        _airtable_dead = False
-        for task in airtable_tasks:
-            if _airtable_dead:
-                break
-            try:
-                create_field_sales_task(task)
-                airtable_synced += 1
-            except Exception as e:
-                err = str(e)
-                if '401' in err or 'Unauthorized' in err:
-                    logger.warning("Airtable API key invalid (401) — skipping remaining tasks")
-                    _airtable_dead = True
-                else:
-                    logger.warning("Airtable task push failed for %s %s: %s",
-                                   task.get('first_name'), task.get('last_name'), e)
-        logger.info("Airtable sync complete: %d/%d pushed", airtable_synced, len(airtable_tasks))
-
     # Exclude duplicate orders from CSV generation
     orders_to_dispatch = {k: v for k, v in orders_grouped.items() if k not in existing_order_nums}
 
@@ -862,7 +790,6 @@ async def process_daily_orders(
         agent_analysis=agent_analysis,
         field_opportunities=field_opportunities,
         campaign_moves=campaign_moves,
-        airtable_synced=airtable_synced,
         shipday_csv_download_url=shipday_csv_url,
         drive_upload_enqueued=drive_upload_enqueued,
     )

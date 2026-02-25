@@ -125,6 +125,8 @@ A CSV file of the day's orders is uploaded every afternoon and automatically cre
 
 **Post-upload triggers:** lifecycle run → opportunity detection → agent cycle for new/returning contacts
 
+> **No immediate Airtable outreach on upload.** Airtable tasks are no longer created at CSV upload time. Outreach is handled entirely by the AI agent cycle post-delivery (DELIVERED triggers a 4h delayed cycle; the agent then decides whether to SMS, email, or escalate to a call).
+
 ---
 
 ## 5. Delivery-Aware Intelligence
@@ -143,6 +145,7 @@ Real-time delivery status from Shipday is ingested and used by the AI orchestrat
 | `[Shipday] Feedback Sync` n8n | Polls feedback, delivery instructions, proof-of-delivery hourly |
 | `[Shipday] Historical Import` n8n | Manual one-shot backfill (intentionally inactive) |
 | Layer 3 orchestrator guardrails | Reads latest delivery event; overrides standard action logic |
+| `routers/webhooks.py` | Shipday webhook handler — DELIVERED schedules a 4h delayed agent cycle; FAILED fires immediately |
 
 ---
 
