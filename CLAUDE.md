@@ -62,7 +62,6 @@ If the env var is empty, read it from that file and use it directly in API calls
 - To **activate** a workflow: `POST /api/v1/workflows/{id}/activate` (PATCH is not allowed on this instance)
 - To **deactivate** a workflow: `POST /api/v1/workflows/{id}/deactivate`
 - Credentials resolve by **name** on first push — use the exact credential name and n8n will auto-match and return the real ID
-- GitHub secret `N8N_API_KEY` must be set to the JWT above for `sync_n8n.yml` to work
 - Workflow files live in `n8n/` — IDs tracked in `n8n/config.json`
 - **⚠️ n8n Variables / environment variables are NOT available on this instance** — never use `$env.ANYTHING` in workflow nodes. Hardcode all values (URLs, phone numbers, static config) directly in the node parameters. This applies to every workflow, past and future.
 

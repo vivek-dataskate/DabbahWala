@@ -56,7 +56,7 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. This backend syst
 | Web service | Render (Starter) — Oregon | Auto-deploys on push to `main` |
 | PostgreSQL 16 | Render (Starter) — Oregon | Schema: `dabbahwala` |
 | n8n automation | Self-hosted `digitalworker.dataskate.io` | 25 workflows |
-| CI/CD | GitHub Actions | Auto-syncs n8n workflows on push |
+| CI/CD | GitHub Actions | — |
 
 ### External Services
 
@@ -542,14 +542,6 @@ On every merge to `main`:
 - Never modify existing migrations — always create a new one
 - Schema: `dabbahwala`
 
-### GitHub Actions — n8n Sync
-
-`.github/workflows/sync_n8n.yml` triggers on push to `main` when `n8n/**/*.json` changes:
-1. Fetch existing workflows from n8n API
-2. For each JSON file: PUT update or POST create
-3. Reactivate if previously active
-
-Requires `N8N_API_KEY` GitHub secret.
 
 ### Environments
 
