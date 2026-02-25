@@ -63,9 +63,16 @@ PR body format:
 https://claude.ai/code/session_01KFDkgbfakqfRJD9TCJ6oaE
 ```
 
-Extract the PR number from the response.
+Extract the PR number from the response. Show the user the PR URL.
 
-### 4. Merge immediately
+### 4. Ask once, then finish automatically
+
+**STOP HERE.** Tell the user:
+> "PR #NNN is open: <url>. Merge to main and delete the branch?"
+
+Wait for yes. Once confirmed, run steps 5–7 without any further prompts.
+
+### 5. Merge
 
 ```bash
 curl -s -X PUT \
