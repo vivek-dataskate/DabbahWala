@@ -1,0 +1,422 @@
+Delivered-To: vivek.yadlapalli@gmail.com
+Received: by 2002:a05:6520:68f:b0:32a:36a7:3ed1 with SMTP id j15csp1578708lka;
+        Tue, 3 Feb 2026 07:08:48 -0800 (PST)
+X-Received: by 2002:a53:d008:0:b0:644:7afd:f4a0 with SMTP id 956f58d0204a3-649a83a3c45mr11682507d50.1.1770131327905;
+        Tue, 03 Feb 2026 07:08:47 -0800 (PST)
+ARC-Seal: i=1; a=rsa-sha256; t=1770131327; cv=none;
+        d=google.com; s=arc-20240605;
+        b=cEyqaCRdHjy7rC/AYWV5tFET90yEIEOWn3wem3YUkmKeSbCyZl5yw+sqBto6CUnDCi
+         uTNqlYJRnL1S28bcgSkPlcv3Xnj2XQRTc1LqO4Wlv0JepD7Es9F/4m54WbclSBCiDcfN
+         CWOs5AFKlXg4PLSTzuAiCo8ZELHlxO0bybCa0QbR/rPB75y/j9qgSQsVs4n8beojpxKI
+         45A/bd+FT9Dhn7Y2Mh1iNkres10hTVqy4n0tptIGi7m70qdYFfjTWu72W6IoH1J0gZd4
+         8DI4u7vxbZ4TfWkvIOm6ET7G8LwIWpbgmEbmeXFHXEhaOr6SLy/hjbVEcUv+aejXXloS
+         /lIg==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=reply-to:mime-version:date:to:list-unsubscribe-post:subject
+         :list-unsubscribe:message-id:from:dkim-signature;
+        bh=cfHVFVgZ1+9ho7ho8lNS17SO+3j6YVzrnb9+e262zNc=;
+        fh=1O0AbqduFGWkSqxvQC7htqai3ZS9jGs3XNbXwGsffD0=;
+        b=DfxEisss56cyiEZW/74lb5UITYVRe/qJh1lCEA+2rj2CD+D1ncAb6XWi2gAykKKOCG
+         bLeO8Xr0/PNlb26C6vbQWKVBtoTg8lsiDKHwsAV/IM/q4b2nFBc+FsjnjQsjTTzsGV0x
+         8xWela+fybHHrmjuyufN75sXyNtjmq+9Dp/Q5ytPjMuIZOEPIclkE6HKsqyx9yAfVsmV
+         8HJHulunvzW1W7tCUq4w4H0iQ3inC41Gq06SF+SBLE6eWm1BYE3reeJbKpbxx5ZnPX+Y
+         hvQH45sa4ga4UEJi+wlcEzof+Af+YCdFaFGG7fjwAjMl5xDzVqdI7Z/7R+Py9AN+Rp06
+         BT+g==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@p.cookunity.com header.s=scph0724 header.b="dXKkPDR/";
+       spf=pass (google.com: domain of msprvs1=20494apzzikls=bounces-266693-1352@p.cookunity.com designates 137.22.239.1 as permitted sender) smtp.mailfrom="msprvs1=20494ApzzIklS=bounces-266693-1352@p.cookunity.com";
+       dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=cookunity.com
+Return-Path: <msprvs1=20494ApzzIklS=bounces-266693-1352@p.cookunity.com>
+Received: from snehe94z.p.cookunity.com (snehe94z.p.cookunity.com. [137.22.239.1])
+        by mx.google.com with ESMTPS id 956f58d0204a3-649b21a897csi9454037d50.156.2026.02.03.07.08.47
+        for <vivek.yadlapalli@gmail.com>
+        (version=TLS1_2 cipher=ECDHE-ECDSA-AES128-GCM-SHA256 bits=128/128);
+        Tue, 03 Feb 2026 07:08:47 -0800 (PST)
+Received-SPF: pass (google.com: domain of msprvs1=20494apzzikls=bounces-266693-1352@p.cookunity.com designates 137.22.239.1 as permitted sender) client-ip=137.22.239.1;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@p.cookunity.com header.s=scph0724 header.b="dXKkPDR/";
+       spf=pass (google.com: domain of msprvs1=20494apzzikls=bounces-266693-1352@p.cookunity.com designates 137.22.239.1 as permitted sender) smtp.mailfrom="msprvs1=20494ApzzIklS=bounces-266693-1352@p.cookunity.com";
+       dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=cookunity.com
+Return-Path: <msprvs1=20494ApzzIklS=bounces-266693-1352@p.cookunity.com>
+X-MSFBL: TVYDKjblnK656ATXAZYsQYWioOL82IwQd6B09jWP3E0=|eyJtZXNzYWdlX2lkIjo
+	iNjk4MDdkMGY4MjY5ZDAwYjEzY2EiLCJyIjoidml2ZWsueWFkbGFwYWxsaUBnbWF
+	pbC5jb20iLCJjdXN0b21lcl9pZCI6IjI2NjY5MyIsInN1YmFjY291bnRfaWQiOiI
+	xMzUyIiwidGVuYW50X2lkIjoic3BjIn0=
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=p.cookunity.com;
+	s=scph0724; t=1770131325; i=@p.cookunity.com;
+	bh=cfHVFVgZ1+9ho7ho8lNS17SO+3j6YVzrnb9+e262zNc=;
+	h=From:Message-ID:List-Unsubscribe:Subject:List-Unsubscribe-Post:To:
+	 Date:Content-Type:From:To:Cc:Subject;
+	b=dXKkPDR/jKoL8w5xnnKi/PnT58d7nfY3Fgcmb1KtEjLUD9QZ2Omu17koCsbmIRzOo
+	 OjvdU1WxhQLgp41qIGNRgUMwYg46bXK5lGYzw88HKrumpzKHl2nucCcOE5HmRNsX3u
+	 4QEeiZa/QInYn98iAEmgBxzrUeEGkFzwCZCClWqdDTugH0ZAc9nyAaXMCDvuksdNBd
+	 OGkfnmfu8ccokDk5xd6F3ANaXAjorVQg2Z4e8PeQs73lKQct3toCZoyX22G1AF9XGS
+	 jP9n6DdFhokgFcXJeWuBTu7pBeceGjCr3CvrGQnGvaVR3iSoDXUzxAW0fCd9RFPxdr
+	 45qwnIkl0ztJw==
+Received: from [10.90.38.228] ([10.90.38.228])
+	by i-03d11cc7d8187539d.mta1vrest.sd.prd.sparkpost (ecelerity 5.1.0.74938 r(msys-ecelerity:tags/5.1.0.39)) with REST
+	id AC/31-12576-D7F02896; Tue, 03 Feb 2026 15:08:45 +0000
+From: "CookUnity" <info@p.cookunity.com>
+Message-ID: <AC.31.12576.D7F02896@i-03d11cc7d8187539d.mta1vrest.sd.prd.sparkpost>
+List-Unsubscribe: <https://07.emailinboundprocessing.com/enc_user/list_unsubscribe?d=%241%24kZqLP5R3FCuHlYETHLg%2FWA%3D%3D%2492WwMP7s4nHNz1%2FJMz0Pa3c2%2FJGg1lsdUtcOOQScWC5o%2BGp8q2CWDI%2BtV%2Bzo%0AArO3KIS1Yohz7hpA90A9ev%2Fyb0mAsbKucPeRSCujATi8KQqxRczT%2B2XqOc1J%0AzyY4xmMFjusUJLnRqF46z24of1PJpmyYzibsEsalTE7cEyPXE02h0w0Wky%2F3%0ARyTB%2F45XOCy3dKzBkHTBWPxExy6KrYsWCTXxjUUOhz40uU75GQd7B6dJwemx%0AWJ4Fo5NJC5awqahxbA3bTuWfKlxn4GPxS7WDO%2FoB%2FGa6GXmeOqySkwrYsfho%0AzmgQx7VAXgvEJYBQCDmXgOA0vxo%2BkyIs0VrYevQygTjSuvIjWa0%2BE3ZAdmBB%0A4WlV9p6ssB4rjLX5uZ1Idd6V7Z70WzPnO8NTq9qyr5QlAg%3D%3D&1=1>,<mailto:4_pw08ccinrhoz0hus1nlxf8m5gxh66c8l3t93gs8x3s85abyhrpgza7@unsubscribe-07.emailinboundprocessing.com?subject=Unsubscribe%20pnrcgsq12c2ctow47jzqmbbblyt1txjl9jf1rmjj7rcwv5v1nwovcfd&body=DO_NOT_DELETE-v2t2z22qgfpbv4a4tr2eycomu5j3zdcoukiebj22mvo4z9i5bpq1xtuvha7ulvakkjg4p7vc4ka7pb4z6pez04p218u1kd-DO_NOT_DELETE>
+Subject: Vivek, 50% off everything. Seriously.
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+To: vivek.yadlapalli@gmail.com
+Date: Tue, 03 Feb 2026 15:08:45 +0000
+Content-Type: multipart/alternative; boundary="_----8Wvi8TRBRSxKeP9brE+LuA===_87/31-12576-D7F02896"
+MIME-Version: 1.0
+Reply-To: support@cookunity.com
+
+--_----8Wvi8TRBRSxKeP9brE+LuA===_87/31-12576-D7F02896
+Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="UTF-8"
+
+Mediterranean, Indian, Mexican,& all the cuisines you loved.
+Start saving now! Rejoin 
+( https://links.p.cookunity.com/f/a/ohHWpTpLFS_QS5o4dzTSag~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZyShhPb2MbUnLuBtQP1LZFNpdDI_0dokDoEX_7yhaon1nvsxSCLiblG5nXvZZ3q_9tKAEN1bamJjZ34p78OaFu3puPSrKmfgPVEAOK2WF0fY_wa85PcniyA5fm7_fezH4fHTjY3lTtm-vckHiQrvJH8nccima0PUV8DdGh0dJSnhtxI1ZgscdMxoLTbGpnatEPWDEwDY-f4DE2of1cYaPQC31ojTFghGhTUyXgAps0DEPOhzbII7vUCoxTN3yJAwKpRT5DT28MjvVkCMIMAUAYG-kZ7bFtI1yvYSEP1tlWhNObKSH2q9LynrwGafpvzrNzow~~ )
+  Start saving now! Rejoin 
+( https://links.p.cookunity.com/f/a/-Jt3vbH8xnyXkzf6Ldtkjw~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZyShTf00Z99DYFGeRyWIgSwWKSMLdAjHBIkXVdk9MalspNhfmR1NCUaz-NQsQLthpRWJ9hMbCgxhJxUZFSB7a4aoHxHXLwi4f3824twO4Gw_KA5cLv6lDRUsTGxTRXQ21yUcUcPNlIfyIHH_tOf2vzSGv9U3ST04h5DgzkG5fWhLfic6Nobb6EnExi41BWVnng9rok7isreu01n6HuEbOiPDIn0bHjcdTC63DZFDT8z7FT-3I8ELBZlPNb6YwyZvXRCUCQ_0tCfPvLi9mxgOenY8a391I__JGRJhShjUFkQo-RHISshAkqHKNrMcs2svQPtg~~ )
+    Explore diet-friendly favorites below 
+( https://links.p.cookunity.com/f/a/5er1W7p3CaHyCTTAmGT1Yg~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySrrrYnhjrVK4QlIFgt_EKh-AtLQvxObx2-nRKtJhck_Ri1Pwd15MSP5Lepr81sXupOXVo_0z2NB1o_DlE6_9hyI4HSylFF-XBVDE7mlK42VYt5Sx4Uu0jxwqNu2qiUMUzZq2RRYBT2aQdkSYqr6VbCxnBJsb76VpcURHhKMUTiA05Fi-w9Srj1ZZqajVNG_Y3jT82hrMcWc5uZ93WQvaTCXreBQV_ho2FWexXKb-pNrM6hOmN01FIAHvxfc-OTBO5oY876l730wWLWeWYIgqQ5DwlYchDfa66x2h8D2Kcks2LUPjm1wA26o6UQoXb8CdXg~~ )
+ Find your match! 
+( https://links.p.cookunity.com/f/a/qh1m_XsOzH9JetlElaM1dA~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySjo2uoxd2ZRHT7f3dj-FdTMDV55RdN0q9DMD491dzfKJaTDW6saqbqeSLw0-7isGM-uxiCMfao4dKvNFapA8NBmkd758kdJGG9U-bAJQ3zB8n6vb6puUA94sdLhyMHzrhkeY2MNABhtpGzZBkyknR4lJWrftKP_mEpI2-B91XoEt6YEaMOspgz3IgfhlHchJanqGtbiMkGJmSBVTEthipW6ybx0ljQ7YaW-cZKqCr79vQWrlFqmzeYh5vIDo66ptjkNAjHb7nmvyut8YOrhvzJS-nx6Zq15EAGxGZVcBwLHt61U6qfKyxti9pEsa02WVew~~ )
+ Our chefs handpick their ingredients. So fresh is always on the
+menu. 
+( https://links.p.cookunity.com/f/a/sm-iYIU7Lz_Jg28kaaOG6g~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySpGVG3oPDJ1NUGyNL1fT3Ra-F2vpeAocONiREDKSWpH0l50yy07WTE1rOPkKDBD55EFXu-fq0HS_YGNUefKBSjh-VjnAXHd2tQiB-RgxOFajXmO2tQXr3Tfcwe9OVdozgi99jmKN8a_IdHiDNwMS042YUKJDUkH21zxX3hEeXM1lyd-Qgi5rGLZcX8Ar7LuI8awjI9L9-poDLrkqoEGi6W1HpElVTOM68GcFfR8KW0n8dxCQ7nbAj-k86e5DszK9SJVlPOvOS9zXUov5xpF97n2k8x1YdcrwTlSKNgPvOzOtGnJYX2QKd9tfzGq2BT01_A~~ )
+    Start saving now! Rejoin 
+( https://links.p.cookunity.com/f/a/KfcDAvhjH2bn4OMCYwFgxw~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySrtZqPBVrW0i8oXKsd1RVTkkOVkWV7UFzqdMWQIMw_Ur3VaHSv6KTQcOS_JdUTyrTsxWXz1UQvQcqlrHzVtXhYOsj5Q9fmw9AuXMUDjvtyHDua73ES8uuFNBL0GdnOYYv2s2PdJ9sCbT4tjKRoqRSNEp45wJhc-yYGgeuiwQdLq3hTXnUjMs2zlBYOXWcVELtYZ1Dr-ikelDlIn-lGLM0Jp4Ig5BDgWAVsZSvKeNqiJGDptVeWI08ctnr2YtlMhQv6PDsZtqdcpTQiy4Jcf5qy8muKEHZw2-ruyAKzQ9i_R3uB2FCPqTER0Hs5HF9U9yjw~~ )
+ Start saving now! Rejoin 
+( https://links.p.cookunity.com/f/a/1AK97K6b-9u-6NREp2CCmw~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySmmXI67IU7Pb97mQsSdhjuRBunlgJ1QTj4YGXcLarhkWB6YIeSAaeUnHXqCkB1vPegZaSglBtzkFwd8uuhzN6IJ9MA2CGDx-mlG4Ba1qWGfuicCEzf825BGi_zMMCyu5YXVJKElK5xhRERDhNIzY0WQyUbTyueWIfKc4k2IO1wvhYQWeynKvQIElwo5V7zrckb4G04gsc2mspc3O3hM9js8eq8A-JfSRwcaO6iWgx7k6p1fRM3YxOMqQQ2nQWowiqqFG1URf9nyxs4ujXqdt_WCMeXL3eR_L3KKeGLX-CzAPcPm1xQdAlwc4bM8txuB8SQ~~ )
+     Offer valid for returning customers only. To receive a 50%
+off your first four weeks, your first four orders must be
+confirmed within 28 days of restarting deliveries. Menu and meals
+are subject to change. CookUnity reserves the right to end or
+modify this offer at any time and substitute another promotion in
+its place.
+
+CookUnity 
+( https://links.p.cookunity.com/f/a/RRnrkLSSUM3TdbhSnCsBVg~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySkle3FXKUKL3ogHK8xfXsuc6sIRZI4vgDQafNcFap3W_X7kovMRz1bAnuhYEJi2gxqpIx36-SQyac5L8EGxBMPusNtz1BnFwFbecM3to5bNmrgSshszH9g985BaAUQeWYw-a__AFa2AIv8l2emvtEBAio4AXKpZEiFLi_aBHNU4Phl-HBjESYaPGPKfihKAAnL6JzxfoYyYaNLOcDf2Rsf6sYJBnSHVQghUX4VcHFP1y260kZwj85oVkxD10nOUC1Yao1Z77SEIXzmUK7eMG56yPqzlksB6txsa4wTKG4hqtbpUTnzGSC9kUaZZpPdZ1mA~~ )
+    Facebook 
+( https://links.p.cookunity.com/f/a/KvRXjitA7EzhIm1rvnCBCQ~~/AAQRxRA~/1rwdhfi5azfYCZ-bC3Cgr7aQ33nm-qE3FtgmIkMvVYapLKlsYQ7Fbu0KlcfAiAg3JyTyMO6gFD5rhvW_pix13cXYqeafr-j_1UuK_J9RO9-WPq0GLeXjf6F0Qi_zoAb2ROQNRs0JFw5dv8ZKOB4ZHqLZrbDlTSzI1p1RmD_iR_0~ )  X 
+( https://links.p.cookunity.com/f/a/xqv8P2Ks4Jp_Ttnig4FseA~~/AAQRxRA~/XqcXy5FoAsvaZ9Zy3lSJm-TdTZWeiThdrjOHhiA78rwpdFFdG4CN_0O57LlicTr4o3q8OYtjnuW8C-TjoUiKD_zmoaVTdqHv5ygX7fjtQuNDxnJTm_ezr8LDrW6gccfR6_vBhffkMPDTcv0kghaD9g~~ ) Instagram 
+( https://links.p.cookunity.com/f/a/5GmtxNhvT8f_DoHL99H9Uw~~/AAQRxRA~/i5u22G0BwWwpbymfElwxy8-FWapQxxlHqFUHOvTn3qreRY6cizOhqWYpWLXhnffuOCrPbvwzZ70VU_pWzuGDzOSIG0nT_9bXe428rB9NZqK5i5xKp_pYiIVOeT30u9QV2RtSzbcf2a3AguR9lBMw_gagC_DVT4IvoRbH7Zf2B84~ )
+CookUnity. 630 Flushing Ave. Brooklyn, NY 11206
+No longer want to receive these emails? unsubscribe (
+https://links.p.cookunity.com/f/a/Vt3uV7TNPODq1ZUwCOZ8Qg~~/AAQRxRA~/GQ-i1-a-YhoEJI7RML-6fBrPFSTyH_kK6kDn-iAlsfSo13xfvb9qlh2ZkELyOdlPm9dviWZgCw_5K5IJrpY67yzATBj0qodeJHMoOJ3xBtuEUkzZ90YIqtR2uodCfdyrDdPTyYoD3MvkxuX0D7zWEfxeIPsFY-6awLnmEqBGodbbfma5MBMYwDvxe3IAD5ye5cc6FiDu1pThSpXZAEMVBe-fP_8r-UpMt92rI0fV5b5tMPUbFWcaALK4XjU4gxzy8QjfYeHrXlC_FNv5wKAT7Ayj1HKof8zfBJfXpM4lb0Y_hkkD-EC9N4dkckvFNk7qbLOdG4eDesbwZZaDDi92W69v0YkoArvAc0kPyeOElZhGQpwV-7YykqNOC2CpovgGeJm9vDTWoHmTbq3Tb8K4yrFOyBRDXv0n2LdrStdnKmQ1md4GUK7n2w6l_5qEhf-hGyfnIVr13loGKYKfpbfuHrqIj9zR_NZA2mjjmRNFd2vynPHxCQ3NaEpx2JQwuFimrSgFvdh5_K6NocKlKR3DhhejWoREUTitCEGpgogbR31A8RhXvPtSBo6zdBRhIZLnAnX-_b85ym9DT2FUwRSyV1N6wWjpW6dGZxFqQmqghSEmDkfBrpmmUsGP91DXMTf9yl2Tr-biOMffUAxyQm3vpDEJhs-O9htUmvC6VskYRfiQdyT52txnM4quVWlDEYoq5nXzxHVBeIohWdCnh3GvtM1v5H_Qqx9J2aNfOHUNRY8J8wx3Q_zkRrh0xveSs-BoAAQgN4srAfLX4D4NVol-Ew~~ )
+--_----8Wvi8TRBRSxKeP9brE+LuA===_87/31-12576-D7F02896
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/html; charset="UTF-8"
+
+<!DOCTYPE html>=0A<html xmlns:v=3D"urn:schemas-microsoft-com:vml" xmlns:o=
+=3D"urn:schemas-microsoft-com:office:office" lang=3D"en">=0A<head>=0A<title=
+></title>=0A<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=
+=3Dutf-8">=0A<meta name=3D"viewport" content=3D"width=3Ddevice-width,initia=
+l-scale=3D1">=0A<!--[if mso]>=0A<xml><w:WordDocument xmlns:w=3D"urn:schemas=
+-microsoft-com:office:word"><w:DontUseAdvancedTypographyReadingMail/></w:Wo=
+rdDocument>=0A<o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInc=
+h><o:AllowPNG/></o:OfficeDocumentSettings></xml>=0A<![endif]--><!--[if !mso=
+]><!--><link href=3D"https://fonts.googleapis.com/css=3Ffamily=3DOpen+Sans"=
+ rel=3D"stylesheet" type=3D"text/css">=0A<!--<![endif]--><style>=0A*{box-si=
+zing:border-box}body{margin:0;padding:0}a[x-apple-data-detectors]{color:inh=
+erit!important;text-decoration:inherit!important}#MessageViewBody a{color:i=
+nherit;text-decoration:none}p{line-height:inherit}.desktop_hide,.desktop_hi=
+de table{mso-hide:all;display:none;max-height:0;overflow:hidden}.image_bloc=
+k img+div{display:none}sub,sup{font-size:75%;line-height:0} @media (max-wid=
+th:620px){.social_block.desktop_hide .social-table{display:inline-block!imp=
+ortant}.mobile_hide{display:none}.row-content{width:100%!important}.stack .=
+column{width:100%;display:block}.mobile_hide{min-height:0;max-height:0;max-=
+width:0;overflow:hidden;font-size:0}.desktop_hide,.desktop_hide table{displ=
+ay:table!important;max-height:none!important}}=0A</style>=0A<!--[if mso ]><=
+style>sup, sub { font-size: 100% !important; } sup { mso-text-raise:10% } s=
+ub { mso-text-raise:-10% }</style> <![endif]-->=0A</head>=0A<body class=3D"=
+body" style=3D"margin:0;background-color:#fff;padding:0;-webkit-text-size-a=
+djust:none;text-size-adjust:none">=0A<div style=3D"display:none !important;=
+visibility:hidden;mso-hide:all;font-size:1px;color:#ffffff;line-height:1px;=
+max-height:0px;max-width:0px;opacity:0;overflow:hidden;">Mediterranean, Ind=
+ian, Mexican,&amp; all the cuisines you loved. </div>=0A<div style=3D"displ=
+ay:none !important;visibility:hidden;mso-hide:all;font-size:1px;color:#ffff=
+ff;line-height:1px;max-height:0px;max-width:0px;opacity:0;overflow:hidden;"=
+>=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=
+=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =
+=EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=
+=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =
+=E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=
+=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =
+=E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=
+=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=
+=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=
+=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=
+=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =
+=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=
+=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =
+=EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=
+=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =
+=E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=
+=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =
+=E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=
+=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=
+=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=
+=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=
+=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =
+=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=
+=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =
+=EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=
+=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =
+=E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=
+=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =
+=E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=
+=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=
+=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=
+=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=
+=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =
+=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=
+=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =
+=EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=
+=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =
+=E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=
+=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =
+=E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=
+=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=
+=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=
+=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=
+=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =
+=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=
+=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =
+=EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=
+=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =
+=E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=
+=BB=BF </div>=0A<table class=3D"nl-container" width=3D"100%" border=3D"0" c=
+ellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table=
+-lspace:0;mso-table-rspace:0;background-color:#fff"><tbody><tr><td>=0A<tabl=
+e class=3D"row row-1" align=3D"center" width=3D"100%" border=3D"0" cellpadd=
+ing=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace=
+:0;mso-table-rspace:0"><tbody><tr><td><table class=3D"row-content stack" al=
+ign=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"pre=
+sentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;color:#000;width:=
+600px;margin:0 auto" width=3D"600"><tbody><tr><td class=3D"column column-1"=
+ width=3D"100%" style=3D"mso-table-lspace:0;mso-table-rspace:0;font-weight:=
+400;text-align:left;vertical-align:top">=0A<table class=3D"image_block bloc=
+k-1" width=3D"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0"><tr><td c=
+lass=3D"pad" style=3D"width:100%"><div class=3D"alignment" align=3D"center"=
+><div style=3D"max-width:600px"><a href=3D"https://links.p.cookunity.com/f/=
+a/ohHWpTpLFS_QS5o4dzTSag~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYW=
+mkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZyShhPb2MbUnLuBtQP1LZFNpdDI_0dok=
+DoEX_7yhaon1nvsxSCLiblG5nXvZZ3q_9tKAEN1bamJjZ34p78OaFu3puPSrKmfgPVEAOK2WF0f=
+Y_wa85PcniyA5fm7_fezH4fHTjY3lTtm-vckHiQrvJH8nccima0PUV8DdGh0dJSnhtxI1ZgscdM=
+xoLTbGpnatEPWDEwDY-f4DE2of1cYaPQC31ojTFghGhTUyXgAps0DEPOhzbII7vUCoxTN3yJAwK=
+pRT5DT28MjvVkCMIMAUAYG-kZ7bFtI1yvYSEP1tlWhNObKSH2q9LynrwGafpvzrNzow~~" targ=
+et=3D"_blank"><img src=3D"https://braze-images.com/appboy/communication/ass=
+ets/image_assets/images/693c825bdd6d77006473a01e/original.jpg=3F1765573210"=
+ style=3D"display:block;height:auto;border:0;width:100%" width=3D"600" alt=
+=3D"Start saving now! Rejoin" title=3D"Start saving now! Rejoin" height=3D"=
+auto"></a></div></div></td></tr></table>=0A<table class=3D"image_block bloc=
+k-2" width=3D"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0"><tr><td c=
+lass=3D"pad" style=3D"width:100%"><div class=3D"alignment" align=3D"center"=
+><div style=3D"max-width:600px">=0A<a href=3D"https://links.p.cookunity.com=
+/f/a/-Jt3vbH8xnyXkzf6Ldtkjw~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3=
+SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZyShTf00Z99DYFGeRyWIgSwWKSMLd=
+AjHBIkXVdk9MalspNhfmR1NCUaz-NQsQLthpRWJ9hMbCgxhJxUZFSB7a4aoHxHXLwi4f3824twO=
+4Gw_KA5cLv6lDRUsTGxTRXQ21yUcUcPNlIfyIHH_tOf2vzSGv9U3ST04h5DgzkG5fWhLfic6Nob=
+b6EnExi41BWVnng9rok7isreu01n6HuEbOiPDIn0bHjcdTC63DZFDT8z7FT-3I8ELBZlPNb6Ywy=
+ZvXRCUCQ_0tCfPvLi9mxgOenY8a391I__JGRJhShjUFkQo-RHISshAkqHKNrMcs2svQPtg~~" t=
+arget=3D"_blank"><img src=3D"https://braze-images.com/appboy/communication/=
+assets/image_assets/images/6931fcbb371e130063c59bb6/original.jpg=3F17648836=
+42" style=3D"display:block;height:auto;border:0;width:100%" width=3D"600" a=
+lt=3D"Start saving now! Rejoin" title=3D"Start saving now! Rejoin" height=
+=3D"auto"></a>=0A</div></div></td></tr></table>=0A</td></tr></tbody></table=
+></td></tr></tbody></table>=0A<table class=3D"row row-2" align=3D"center" w=
+idth=3D"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"pres=
+entation" style=3D"mso-table-lspace:0;mso-table-rspace:0"><tbody><tr><td><t=
+able class=3D"row-content stack" align=3D"center" border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;=
+mso-table-rspace:0;background-color:#fff;border-radius:0;color:#000;width:6=
+00px;margin:0 auto" width=3D"600"><tbody><tr><td class=3D"column column-1" =
+width=3D"100%" style=3D"mso-table-lspace:0;mso-table-rspace:0;font-weight:4=
+00;text-align:left;vertical-align:top">=0A<table class=3D"image_block block=
+-1" width=3D"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D=
+"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0"><tr><td clas=
+s=3D"pad" style=3D"width:100%"><div class=3D"alignment" align=3D"center"><d=
+iv style=3D"max-width:600px"><a href=3D"https://links.p.cookunity.com/f/a/5=
+er1W7p3CaHyCTTAmGT1Yg~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkh=
+aOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySrrrYnhjrVK4QlIFgt_EKh-AtLQvxObx2=
+-nRKtJhck_Ri1Pwd15MSP5Lepr81sXupOXVo_0z2NB1o_DlE6_9hyI4HSylFF-XBVDE7mlK42VY=
+t5Sx4Uu0jxwqNu2qiUMUzZq2RRYBT2aQdkSYqr6VbCxnBJsb76VpcURHhKMUTiA05Fi-w9Srj1Z=
+ZqajVNG_Y3jT82hrMcWc5uZ93WQvaTCXreBQV_ho2FWexXKb-pNrM6hOmN01FIAHvxfc-OTBO5o=
+Y876l730wWLWeWYIgqQ5DwlYchDfa66x2h8D2Kcks2LUPjm1wA26o6UQoXb8CdXg~~" target=
+=3D"_blank"><img src=3D"https://braze-images.com/appboy/communication/asset=
+s/image_assets/images/688cf224b5d5ad00765b8f8f/original.jpg=3F1754067492" s=
+tyle=3D"display:block;height:auto;border:0;width:100%" width=3D"600" alt=3D=
+"Explore diet-friendly favorites below" title=3D"Explore diet-friendly favo=
+rites below" height=3D"auto"></a></div></div></td></tr></table>=0A<table cl=
+ass=3D"image_block block-2" width=3D"100%" border=3D"0" cellpadding=3D"0" c=
+ellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso-tabl=
+e-rspace:0"><tr><td class=3D"pad" style=3D"width:100%"><div class=3D"alignm=
+ent" align=3D"center"><div style=3D"max-width:600px"><a href=3D"https://lin=
+ks.p.cookunity.com/f/a/qh1m_XsOzH9JetlElaM1dA~~/AAQRxRA~/svkJUcUmIY4P3dH7d-=
+QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySjo2uoxd2=
+ZRHT7f3dj-FdTMDV55RdN0q9DMD491dzfKJaTDW6saqbqeSLw0-7isGM-uxiCMfao4dKvNFapA8=
+NBmkd758kdJGG9U-bAJQ3zB8n6vb6puUA94sdLhyMHzrhkeY2MNABhtpGzZBkyknR4lJWrftKP_=
+mEpI2-B91XoEt6YEaMOspgz3IgfhlHchJanqGtbiMkGJmSBVTEthipW6ybx0ljQ7YaW-cZKqCr7=
+9vQWrlFqmzeYh5vIDo66ptjkNAjHb7nmvyut8YOrhvzJS-nx6Zq15EAGxGZVcBwLHt61U6qfKyx=
+ti9pEsa02WVew~~" target=3D"_blank"><img src=3D"https://braze-images.com/app=
+boy/communication/assets/image_assets/images/688cf22b4676930067c4b478/origi=
+nal.gif=3F1754067499" style=3D"display:block;height:auto;border:0;width:100=
+%" width=3D"600" alt=3D"Find your match!" title=3D"Find your match!" height=
+=3D"auto"></a></div></div></td></tr></table>=0A<table class=3D"image_block =
+block-3" width=3D"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" ro=
+le=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0"><tr><td=
+ class=3D"pad" style=3D"width:100%"><div class=3D"alignment" align=3D"cente=
+r"><div style=3D"max-width:600px"><a href=3D"https://links.p.cookunity.com/=
+f/a/sm-iYIU7Lz_Jg28kaaOG6g~~/AAQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3S=
+YWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySpGVG3oPDJ1NUGyNL1fT3Ra-F2vp=
+eAocONiREDKSWpH0l50yy07WTE1rOPkKDBD55EFXu-fq0HS_YGNUefKBSjh-VjnAXHd2tQiB-Rg=
+xOFajXmO2tQXr3Tfcwe9OVdozgi99jmKN8a_IdHiDNwMS042YUKJDUkH21zxX3hEeXM1lyd-Qgi=
+5rGLZcX8Ar7LuI8awjI9L9-poDLrkqoEGi6W1HpElVTOM68GcFfR8KW0n8dxCQ7nbAj-k86e5Ds=
+zK9SJVlPOvOS9zXUov5xpF97n2k8x1YdcrwTlSKNgPvOzOtGnJYX2QKd9tfzGq2BT01_A~~" ta=
+rget=3D"_blank"><img src=3D"https://braze-images.com/appboy/communication/a=
+ssets/image_assets/images/688cf233f238f600674125cc/original.jpg=3F175406750=
+6" style=3D"display:block;height:auto;border:0;width:100%" width=3D"600" al=
+t=3D"Our chefs handpick their ingredients. So fresh is always on the menu."=
+ title=3D"Our chefs handpick their ingredients. So fresh is always on the m=
+enu." height=3D"auto"></a></div></div></td></tr></table>=0A</td></tr></tbod=
+y></table></td></tr></tbody></table>=0A<table class=3D"row row-3" align=3D"=
+center" width=3D"100%" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" rol=
+e=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0"><tbody><=
+tr><td>=0A<table class=3D"row-content stack" align=3D"center" border=3D"0" =
+cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-tabl=
+e-lspace:0;mso-table-rspace:0;color:#000;width:600px;margin:0 auto" width=
+=3D"600"><tbody><tr><td class=3D"column column-1" width=3D"100%" style=3D"m=
+so-table-lspace:0;mso-table-rspace:0;font-weight:400;text-align:left;vertic=
+al-align:top">=0A<table class=3D"image_block block-1" width=3D"100%" border=
+=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"m=
+so-table-lspace:0;mso-table-rspace:0"><tr><td class=3D"pad" style=3D"width:=
+100%"><div class=3D"alignment" align=3D"center"><div style=3D"max-width:600=
+px"><a href=3D"https://links.p.cookunity.com/f/a/KfcDAvhjH2bn4OMCYwFgxw~~/A=
+AQRxRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9=
+hSryVJY0YKYyTYoZySrtZqPBVrW0i8oXKsd1RVTkkOVkWV7UFzqdMWQIMw_Ur3VaHSv6KTQcOS_=
+JdUTyrTsxWXz1UQvQcqlrHzVtXhYOsj5Q9fmw9AuXMUDjvtyHDua73ES8uuFNBL0GdnOYYv2s2P=
+dJ9sCbT4tjKRoqRSNEp45wJhc-yYGgeuiwQdLq3hTXnUjMs2zlBYOXWcVELtYZ1Dr-ikelDlIn-=
+lGLM0Jp4Ig5BDgWAVsZSvKeNqiJGDptVeWI08ctnr2YtlMhQv6PDsZtqdcpTQiy4Jcf5qy8muKE=
+HZw2-ruyAKzQ9i_R3uB2FCPqTER0Hs5HF9U9yjw~~" target=3D"_blank"><img src=3D"ht=
+tps://braze-images.com/appboy/communication/assets/image_assets/images/690a=
+04860e7f4b0063265bfd/original.jpg=3F1762264198" style=3D"display:block;heig=
+ht:auto;border:0;width:100%" width=3D"600" alt=3D"Start saving now! Rejoin"=
+ title=3D"Start saving now! Rejoin" height=3D"auto"></a></div></div></td></=
+tr></table>=0A<table class=3D"image_block block-2" width=3D"100%" border=3D=
+"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-=
+table-lspace:0;mso-table-rspace:0"><tr><td class=3D"pad" style=3D"width:100=
+%"><div class=3D"alignment" align=3D"center"><div style=3D"max-width:600px"=
+><a href=3D"https://links.p.cookunity.com/f/a/1AK97K6b-9u-6NREp2CCmw~~/AAQR=
+xRA~/svkJUcUmIY4P3dH7d-QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSr=
+yVJY0YKYyTYoZySmmXI67IU7Pb97mQsSdhjuRBunlgJ1QTj4YGXcLarhkWB6YIeSAaeUnHXqCkB=
+1vPegZaSglBtzkFwd8uuhzN6IJ9MA2CGDx-mlG4Ba1qWGfuicCEzf825BGi_zMMCyu5YXVJKElK=
+5xhRERDhNIzY0WQyUbTyueWIfKc4k2IO1wvhYQWeynKvQIElwo5V7zrckb4G04gsc2mspc3O3hM=
+9js8eq8A-JfSRwcaO6iWgx7k6p1fRM3YxOMqQQ2nQWowiqqFG1URf9nyxs4ujXqdt_WCMeXL3eR=
+_L3KKeGLX-CzAPcPm1xQdAlwc4bM8txuB8SQ~~" target=3D"_blank"><img src=3D"https=
+://braze-images.com/appboy/communication/assets/image_assets/images/688cfe3=
+d8b102800674180c5/original.jpg=3F1754070589" style=3D"display:block;height:=
+auto;border:0;width:100%" width=3D"600" alt=3D"Start saving now! Rejoin" ti=
+tle=3D"Start saving now! Rejoin" height=3D"auto"></a></div></div></td></tr>=
+</table>=0A</td></tr></tbody></table>=0A</td></tr></tbody></table>=0A<table=
+ class=3D"row row-4" align=3D"center" width=3D"100%" border=3D"0" cellpaddi=
+ng=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:=
+0;mso-table-rspace:0"><tbody><tr><td><table class=3D"row-content stack" ali=
+gn=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"pres=
+entation" style=3D"mso-table-lspace:0;mso-table-rspace:0;background-color:#=
+24272a;color:#000;width:600px;margin:0 auto" width=3D"600"><tbody><tr><td c=
+lass=3D"column column-1" width=3D"100%" style=3D"mso-table-lspace:0;mso-tab=
+le-rspace:0;font-weight:400;text-align:left;padding-bottom:5px;padding-top:=
+5px;vertical-align:top">=0A<table class=3D"paragraph_block block-1" width=
+=3D"100%" border=3D"0" cellpadding=3D"10" cellspacing=3D"0" role=3D"present=
+ation" style=3D"mso-table-lspace:0;mso-table-rspace:0;word-break:break-word=
+"><tr><td class=3D"pad"><div style=3D"color:#fff;direction:ltr;font-family:=
+Open Sans,Arial,Sans-serif;font-size:14px;font-weight:400;letter-spacing:0;=
+line-height:NaN;text-align:center;mso-line-height-alt:NaNpx"><p style=3D"ma=
+rgin:0">=0AOffer valid for returning customers only. To receive a 50% off y=
+our first four weeks, your first four orders must be confirmed within 28 da=
+ys of restarting deliveries. Menu and meals are subject to change. CookUnit=
+y reserves the right to end or modify this offer at any time and substitute=
+ another promotion in its place.</p></div></td></tr></table>=0A<table class=
+=3D"image_block block-2" width=3D"100%" border=3D"0" cellpadding=3D"0" cell=
+spacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso-table-r=
+space:0"><tr>=0A<td class=3D"pad" style=3D"width:100%"><div class=3D"alignm=
+ent" align=3D"center"><div style=3D"max-width:600px"><a href=3D"https://lin=
+ks.p.cookunity.com/f/a/RRnrkLSSUM3TdbhSnCsBVg~~/AAQRxRA~/svkJUcUmIY4P3dH7d-=
+QP8B3NxooRUYWrl9E3SYWmkhaOoisoRoY4AzsAlMIpMxvkfL9hSryVJY0YKYyTYoZySkle3FXKU=
+KL3ogHK8xfXsuc6sIRZI4vgDQafNcFap3W_X7kovMRz1bAnuhYEJi2gxqpIx36-SQyac5L8EGxB=
+MPusNtz1BnFwFbecM3to5bNmrgSshszH9g985BaAUQeWYw-a__AFa2AIv8l2emvtEBAio4AXKpZ=
+EiFLi_aBHNU4Phl-HBjESYaPGPKfihKAAnL6JzxfoYyYaNLOcDf2Rsf6sYJBnSHVQghUX4VcHFP=
+1y260kZwj85oVkxD10nOUC1Yao1Z77SEIXzmUK7eMG56yPqzlksB6txsa4wTKG4hqtbpUTnzGSC=
+9kUaZZpPdZ1mA~~" target=3D"_blank"><img src=3D"https://braze-images.com/app=
+boy/communication/assets/image_assets/images/66a00b5b23c2ac0058cf8ad1/origi=
+nal.png=3F1721764699" style=3D"display:block;height:auto;border:0;width:100=
+%" width=3D"600" alt=3D"CookUnity" title=3D"CookUnity" height=3D"auto"></a>=
+</div></div></td>=0A</tr></table>=0A<table class=3D"social_block block-3" w=
+idth=3D"100%" border=3D"0" cellpadding=3D"10" cellspacing=3D"0" role=3D"pre=
+sentation" style=3D"mso-table-lspace:0;mso-table-rspace:0"><tr><td class=3D=
+"pad"><div class=3D"alignment" align=3D"center"><table class=3D"social-tabl=
+e" width=3D"138px" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=3D=
+"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;display:inlin=
+e-block"><tr>=0A<td style=3D"padding:0 7px 0 7px">=0A<a href=3D"https://lin=
+ks.p.cookunity.com/f/a/KvRXjitA7EzhIm1rvnCBCQ~~/AAQRxRA~/1rwdhfi5azfYCZ-bC3=
+Cgr7aQ33nm-qE3FtgmIkMvVYapLKlsYQ7Fbu0KlcfAiAg3JyTyMO6gFD5rhvW_pix13cXYqeafr=
+-j_1UuK_J9RO9-WPq0GLeXjf6F0Qi_zoAb2ROQNRs0JFw5dv8ZKOB4ZHqLZrbDlTSzI1p1RmD_i=
+R_0~" target=3D"_blank"><img src=3D"https://braze-social-icons.s3.amazonaws=
+.com/social-networks-icon-sets/circle-dark-gray/facebook@2x.png" width=3D"=
+32" height=3D"auto" alt=3D"Facebook" title=3D"Facebook" style=3D"display:bl=
+ock;height:auto;border:0"></a>=0A</td>=0A<td style=3D"padding:0 7px 0 7px">=
+<a href=3D"https://links.p.cookunity.com/f/a/xqv8P2Ks4Jp_Ttnig4FseA~~/AAQRx=
+RA~/XqcXy5FoAsvaZ9Zy3lSJm-TdTZWeiThdrjOHhiA78rwpdFFdG4CN_0O57LlicTr4o3q8OYt=
+jnuW8C-TjoUiKD_zmoaVTdqHv5ygX7fjtQuNDxnJTm_ezr8LDrW6gccfR6_vBhffkMPDTcv0kgh=
+aD9g~~" target=3D"_blank"><img src=3D"https://braze-social-icons.s3.amazona=
+ws.com/social-networks-icon-sets/circle-dark-gray/twitter@2x.png" width=3D"=
+32" height=3D"auto" alt=3D"X" title=3D"X" style=3D"display:block;height:aut=
+o;border:0"></a></td>=0A<td style=3D"padding:0 7px 0 7px"><a href=3D"https:=
+//links.p.cookunity.com/f/a/5GmtxNhvT8f_DoHL99H9Uw~~/AAQRxRA~/i5u22G0BwWwpb=
+ymfElwxy8-FWapQxxlHqFUHOvTn3qreRY6cizOhqWYpWLXhnffuOCrPbvwzZ70VU_pWzuGDzOSI=
+G0nT_9bXe428rB9NZqK5i5xKp_pYiIVOeT30u9QV2RtSzbcf2a3AguR9lBMw_gagC_DVT4IvoRb=
+H7Zf2B84~" target=3D"_blank"><img src=3D"https://braze-social-icons.s3.amaz=
+onaws.com/social-networks-icon-sets/circle-dark-gray/instagram@2x.png" widt=
+h=3D"32" height=3D"auto" alt=3D"Instagram" title=3D"Instagram" style=3D"dis=
+play:block;height:auto;border:0"></a></td>=0A</tr></table></div></td></tr><=
+/table>=0A<table class=3D"paragraph_block block-4" width=3D"100%" border=3D=
+"0" cellpadding=3D"10" cellspacing=3D"0" role=3D"presentation" style=3D"mso=
+-table-lspace:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"=
+pad"><div style=3D"color:#fff;direction:ltr;font-family:Open Sans,Arial,San=
+s-serif;font-size:14px;font-weight:400;letter-spacing:0;line-height:NaN;tex=
+t-align:center;mso-line-height-alt:NaNpx"><p style=3D"margin:0">=0ACookUnit=
+y. 630 Flushing Ave. Brooklyn, NY 11206<br>No longer want to receive these =
+emails=3F <a href=3D"https://links.p.cookunity.com/f/a/Vt3uV7TNPODq1ZUwCOZ8=
+Qg~~/AAQRxRA~/GQ-i1-a-YhoEJI7RML-6fBrPFSTyH_kK6kDn-iAlsfSo13xfvb9qlh2ZkELyO=
+dlPm9dviWZgCw_5K5IJrpY67yzATBj0qodeJHMoOJ3xBtuEUkzZ90YIqtR2uodCfdyrDdPTyYoD=
+3MvkxuX0D7zWEfxeIPsFY-6awLnmEqBGodbbfma5MBMYwDvxe3IAD5ye5cc6FiDu1pThSpXZAEM=
+VBe-fP_8r-UpMt92rI0fV5b5tMPUbFWcaALK4XjU4gxzy8QjfYeHrXlC_FNv5wKAT7Ayj1HKof8=
+zfBJfXpM4lb0Y_hkkD-EC9N4dkckvFNk7qbLOdG4eDesbwZZaDDi92W69v0YkoArvAc0kPyeOEl=
+ZhGQpwV-7YykqNOC2CpovgGeJm9vDTWoHmTbq3Tb8K4yrFOyBRDXv0n2LdrStdnKmQ1md4GUK7n=
+2w6l_5qEhf-hGyfnIVr13loGKYKfpbfuHrqIj9zR_NZA2mjjmRNFd2vynPHxCQ3NaEpx2JQwuFi=
+mrSgFvdh5_K6NocKlKR3DhhejWoREUTitCEGpgogbR31A8RhXvPtSBo6zdBRhIZLnAnX-_b85ym=
+9DT2FUwRSyV1N6wWjpW6dGZxFqQmqghSEmDkfBrpmmUsGP91DXMTf9yl2Tr-biOMffUAxyQm3vp=
+DEJhs-O9htUmvC6VskYRfiQdyT52txnM4quVWlDEYoq5nXzxHVBeIohWdCnh3GvtM1v5H_Qqx9J=
+2aNfOHUNRY8J8wx3Q_zkRrh0xveSs-BoAAQgN4srAfLX4D4NVol-Ew~~" target=3D"_blank"=
+ style=3D"text-decoration: underline; color: #ffffff;" data-mce-attribute-n=
+ame-1 data-mce-attribute-value-1 rel=3D"noopener">unsubscribe</a></p></div>=
+</td></tr></table>=0A</td></tr></tbody></table></td></tr></tbody></table>=
+=0A</td></tr></tbody></table>=0A<!-- End -->=0A=0D=0A<img border=3D"0" widt=
+h=3D"1" height=3D"1" alt=3D"" src=3D"https://links.p.cookunity.com/q/VWTQHZ=
+qPstifjTJz-5hniw~~/AAQRxRA~/T61Rgd98OjnncGXuX4pkdN-PlskBvXZH5071LcTiYCxU-2u=
+yXZb2njt32hipwqO-v82mnKGiwUWtgREL3ocGvQ~~">=0D=0A</body>=0A</html>
+--_----8Wvi8TRBRSxKeP9brE+LuA===_87/31-12576-D7F02896--
+
