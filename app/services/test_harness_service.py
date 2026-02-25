@@ -665,36 +665,37 @@ def _g6_agent_pipeline(suite: TestSuite) -> None:
     def agent_inference_results():
         with get_cursor(commit=False) as cur:
             cur.execute("""
-                SELECT inference_type, COUNT(*) AS cnt
+                SELECT sentiment, intent, engagement_score
                 FROM inference_results
                 WHERE contact_id = %s
-                GROUP BY inference_type
+                ORDER BY run_at DESC LIMIT 1
             """, (suite.test_contact_id,))
-            rows = {r["inference_type"]: r["cnt"] for r in cur.fetchall()}
-        assert rows, f"No inference_results for test contact {suite.test_contact_id}"
-        return {"inference_types": list(rows.keys()), "counts": rows}
+            row = cur.fetchone()
+        assert row, f"No inference_results for test contact {suite.test_contact_id}"
+        return {"sentiment": row["sentiment"], "intent": row["intent"], "engagement_score": row["engagement_score"]}
     _run(suite, "agent_inference_results", G, agent_inference_results)
 
     def agent_decision_results():
         with get_cursor(commit=False) as cur:
             cur.execute("""
-                SELECT decision_type, COUNT(*) AS cnt
+                SELECT COUNT(*) AS cnt, recommended_channel, offer_type
                 FROM decision_recommendations
                 WHERE contact_id = %s
-                GROUP BY decision_type
+                GROUP BY recommended_channel, offer_type
+                LIMIT 1
             """, (suite.test_contact_id,))
-            rows = {r["decision_type"]: r["cnt"] for r in cur.fetchall()}
-        assert rows, f"No decision_recommendations for test contact"
-        return {"decision_types": list(rows.keys())}
+            row = cur.fetchone()
+        assert row and row["cnt"] > 0, f"No decision_recommendations for test contact"
+        return {"count": row["cnt"], "channel": row["recommended_channel"], "offer": row["offer_type"]}
     _run(suite, "agent_decision_results", G, agent_decision_results)
 
     def agent_orchestrator_log():
         with get_cursor(commit=False) as cur:
             cur.execute("""
-                SELECT id, chosen_action, created_at
+                SELECT id, chosen_action, run_at
                 FROM orchestrator_log
                 WHERE contact_id = %s
-                ORDER BY created_at DESC LIMIT 1
+                ORDER BY run_at DESC LIMIT 1
             """, (suite.test_contact_id,))
             row = cur.fetchone()
         assert row, "No orchestrator_log entry for test contact"
@@ -1248,6 +1249,7 @@ def _g15_competitor_agent(suite: TestSuite) -> None:
 def _cascade_delete(cur, contact_id: int) -> None:
     """Delete all test-related rows for a given contact_id."""
     tables = [
+        "campaign_queue",
         "action_queue",
         "orchestrator_log",
         "decision_recommendations",
