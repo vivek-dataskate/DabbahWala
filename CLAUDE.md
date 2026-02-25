@@ -19,7 +19,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 ## Database Migrations
 - All migrations live in `migrations/` and are numbered sequentially
-- Next available migration number: **044**
+- Next available migration number: **056**
 - Use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for idempotency
 
 ## Credentials & Integrations
@@ -48,8 +48,14 @@ If the env var is empty, read it from that file and use it directly in API calls
   - Used by: `google_docs_sync` (reads doc content for chatbot index)
 - Drive folder for chatbot docs: `1O0ES9uiDL6AWf9QMMYiyRUWGtymDjPF5`
 
+### Airtable
+- API key: stored in Render env as `AIRTABLE_API_KEY` and in `~/.claude/CLAUDE.md` (never commit to repo)
+- Base ID: `appuy2VTIao6XVpIW`
+- Menu table: **`Weekly Menu`** — fields: Name, Category, Is Veg, Description, Image URL, Week Start, Active, Price
+
 ### n8n Workflow Status
-- All **22 scheduled workflows** are active as of 2026-02-23
+- All **22 scheduled workflows** are active as of 2026-02-25
+- `[Airtable — Evidence] Menu Sync` (ID: `baZV5ViA5lXNCTWR`) replaced the old Playwright weekly scrape
 - Only `[Shipday — Evidence] Historical Import` is intentionally inactive (manual one-shot trigger)
 - Credential IDs for all integrations are tracked in `n8n/config.json`
 
