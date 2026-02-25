@@ -89,7 +89,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const campaigns = $input.first().json;\nif (!Array.isArray(campaigns) || campaigns.length === 0) return [];\nreturn campaigns.map(item => ({ json: item }));"
+        "jsCode": "const items = $input.all();\nif (!items || items.length === 0) return [];\n// n8n HTTP Request may either:\n//   (a) return ONE item whose .json is the full array  \u2014 split it\n//   (b) already split the array into N items          \u2014 pass through\nif (items.length === 1 && Array.isArray(items[0].json)) {\n  const arr = items[0].json;\n  return arr.map(c => ({ json: c }));\n}\nreturn items;"
       },
       "id": "split-campaigns",
       "name": "Split Campaign Moves",
@@ -102,7 +102,8 @@
     },
     {
       "parameters": {
-        "jsCode": "// Map internal campaign names to Instantly campaign IDs\nconst INSTANTLY_IDS = {\n  'NURTURE_SLOW':            '90ecd160-22cc-46b1-9fa5-9342fe970837',\n  'PROMO_STANDARD':          '30292b3d-9f39-4ef3-b0ba-ea15c634acef',\n  'PROMO_AGGRESSIVE':        'c9af877a-77ac-491c-a5ee-a8ea7646416b',\n  'NEW_CUSTOMER_ONBOARDING': 'c4c42e73-83fd-4d43-b629-db5b11be66ae',\n  'REACTIVATION':            '0c760ec8-3415-48cd-87ff-b58babc17dde'\n};\n\nconst item = $input.item.json;\n\nconst toCampaignId   = INSTANTLY_IDS[item.to_campaign];\nconst fromCampaignId = item.from_campaign ? INSTANTLY_IDS[item.from_campaign] : null;\n\nif (!toCampaignId) {\n  throw new Error(`Unknown campaign name: ${item.to_campaign}`);\n}\n\nreturn {\n  json: {\n    queue_id:                 item.queue_id,\n    email:                    item.contact_email,\n    phone:                    item.contact_phone || null,\n    to_campaign:              item.to_campaign,\n    from_campaign:            item.from_campaign || null,\n    instantly_to_campaign_id: toCampaignId,\n    instantly_from_campaign_id: fromCampaignId\n  }\n};"
+        "jsCode": "// Map internal campaign names to Instantly campaign IDs\nconst INSTANTLY_IDS = {\n  'NURTURE_SLOW':            '76a88797-961a-47b6-af11-77e2211c4e73',\n  'PROMO_STANDARD':          'f3e2d621-9bf2-4130-bc1c-f8168fc44e1e',\n  'ACTIVE_CUSTOMER':         'c763e229-f633-468b-bfe4-7f9a4fd21036',\n  'PROMO_AGGRESSIVE':        '87d44ff1-8720-4c1d-92ff-b827970f323f',\n  'NEW_CUSTOMER_ONBOARDING': '8a5ccbfb-500d-4060-ad99-76aa0159bbf2',\n  'REACTIVATION':            '69c84455-d9b8-437f-b249-8325d23798e6'\n};\n\n// Campaigns with no Instantly email campaign (app-only users with placeholder emails)\nconst SKIP_CAMPAIGNS = new Set(['APP_TO_DIRECT']);\n\nconst item = $input.item.json;\n\nif (SKIP_CAMPAIGNS.has(item.to_campaign)) {\n  return {\n    json: {\n      queue_id: item.queue_id,\n      email:    item.contact_email,\n      skip:     true,\n      reason:   item.to_campaign + ' has no Instantly email campaign'\n    }\n  };\n}\n\nconst toCampaignId   = INSTANTLY_IDS[item.to_campaign];\nconst fromCampaignId = item.from_campaign ? INSTANTLY_IDS[item.from_campaign] : null;\n\nif (!toCampaignId) {\n  throw new Error('Unknown campaign name: ' + item.to_campaign);\n}\n\nreturn {\n  json: {\n    queue_id:                   item.queue_id,\n    email:                      item.contact_email,\n    first_name:                 item.contact_first_name || '',\n    last_name:                  item.contact_last_name  || '',\n    phone:                      item.contact_phone || null,\n    to_campaign:                item.to_campaign,\n    from_campaign:              item.from_campaign || null,\n    instantly_to_campaign_id:   toCampaignId,\n    instantly_from_campaign_id: fromCampaignId,\n    skip:                       false\n  }\n};",
+        "mode": "runOnceForEachItem"
       },
       "id": "prepare-instantly-payload",
       "name": "Prepare Instantly Payload",
@@ -115,52 +116,49 @@
     },
     {
       "parameters": {
-        "method": "DELETE",
-        "url": "=https://api.instantly.ai/api/v2/leads",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendQuery": true,
-        "queryParameters": {
-          "parameters": [
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
             {
-              "name": "campaign_id",
-              "value": "={{ $json.instantly_from_campaign_id }}"
-            },
-            {
-              "name": "email",
-              "value": "={{ $json.email }}"
+              "id": "is-skip",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
             }
-          ]
+          ],
+          "combinator": "and"
         },
-        "options": {
-          "allowUnauthorizedCerts": false
-        }
+        "options": {}
       },
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "FKw9At5AkLdEmHHi",
-          "name": "Instantly API Key"
-        }
+      "id": "skip-or-push",
+      "name": "Skip or Push?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1540,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/campaigns/{{ $json.queue_id }}/executed",
+        "options": {}
       },
-      "id": "remove-from-old-campaign",
-      "name": "Remove from Old Campaign",
+      "id": "mark-skip-executed",
+      "name": "Mark Skip Executed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1540,
-        160
-      ],
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {},
-      "id": "skip-removal",
-      "name": "Skip Removal",
-      "type": "n8n-nodes-base.noOp",
-      "typeVersion": 1,
-      "position": [
-        1540,
-        340
+        1760,
+        120
       ]
     },
     {
@@ -191,22 +189,60 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        1430,
-        240
+        1760,
+        360
       ]
     },
     {
       "parameters": {
-        "mode": "passThrough",
-        "output": "input1"
+        "method": "DELETE",
+        "url": "=https://api.instantly.ai/api/v2/leads",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "campaign",
+              "value": "={{ $json.instantly_from_campaign_id }}"
+            },
+            {
+              "name": "email",
+              "value": "={{ $json.email }}"
+            }
+          ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": false
+        }
       },
-      "id": "merge-removal-paths",
-      "name": "Merge",
-      "type": "n8n-nodes-base.merge",
-      "typeVersion": 3,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "98RupYRuQa6m9mqh",
+          "name": "Instantly API Key"
+        }
+      },
+      "id": "remove-from-old-campaign",
+      "name": "Remove from Old Campaign",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
-        1760,
-        240
+        1980,
+        280
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Restore our payload after Remove from Old Campaign replaced $json with the Instantly response.\n// $('Prepare Instantly Payload').item.json always has the current item's data.\nconst orig = $('Prepare Instantly Payload').item.json;\nreturn { json: orig };"
+      },
+      "id": "restore-payload",
+      "name": "Restore Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2180,
+        360
       ]
     },
     {
@@ -219,12 +255,20 @@
         "bodyParameters": {
           "parameters": [
             {
-              "name": "campaign_id",
+              "name": "campaign",
               "value": "={{ $json.instantly_to_campaign_id }}"
             },
             {
               "name": "email",
               "value": "={{ $json.email }}"
+            },
+            {
+              "name": "first_name",
+              "value": "={{ $json.first_name }}"
+            },
+            {
+              "name": "last_name",
+              "value": "={{ $json.last_name }}"
             },
             {
               "name": "phone",
@@ -240,7 +284,7 @@
       },
       "credentials": {
         "httpHeaderAuth": {
-          "id": "FKw9At5AkLdEmHHi",
+          "id": "98RupYRuQa6m9mqh",
           "name": "Instantly API Key"
         }
       },
@@ -249,14 +293,15 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1980,
-        240
-      ]
+        2380,
+        360
+      ],
+      "continueOnFail": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "https://dabbahwala-latest.onrender.com/api/campaigns/{{ $json.queue_id }}/executed",
+        "url": "=https://dabbahwala-latest.onrender.com/api/campaigns/{{ $('Prepare Instantly Payload').item.json.queue_id }}/executed",
         "options": {}
       },
       "id": "mark-executed",
@@ -264,8 +309,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2200,
-        240
+        2580,
+        360
       ]
     },
     {
@@ -358,6 +403,24 @@
       "main": [
         [
           {
+            "node": "Skip or Push?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip or Push?": {
+      "main": [
+        [
+          {
+            "node": "Mark Skip Executed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Has Old Campaign?",
             "type": "main",
             "index": 0
@@ -376,7 +439,7 @@
         ],
         [
           {
-            "node": "Skip Removal",
+            "node": "Restore Payload",
             "type": "main",
             "index": 0
           }
@@ -387,25 +450,14 @@
       "main": [
         [
           {
-            "node": "Merge",
+            "node": "Restore Payload",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Skip Removal": {
-      "main": [
-        [
-          {
-            "node": "Merge",
-            "type": "main",
-            "index": 1
-          }
-        ]
-      ]
-    },
-    "Merge": {
+    "Restore Payload": {
       "main": [
         [
           {

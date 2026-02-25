@@ -204,6 +204,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `get_campaign_performance()` | Campaign stats (opens, clicks, orders) |
 | `generate_daily_report()` | Aggregate metrics for a date |
 | `create_opportunity()` | Opportunity creation with deduplication |
+| `get_pending_campaign_moves()` | Returns pending campaign_queue rows joined with contacts — includes `contact_first_name`, `contact_last_name` for Instantly lead creation |
 
 ---
 
