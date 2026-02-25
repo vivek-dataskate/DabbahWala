@@ -207,7 +207,7 @@ def get_campaign_analytics():
     if not INSTANTLY_API_KEY:
         raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
 
-    headers = {"X-API-Key": INSTANTLY_API_KEY}
+    headers = {"Authorization": f"Bearer {INSTANTLY_API_KEY}"}
     results = []
 
     for name, meta in _CAMPAIGN_META.items():
@@ -645,7 +645,7 @@ def setup_instantly_campaigns():
         raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
 
     headers = {
-        "X-API-Key": INSTANTLY_API_KEY,
+        "Authorization": f"Bearer {INSTANTLY_API_KEY}",
         "Content-Type": "application/json",
     }
 
