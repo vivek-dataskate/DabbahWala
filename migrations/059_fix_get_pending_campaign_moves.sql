@@ -4,6 +4,8 @@
 
 SET search_path TO dabbahwala;
 
+DROP FUNCTION IF EXISTS get_pending_campaign_moves();
+
 CREATE OR REPLACE FUNCTION get_pending_campaign_moves()
 RETURNS TABLE(
     queue_id       BIGINT,
