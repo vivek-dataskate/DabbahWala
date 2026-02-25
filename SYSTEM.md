@@ -209,7 +209,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `agents.py` | `/api/agents` | `POST /cycle/run`, `/cycle/run-for-contact`, `/cycle/run-all`, `/cycle/run-daily-sweep`, `/cycle/run-all-lapsed`, `GET /action-queue/pending`, `POST /action-queue/{id}/done`, `POST /goals`, `POST /report/activity`, `POST /report/outcome` |
 | `intelligence.py` | `/api/intelligence` | `POST /run-cycle`, `GET /pending-actions`, `POST /ingest-instantly-events` |
 | `daily_orders.py` | `/api/daily-orders` | `POST /process`, `GET /summary/{date}` |
-| `query.py` | `/api/query` | `POST /` (10 Tier-1 SQL + 1 Tier-2 Claude categories), `GET /categories` |
+| `query.py` | `/api/query` | `POST /` (14 Tier-1 SQL + 1 Tier-2 Claude categories — includes `sms_performance`, `email_performance`, `activity_report`, `outcome_report` with date-range filtering), `GET /categories` |
 | `lifecycle.py` | `/api/lifecycle` | `POST /run` — SQL rule engine |
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |
 | `campaigns.py` | `/api/campaigns` | `GET /pending`, `POST /{id}/executed` |
