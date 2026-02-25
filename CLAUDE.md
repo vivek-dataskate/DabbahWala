@@ -84,7 +84,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 - Menu table: **`Weekly Menu`** — fields: Name, Category, Is Veg, Description, Image URL, Week Start, Active, Price
 
 ### n8n Workflow Status
-- All **24 scheduled workflows** are active as of 2026-02-25
+- All **25 workflows** active as of 2026-02-25 (24 scheduled + 1 manual-only)
 - `[Claude — Inference] Competitor Research Agent` (ID: TBD — activate after first push) added 2026-02-25
 - `[Airtable — Evidence] Menu Sync` (ID: `baZV5ViA5lXNCTWR`) replaced the old Playwright weekly scrape
 - `[System — Test] Daily E2E Test Suite` (ID: `M7bwNMGrUMRvAHH4`) — daily 5 AM E2E test runner, added 2026-02-25

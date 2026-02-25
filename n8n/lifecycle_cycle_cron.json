@@ -256,7 +256,8 @@
     },
     {
       "parameters": {
-        "jsCode": "// Restore our payload after Remove from Old Campaign replaced $json with the Instantly response.\n// $('Prepare Instantly Payload').item.json always has the current item's data.\nconst orig = $('Prepare Instantly Payload').item.json;\nreturn { json: orig };"
+        "jsCode": "// Restore our payload after Remove from Old Campaign replaced $json with the Instantly response.\n// $('Prepare Instantly Payload').item.json always has the current item's data.\nconst orig = $('Prepare Instantly Payload').item.json;\nreturn { json: orig };",
+        "mode": "runOnceForEachItem"
       },
       "id": "restore-payload",
       "name": "Restore Payload",
