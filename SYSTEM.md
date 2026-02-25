@@ -171,6 +171,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `rules` | Lifecycle rule predicates + actions (SQL-driven) |
 | `campaign_routing` | Lifecycle segment → Instantly campaign mapping |
 | `campaign_queue` | Pending campaign moves |
+| `campaign_push_log` | Audit log of every Instantly lead-push attempt from n8n — `queue_id`, `email`, `to_campaign`, `success`, `status_code`, `error_message`, `response_body`, `created_at` (migration 060) |
 | `agent_playbook` | User-configured rules (synced from Airtable every 15 min) |
 | `sms_templates` | SMS A/B testing variants |
 | `team_content` | Ground notes, ad copies, Google Docs content |
@@ -234,7 +235,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `query.py` | `/api/query` | `POST /` (14 Tier-1 SQL + 1 Tier-2 Claude categories — includes `sms_performance`, `email_performance`, `activity_report`, `outcome_report` with date-range filtering), `GET /categories` |
 | `lifecycle.py` | `/api/lifecycle` | `POST /run` — SQL rule engine |
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |
-| `campaigns.py` | `/api/campaigns` | `GET /pending`, `GET /active-contacts` (all contacts with active campaign — for Instantly seed), `POST /bulk-executed` (batch mark), `POST /{id}/executed` |
+| `campaigns.py` | `/api/campaigns` | `GET /pending` (returns first/last name), `GET /active-contacts` (all contacts with active campaign — for Instantly seed), `POST /log-push` (record Instantly push result), `GET /push-log` (diagnostic — filter by success), `POST /bulk-executed` (batch mark), `POST /{id}/executed` |
 | `telnyx.py` | `/api/telnyx` | `POST /message`, `POST /call`, `POST /field-agent-message` |
 | `delivery.py` | `/api/delivery` | `POST /status` |
 | `playbook.py` | `/api/playbook` | `GET /rules`, `POST /rules`, `POST /sync-from-airtable` |
@@ -425,7 +426,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Reporting** | Daily Outcome Report | Daily 8:30 AM | `POST /api/agents/report/outcome` → Claude HTML + CSV → email |
 | **Claude** | Agent Orchestration | Daily 9:00 AM | `POST /api/agents/cycle/run-daily-sweep` — dormant contacts (cap 200, 72 h cooldown) |
 | **Claude** | Daily Intelligence Cycle | Daily 7:00 AM | `POST /api/intelligence/run-cycle` — full 5-phase cycle (24 h poll window) |
-| **Claude** | Lifecycle Cycle Runner | Daily 6:00 AM | `POST /api/lifecycle/run` — SQL rule engine; pending contacts pushed to Instantly via bulk `POST /api/campaigns/bulk-executed` (single DB call) |
+| **Claude** | Lifecycle Cycle Runner | Hourly | `POST /api/lifecycle/run` — SQL rule engine; for each pending campaign move: removes lead from old Instantly campaign, adds to new campaign, logs attempt to `campaign_push_log` via `POST /api/campaigns/log-push`; only marks `executed` on Instantly success — failures stay `pending` and retry next hour |
 | **Claude** | Lapsed Customer Daily | Daily (random offset) | Persistent re-engagement for lapsed customers |
 | **Claude** | Menu Sync Weekly | Weekly | Menu suggestion agent cycle |
 | **Claude** | Growth Agent Cycle | Every Monday 7:30 AM | Growth hacker 4-phase experiment loop: refresh baseline → measure → design+launch → email report |
