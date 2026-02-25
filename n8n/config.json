@@ -401,6 +401,19 @@
       "note": "4-phase proactive experiment loop: HYPOTHESIZE (generate ideas) \u2192 EXPERIMENT (select cohorts, queue SMS) \u2192 MEASURE (check 72h conversions) \u2192 HARVEST (proven experiments \u2192 discovered_signals). Creates new signals instead of relying only on existing ones."
     },
     "_group_system": "── System ────────────────────────────────────────────────",
+    "daily_test_suite": {
+      "id": "",
+      "name": "[System — Test] Daily E2E Test Suite",
+      "tags": [
+        "DabbahWala",
+        "System",
+        "Test"
+      ],
+      "schedule": "Daily at 5:00 AM ET",
+      "active": true,
+      "file": "system_test_suite.json",
+      "note": "Runs all 55+ end-to-end tests across 14 groups (connectivity, schema, agents, Telnyx SMS, Instantly email, Shipday, Airtable, orders, reports, chatbot). Creates test data with source='test_harness', cleans up after. Sends summary email to vivek@dabbahwala.com. Failure alerts include per-test details. Trigger: POST /api/test/run. Requires ADMIN_SECRET env var set in n8n."
+    },
     "action_queue_executor": {
       "id": "RzR3ZNYlty7cuTDY",
       "name": "[System — Action] Action Queue Executor",

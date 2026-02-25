@@ -1,0 +1,193 @@
+{
+  "name": "[System — Test] Daily E2E Test Suite",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 5 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily at 5 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 480]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{ json: { triggered_by: 'n8n_daily', ts: new Date().toISOString() } }];"
+      },
+      "id": "set-context",
+      "name": "Set Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run?triggered_by={{ $json.triggered_by }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Admin-Secret",
+              "value": "={{ $env.ADMIN_SECRET }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 900000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "run-test-suite",
+      "name": "Run Full E2E Test Suite",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json;\n\n// Extract summary\nconst summary = body.summary || {};\nconst failed = summary.failed || 0;\nconst passed = summary.passed || 0;\nconst skipped = summary.skipped || 0;\nconst total = summary.total || 0;\nconst duration = body.duration_seconds || 0;\nconst runId = body.run_id || 'unknown';\n\n// Collect failed tests for the email\nconst allTests = body.all_tests || [];\nconst failedTests = allTests.filter(t => t.status === 'fail');\n\n// Build HTML failure details\nlet failureRows = '';\nfor (const t of failedTests) {\n  failureRows += `<tr style=\"background:#fff0f0\">\n    <td style=\"padding:6px 12px;border:1px solid #fcc\">${t.group}</td>\n    <td style=\"padding:6px 12px;border:1px solid #fcc;font-weight:bold\">${t.test}</td>\n    <td style=\"padding:6px 12px;border:1px solid #fcc;color:#c00\">${t.message}</td>\n    <td style=\"padding:6px 12px;border:1px solid #fcc\">${t.duration_ms}ms</td>\n  </tr>`;\n}\n\n// Group summary rows\nconst groups = body.groups || [];\nlet groupRows = '';\nfor (const g of groups) {\n  const statusColor = g.failed > 0 ? '#c00' : '#080';\n  groupRows += `<tr>\n    <td style=\"padding:6px 12px;border:1px solid #ddd\">${g.name}</td>\n    <td style=\"padding:6px 12px;border:1px solid #ddd;color:#080\">${g.passed}</td>\n    <td style=\"padding:6px 12px;border:1px solid #ddd;color:${statusColor}\">${g.failed}</td>\n    <td style=\"padding:6px 12px;border:1px solid #ddd;color:#888\">${g.skipped || 0}</td>\n  </tr>`;\n}\n\nconst overallColor = failed === 0 ? '#080' : '#c00';\nconst overallStatus = failed === 0 ? '✅ ALL PASSING' : `❌ ${failed} FAILED`;\n\nconst htmlBody = `<!DOCTYPE html>\n<html>\n<head><style>\n  body { font-family: Arial, sans-serif; color: #333; max-width: 900px; margin: 0 auto; padding: 20px; }\n  h1 { color: ${overallColor}; }\n  h2 { color: #555; margin-top: 30px; }\n  table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }\n  th { background: #f5f5f5; padding: 8px 12px; border: 1px solid #ddd; text-align: left; }\n  .badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-weight: bold; }\n  .pass { background: #d4edda; color: #155724; }\n  .fail { background: #f8d7da; color: #721c24; }\n  .meta { color: #888; font-size: 0.9em; margin-bottom: 20px; }\n</style></head>\n<body>\n  <h1>DabbahWala E2E Test Suite — ${overallStatus}</h1>\n  <p class=\"meta\">\n    Run ID: ${runId}<br/>\n    Date: ${body.started_at || new Date().toISOString()}<br/>\n    Duration: ${duration}s\n  </p>\n\n  <h2>Summary</h2>\n  <table>\n    <tr><th>Total</th><th>Passed</th><th>Failed</th><th>Skipped</th></tr>\n    <tr>\n      <td style=\"padding:8px 12px;border:1px solid #ddd;font-size:1.2em;font-weight:bold\">${total}</td>\n      <td style=\"padding:8px 12px;border:1px solid #ddd;color:#080;font-size:1.2em;font-weight:bold\">${passed}</td>\n      <td style=\"padding:8px 12px;border:1px solid #ddd;color:${overallColor};font-size:1.2em;font-weight:bold\">${failed}</td>\n      <td style=\"padding:8px 12px;border:1px solid #ddd;color:#888;font-size:1.2em\">${skipped}</td>\n    </tr>\n  </table>\n\n  <h2>By Group</h2>\n  <table>\n    <tr><th>Group</th><th>Passed</th><th>Failed</th><th>Skipped</th></tr>\n    ${groupRows}\n  </table>\n\n  ${failedTests.length > 0 ? `\n  <h2 style=\"color:#c00\">Failed Tests (${failedTests.length})</h2>\n  <table>\n    <tr><th>Group</th><th>Test</th><th>Error</th><th>Duration</th></tr>\n    ${failureRows}\n  </table>` : '<p style=\"color:#080;font-size:1.1em\">✓ All tests passed — system healthy.</p>'}\n</body>\n</html>`;\n\nreturn [{\n  json: {\n    run_id: runId,\n    failed,\n    passed,\n    total,\n    duration,\n    overall_status: overallStatus,\n    has_failures: failed > 0,\n    html_body: htmlBody,\n    subject: `DabbahWala E2E Test Suite — ${overallStatus} (${passed}/${total} passed, ${duration}s)`,\n    to: 'vivek@dabbahwala.com',\n  }\n}];"
+      },
+      "id": "parse-results",
+      "name": "Parse Results & Build Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [880, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-failures",
+              "leftValue": "={{ $json.has_failures }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-failures",
+      "name": "Any Failures?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1100, 300]
+    },
+    {
+      "parameters": {
+        "fromEmail": "core@dabbahwala.com",
+        "toEmail": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "html": "={{ $json.html_body }}",
+        "options": {}
+      },
+      "id": "send-failure-email",
+      "name": "Send Failure Alert Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 220],
+      "credentials": {
+        "smtp": {
+          "id": "Sk6XzPNPnJTXHEbr",
+          "name": "Gmail-SMTP"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "core@dabbahwala.com",
+        "toEmail": "vivek@dabbahwala.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "html": "={{ $json.html_body }}",
+        "options": {}
+      },
+      "id": "send-success-email",
+      "name": "Send Success Summary Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [1340, 400],
+      "credentials": {
+        "smtp": {
+          "id": "Sk6XzPNPnJTXHEbr",
+          "name": "Gmail-SMTP"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily at 5 AM": {
+      "main": [
+        [{ "node": "Set Context", "type": "main", "index": 0 }]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [{ "node": "Set Context", "type": "main", "index": 0 }]
+      ]
+    },
+    "Set Context": {
+      "main": [
+        [{ "node": "Run Full E2E Test Suite", "type": "main", "index": 0 }]
+      ]
+    },
+    "Run Full E2E Test Suite": {
+      "main": [
+        [{ "node": "Parse Results & Build Email", "type": "main", "index": 0 }]
+      ]
+    },
+    "Parse Results & Build Email": {
+      "main": [
+        [{ "node": "Any Failures?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Any Failures?": {
+      "main": [
+        [{ "node": "Send Failure Alert Email", "type": "main", "index": 0 }],
+        [{ "node": "Send Success Summary Email", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "tags": [
+    { "name": "DabbahWala", "id": "dabbahwala" },
+    { "name": "System", "id": "system" },
+    { "name": "Test", "id": "test" }
+  ],
+  "pinData": {}
+}
