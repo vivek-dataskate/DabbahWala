@@ -1473,10 +1473,21 @@ def _handle_activity_report(date_from: str | None, date_to: str | None) -> tuple
 
 
 def _handle_outcome_report(date_from: str | None, date_to: str | None) -> tuple[str, dict]:
-    """Return marketing outcomes: lifecycle transitions and attributed orders."""
+    """Return marketing outcomes: lifecycle transitions, attributed orders, and winback stats."""
     with get_cursor(commit=False) as cur:
+        # ── Date params reused across queries ──────────────────────────────
+        date_params: list = []
+        date_where_parts: list[str] = []
+        if date_from:
+            date_where_parts.append("%s")
+            date_params.append(date_from)
+        if date_to:
+            date_where_parts.append("%s::date + interval '1 day'")
+            date_params.append(date_to)
+
+        # ── Lifecycle transitions ──────────────────────────────────────────
+        trans_where = []
         trans_params: list = []
-        trans_where: list[str] = []
         if date_from:
             trans_where.append("decided_at >= %s")
             trans_params.append(date_from)
@@ -1496,7 +1507,7 @@ def _handle_outcome_report(date_from: str | None, date_to: str | None) -> tuple[
         )
         transitions = [dict(r) for r in cur.fetchall()]
 
-        # Orders in period + marketing-attributed orders
+        # ── Orders in period + marketing-attributed orders ─────────────────
         ord_params: list = []
         ord_where = ["e_order.event_type = 'order_placed'"]
         if date_from:
@@ -1529,12 +1540,71 @@ def _handle_outcome_report(date_from: str | None, date_to: str | None) -> tuple[
         )
         attributed_orders = (cur.fetchone() or {}).get("attributed") or 0
 
+        # ── Winback: lapsed/reactivation_candidate → active_customer ──────
+        wb_params: list = []
+        wb_where = [
+            "prev_lifecycle IN ('lapsed_customer','reactivation_candidate')",
+            "new_lifecycle = 'active_customer'",
+        ]
+        if date_from:
+            wb_where.append("decided_at >= %s")
+            wb_params.append(date_from)
+        if date_to:
+            wb_where.append("decided_at <= %s::date + interval '1 day'")
+            wb_params.append(date_to)
+        wb_where_sql = "WHERE " + " AND ".join(wb_where)
+
+        cur.execute(
+            f"""
+            SELECT COUNT(DISTINCT contact_id) AS winback_count
+            FROM decision_log {wb_where_sql}
+            """,
+            wb_params,
+        )
+        winback_count = (cur.fetchone() or {}).get("winback_count") or 0
+
+        # Revenue from winback customers in the same period
+        rev_params: list = list(wb_params)  # same date filters for decided_at
+        ord_date_parts: list[str] = []
+        if date_from:
+            ord_date_parts.append("o.order_date >= %s")
+            rev_params.append(date_from)
+        if date_to:
+            ord_date_parts.append("o.order_date <= %s::date + interval '1 day'")
+            rev_params.append(date_to)
+        ord_date_sql = ("AND " + " AND ".join(ord_date_parts)) if ord_date_parts else ""
+
+        cur.execute(
+            f"""
+            SELECT COALESCE(SUM(o.total_amount), 0) AS winback_revenue
+            FROM orders o
+            WHERE o.contact_id IN (
+                SELECT DISTINCT contact_id
+                FROM decision_log {wb_where_sql}
+            )
+            {ord_date_sql}
+            """,
+            rev_params,
+        )
+        winback_revenue = float((cur.fetchone() or {}).get("winback_revenue") or 0)
+
+        # ── Current pipeline snapshot ──────────────────────────────────────
         cur.execute(
             "SELECT lifecycle_segment::text, COUNT(*) AS count FROM contacts GROUP BY lifecycle_segment ORDER BY count DESC"
         )
         pipeline = [dict(r) for r in cur.fetchall()]
 
     lines = ["**Outcome Report**", ""]
+
+    # Winback section
+    lines.append(f"Customers brought back: **{winback_count}**")
+    if winback_count:
+        lines.append(f"Revenue from winbacks: **${winback_revenue:,.2f}**")
+        if winback_count > 0:
+            avg = winback_revenue / winback_count
+            lines.append(f"Avg order value (winbacks): **${avg:,.2f}**")
+
+    lines.append("")
     lines.append(f"Orders in period: **{total_orders}** | Marketing-attributed: **{attributed_orders}**")
     if total_orders:
         pct = f"{(attributed_orders / total_orders * 100):.1f}%"
@@ -1557,6 +1627,8 @@ def _handle_outcome_report(date_from: str | None, date_to: str | None) -> tuple[
         "pipeline": pipeline,
         "attributed_orders": int(attributed_orders),
         "total_orders": int(total_orders),
+        "winback_count": int(winback_count),
+        "winback_revenue": winback_revenue,
     }
 
 
