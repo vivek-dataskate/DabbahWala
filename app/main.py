@@ -6,7 +6,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, campaigns, broadcasts, chatbot, contacts, daily_orders, delivery, events, field_agent, intelligence, lifecycle, menu_scrape, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, sms, team_content, telnyx, webhooks
+from app.routers import agents, agent, airtable_menu, campaigns, broadcasts, chatbot, contacts, daily_orders, delivery, events, field_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, sms, team_content, telnyx, webhooks
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
@@ -136,58 +136,6 @@ async def startup_run_migrations():
     )
 
 
-@app.on_event("startup")
-async def startup_install_playwright():
-    """
-    Ensure Playwright Chromium headless shell is present at runtime.
-
-    The build script installs browsers to PLAYWRIGHT_BROWSERS_PATH during the
-    Render build phase.  However, if playwright was just updated (its browser
-    path format changed from chromium-XXXX to chromium_headless_shell-XXXX) or
-    if Render served a cached build, the browser may be absent.  This guard
-    re-runs the install when the binary is missing so the first scrape request
-    doesn't fail with a cryptic "Executable doesn't exist" error.
-    """
-    import glob as _glob
-    import subprocess
-
-    browsers_path = os.environ.get(
-        "PLAYWRIGHT_BROWSERS_PATH",
-        "/opt/render/project/src/.playwright-browsers",
-    )
-    # Ensure the env var is set for the current process so Playwright finds it
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = browsers_path
-
-    pattern = os.path.join(
-        browsers_path, "chromium_headless_shell-*", "chrome-linux", "headless_shell"
-    )
-    if _glob.glob(pattern):
-        logger.info("startup_install_playwright — Chromium headless shell present, skipping install")
-        return
-
-    logger.warning(
-        "startup_install_playwright — Chromium not found at %s, installing now…",
-        browsers_path,
-    )
-    try:
-        result = subprocess.run(
-            ["python", "-m", "playwright", "install", "chromium"],
-            env={**os.environ, "PLAYWRIGHT_BROWSERS_PATH": browsers_path},
-            capture_output=True,
-            text=True,
-            timeout=300,  # 5 min — generous for Render's bandwidth
-        )
-        if result.returncode == 0:
-            logger.info("startup_install_playwright — Chromium installed successfully")
-        else:
-            logger.error(
-                "startup_install_playwright — playwright install failed (rc=%d): %s",
-                result.returncode,
-                result.stderr[-2000:],
-            )
-    except Exception as exc:
-        logger.error("startup_install_playwright — unexpected error: %s", exc)
-
 
 @app.on_event("startup")
 async def startup_sync_chatbot_docs():
@@ -237,13 +185,21 @@ app.include_router(broadcasts.router, prefix="/api/broadcasts", tags=["broadcast
 app.include_router(prospects.router, prefix="/api/prospects", tags=["prospects"])
 app.include_router(contacts.router, prefix="/api/contacts", tags=["contacts"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
-app.include_router(menu_scrape.router, prefix="/api/menu-scrape", tags=["menu-scrape"])
+app.include_router(airtable_menu.router, prefix="/api/menu", tags=["menu"])
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def dashboard():
     """Interactive marketing intelligence dashboard."""
     html_path = os.path.join(os.path.dirname(__file__), "dashboard.html")
+    with open(html_path) as f:
+        return f.read()
+
+
+@app.get("/menu-dashboard", response_class=HTMLResponse)
+def menu_dashboard():
+    """Menu management dashboard — view, add, edit, and delete menu items."""
+    html_path = os.path.join(os.path.dirname(__file__), "menu_dashboard.html")
     with open(html_path) as f:
         return f.read()
 

@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DabbahWala — Menu Manager</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f5f6fa; color: #2d3436; }
+
+    header {
+      background: #1e272e;
+      color: #fff;
+      padding: 16px 28px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 1.2rem; font-weight: 600; letter-spacing: .5px; }
+    header .sub { font-size: .8rem; color: #b2bec3; margin-top: 2px; }
+
+    .toolbar {
+      padding: 16px 28px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .toolbar input, .toolbar select {
+      padding: 8px 12px; border: 1px solid #dfe6e9; border-radius: 6px;
+      font-size: .875rem; background: #fff;
+    }
+    .toolbar input { width: 220px; }
+
+    button {
+      padding: 8px 18px; border: none; border-radius: 6px;
+      font-size: .875rem; font-weight: 500; cursor: pointer;
+    }
+    .btn-primary  { background: #0984e3; color: #fff; }
+    .btn-primary:hover  { background: #0773c5; }
+    .btn-success  { background: #00b894; color: #fff; }
+    .btn-success:hover  { background: #00a381; }
+    .btn-danger   { background: #d63031; color: #fff; font-size: .8rem; padding: 5px 12px; }
+    .btn-danger:hover   { background: #b71c1c; }
+    .btn-edit     { background: #fdcb6e; color: #2d3436; font-size: .8rem; padding: 5px 12px; }
+    .btn-edit:hover     { background: #e9b84e; }
+    .btn-secondary { background: #636e72; color: #fff; }
+    .btn-secondary:hover { background: #4f5a5d; }
+    .btn-sm { padding: 5px 10px; font-size: .78rem; }
+
+    .status-bar {
+      margin: 0 28px 4px;
+      font-size: .8rem;
+      color: #636e72;
+    }
+    .status-bar.error { color: #d63031; }
+    .status-bar.ok    { color: #00b894; }
+
+    .table-wrap {
+      margin: 0 28px 28px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    thead { background: #f0f3f7; }
+    th { text-align: left; padding: 11px 14px; font-size: .78rem; text-transform: uppercase; letter-spacing: .4px; color: #636e72; }
+    td { padding: 10px 14px; font-size: .875rem; border-top: 1px solid #f0f3f7; vertical-align: middle; }
+    tr:hover td { background: #fafbfd; }
+
+    .badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: .75rem; font-weight: 600;
+    }
+    .badge-veg    { background: #d4edda; color: #155724; }
+    .badge-nonveg { background: #fde8e8; color: #7f1d1d; }
+    .badge-active { background: #d1ecf1; color: #0c5460; }
+    .badge-inactive { background: #f8f9fa; color: #6c757d; }
+
+    .actions-cell { display: flex; gap: 6px; }
+
+    /* Modal */
+    .overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    .overlay.show { display: flex; }
+    .modal {
+      background: #fff; border-radius: 12px;
+      width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+      padding: 28px;
+      box-shadow: 0 8px 30px rgba(0,0,0,.2);
+    }
+    .modal h2 { font-size: 1.1rem; margin-bottom: 20px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .form-grid .full { grid-column: 1 / -1; }
+    label { display: block; font-size: .8rem; font-weight: 500; margin-bottom: 4px; color: #636e72; }
+    input[type=text], input[type=number], input[type=date], textarea, select {
+      width: 100%; padding: 9px 11px; border: 1px solid #dfe6e9;
+      border-radius: 6px; font-size: .875rem;
+    }
+    textarea { resize: vertical; min-height: 70px; }
+    .checkbox-row { display: flex; align-items: center; gap: 8px; font-size: .875rem; }
+    .checkbox-row input { width: auto; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 10px; margin-top: 22px; }
+
+    .loading { opacity: .5; pointer-events: none; }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; vertical-align: middle; margin-right: 6px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state { text-align: center; padding: 48px; color: #b2bec3; font-size: .95rem; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>DabbahWala — Menu Manager</h1>
+    <div class="sub">Airtable ↔ PostgreSQL sync</div>
+  </div>
+  <div style="display:flex;gap:10px;">
+    <button class="btn-success" onclick="syncFromAirtable()">⟳ Sync from Airtable</button>
+    <button class="btn-primary" onclick="openAdd()">+ Add Item</button>
+  </div>
+</header>
+
+<div class="toolbar">
+  <input id="search" type="text" placeholder="Search by name…" oninput="filterTable()" />
+  <select id="filterWeek" onchange="filterTable()">
+    <option value="">All weeks</option>
+  </select>
+  <select id="filterCategory" onchange="filterTable()">
+    <option value="">All categories</option>
+  </select>
+  <select id="filterVeg" onchange="filterTable()">
+    <option value="">Veg / Non-veg</option>
+    <option value="true">Veg only</option>
+    <option value="false">Non-veg only</option>
+  </select>
+  <select id="filterActive" onchange="filterTable()">
+    <option value="">All status</option>
+    <option value="true">Active</option>
+    <option value="false">Inactive</option>
+  </select>
+</div>
+
+<div id="statusBar" class="status-bar">&nbsp;</div>
+
+<div class="table-wrap">
+  <table id="menuTable">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Category</th>
+        <th>Week Start</th>
+        <th>Price</th>
+        <th>Type</th>
+        <th>Status</th>
+        <th>Airtable ID</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      <tr><td colspan="8" class="empty-state">Loading…</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h2 id="modalTitle">Add Menu Item</h2>
+    <div class="form-grid">
+      <div class="full">
+        <label>Item Name *</label>
+        <input type="text" id="fName" placeholder="e.g. Butter Chicken" />
+      </div>
+      <div>
+        <label>Category</label>
+        <select id="fCategory">
+          <option value="">— select —</option>
+          <option>Main</option>
+          <option>Side</option>
+          <option>Dessert</option>
+          <option>Beverage</option>
+          <option>Snack</option>
+          <option>Bread</option>
+          <option>Rice</option>
+          <option>Salad</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div>
+        <label>Week Start</label>
+        <input type="date" id="fWeekStart" />
+      </div>
+      <div>
+        <label>Price (₹)</label>
+        <input type="number" id="fPrice" min="0" step="0.01" placeholder="0.00" />
+      </div>
+      <div>
+        <label>Image URL</label>
+        <input type="text" id="fImageUrl" placeholder="https://…" />
+      </div>
+      <div class="full">
+        <label>Description</label>
+        <textarea id="fDescription" placeholder="Short description of the dish…"></textarea>
+      </div>
+      <div class="full">
+        <div class="checkbox-row">
+          <input type="checkbox" id="fIsVeg" />
+          <label for="fIsVeg" style="margin:0">Vegetarian</label>
+          &nbsp;&nbsp;
+          <input type="checkbox" id="fActive" checked />
+          <label for="fActive" style="margin:0">Active</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-secondary" onclick="closeModalDirect()">Cancel</button>
+      <button class="btn-primary" id="saveBtn" onclick="saveItem()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let allItems = [];
+let editingId = null;
+
+// ---------------------------------------------------------------------------
+// Fetch & render
+// ---------------------------------------------------------------------------
+async function loadItems() {
+  setStatus('Loading…', '');
+  try {
+    const res = await fetch('/api/menu/items');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    allItems = data.items || [];
+    populateFilters();
+    renderTable(allItems);
+    setStatus(`${allItems.length} item(s) loaded`, 'ok');
+  } catch (e) {
+    setStatus('Failed to load items: ' + e.message, 'error');
+  }
+}
+
+function renderTable(items) {
+  const tbody = document.getElementById('tableBody');
+  if (!items.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="empty-state">No items found</td></tr>';
+    return;
+  }
+  tbody.innerHTML = items.map(it => `
+    <tr data-id="${it.id}">
+      <td><strong>${esc(it.item_name)}</strong></td>
+      <td>${esc(it.category || '—')}</td>
+      <td>${esc(it.week_start || '—')}</td>
+      <td>${it.price != null ? '₹' + Number(it.price).toFixed(2) : '—'}</td>
+      <td><span class="badge ${it.is_veg ? 'badge-veg' : (it.is_veg === false ? 'badge-nonveg' : '')}">${it.is_veg === true ? 'Veg' : it.is_veg === false ? 'Non-veg' : '—'}</span></td>
+      <td><span class="badge ${it.active ? 'badge-active' : 'badge-inactive'}">${it.active ? 'Active' : 'Inactive'}</span></td>
+      <td style="font-size:.72rem;color:#636e72">${esc(it.airtable_record_id || '—')}</td>
+      <td><div class="actions-cell">
+        <button class="btn-edit btn-sm" onclick="openEdit(${it.id})">Edit</button>
+        <button class="btn-danger btn-sm" onclick="deleteItem(${it.id})">Delete</button>
+      </div></td>
+    </tr>
+  `).join('');
+}
+
+function populateFilters() {
+  const weeks = [...new Set(allItems.map(i => i.week_start).filter(Boolean))].sort().reverse();
+  const cats  = [...new Set(allItems.map(i => i.category).filter(Boolean))].sort();
+
+  const wSel = document.getElementById('filterWeek');
+  const existing = wSel.value;
+  wSel.innerHTML = '<option value="">All weeks</option>' + weeks.map(w => `<option value="${w}">${w}</option>`).join('');
+  if (existing) wSel.value = existing;
+
+  const cSel = document.getElementById('filterCategory');
+  const cExisting = cSel.value;
+  cSel.innerHTML = '<option value="">All categories</option>' + cats.map(c => `<option value="${c}">${c}</option>`).join('');
+  if (cExisting) cSel.value = cExisting;
+}
+
+function filterTable() {
+  const search  = document.getElementById('search').value.toLowerCase();
+  const week    = document.getElementById('filterWeek').value;
+  const cat     = document.getElementById('filterCategory').value;
+  const veg     = document.getElementById('filterVeg').value;
+  const active  = document.getElementById('filterActive').value;
+
+  const filtered = allItems.filter(it => {
+    if (search && !it.item_name.toLowerCase().includes(search)) return false;
+    if (week   && it.week_start !== week) return false;
+    if (cat    && it.category !== cat) return false;
+    if (veg    !== '' && String(it.is_veg) !== veg) return false;
+    if (active !== '' && String(it.active) !== active) return false;
+    return true;
+  });
+  renderTable(filtered);
+}
+
+// ---------------------------------------------------------------------------
+// Sync
+// ---------------------------------------------------------------------------
+async function syncFromAirtable() {
+  setStatus('Syncing from Airtable…', '');
+  try {
+    const res = await fetch('/api/menu/sync', { method: 'POST' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    setStatus(`Sync complete — ${data.upserted} upserted, ${data.errors} errors`, data.errors ? 'error' : 'ok');
+    await loadItems();
+  } catch (e) {
+    setStatus('Sync failed: ' + e.message, 'error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Modal
+// ---------------------------------------------------------------------------
+function openAdd() {
+  editingId = null;
+  document.getElementById('modalTitle').textContent = 'Add Menu Item';
+  clearForm();
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+function openEdit(id) {
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+  editingId = id;
+  document.getElementById('modalTitle').textContent = 'Edit Menu Item';
+  document.getElementById('fName').value       = item.item_name || '';
+  document.getElementById('fCategory').value   = item.category || '';
+  document.getElementById('fWeekStart').value  = item.week_start || '';
+  document.getElementById('fPrice').value      = item.price != null ? item.price : '';
+  document.getElementById('fImageUrl').value   = item.image_url || '';
+  document.getElementById('fDescription').value= item.description || '';
+  document.getElementById('fIsVeg').checked    = !!item.is_veg;
+  document.getElementById('fActive').checked   = item.active !== false;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+function clearForm() {
+  ['fName','fCategory','fWeekStart','fPrice','fImageUrl','fDescription'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('fIsVeg').checked  = false;
+  document.getElementById('fActive').checked = true;
+}
+
+function closeModal(event) {
+  if (event.target === document.getElementById('modalOverlay')) closeModalDirect();
+}
+function closeModalDirect() {
+  document.getElementById('modalOverlay').classList.remove('show');
+}
+
+// ---------------------------------------------------------------------------
+// Save
+// ---------------------------------------------------------------------------
+async function saveItem() {
+  const name = document.getElementById('fName').value.trim();
+  if (!name) { alert('Item name is required'); return; }
+
+  const payload = {
+    item_name:   name,
+    category:    document.getElementById('fCategory').value || null,
+    week_start:  document.getElementById('fWeekStart').value || null,
+    price:       document.getElementById('fPrice').value ? parseFloat(document.getElementById('fPrice').value) : null,
+    image_url:   document.getElementById('fImageUrl').value.trim() || null,
+    description: document.getElementById('fDescription').value.trim() || null,
+    is_veg:      document.getElementById('fIsVeg').checked,
+    active:      document.getElementById('fActive').checked,
+  };
+
+  const btn = document.getElementById('saveBtn');
+  btn.innerHTML = '<span class="spinner"></span>Saving…';
+  btn.disabled = true;
+
+  try {
+    const url    = editingId ? `/api/menu/items/${editingId}` : '/api/menu/items';
+    const method = editingId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    closeModalDirect();
+    setStatus(editingId ? 'Item updated' : 'Item created', 'ok');
+    await loadItems();
+  } catch (e) {
+    alert('Save failed: ' + e.message);
+  } finally {
+    btn.innerHTML = 'Save';
+    btn.disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Delete
+// ---------------------------------------------------------------------------
+async function deleteItem(id) {
+  const item = allItems.find(i => i.id === id);
+  if (!item) return;
+  if (!confirm(`Delete "${item.item_name}"? This also removes it from Airtable.`)) return;
+
+  setStatus('Deleting…', '');
+  try {
+    const res = await fetch(`/api/menu/items/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    setStatus('Item deleted', 'ok');
+    await loadItems();
+  } catch (e) {
+    setStatus('Delete failed: ' + e.message, 'error');
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function setStatus(msg, cls) {
+  const el = document.getElementById('statusBar');
+  el.textContent = msg;
+  el.className = 'status-bar' + (cls ? ' ' + cls : '');
+}
+
+function esc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Boot
+loadItems();
+</script>
+</body>
+</html>

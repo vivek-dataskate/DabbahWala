@@ -4,7 +4,7 @@ DabbahWala is an automated customer marketing system built on a **4-layer Claude
 
 ```
 Events  ──→  Agent Pipeline (4 layers)  ──→  Action Queue  ──→  n8n Executors  ──→  Telnyx / Airtable / Instantly
-Website ──→  Playwright Scraper (OTP via Telnyx)  ──→  weekly_menu_schedule table
+Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule table  ──→  /menu-dashboard
 ```
 
 ---
@@ -137,7 +137,7 @@ Workflows follow the `[ExternalApp — FlowType] Name` taxonomy. All credential 
 
 | Group | Workflow | Schedule | Purpose |
 |-------|----------|----------|---------|
-| **Website** | Weekly Menu Scrape | Every Monday 8 AM | Playwright navigates dabbahwala.com, SMS OTP via Telnyx `+18444322224`, scrapes menu into `weekly_menu_schedule`. Logs to Airtable + emails result. ID: `xJ7UT2IDUQJBiztS` |
+| **Airtable** | Menu Sync | Hourly | Pulls all records from Airtable "Weekly Menu" table, POSTs to `/api/menu/sync`, upserts into `weekly_menu_schedule`. ID: `baZV5ViA5lXNCTWR` |
 | **Shipday** | Delivery Collector | Every 30 min | Fetches orders from Shipday, POSTs to `/api/shipday/ingest-orders` |
 | **Shipday** | Feedback Sync | Hourly | Polls feedback, delivery instructions, proof-of-delivery |
 | **Shipday** | Historical Import | Manual only | One-shot backfill of up to 1 year of order history |
@@ -176,7 +176,7 @@ Workflows follow the `[ExternalApp — FlowType] Name` taxonomy. All credential 
 | `order_items` | Line items (menu_item_id, quantity, unit_price) |
 | `menu_items` | Master menu catalog (item_name, category, is_veg, avg_price) |
 | `menu_item_aliases` | CSV dish name -> canonical menu item mapping |
-| `weekly_menu_schedule` | Weekly menu scraped from dabbahwala.com — keyed by `(week_start, item_name)` |
+| `weekly_menu_schedule` | Weekly menu items — Airtable-driven, keyed by `(week_start, item_name)`, includes `airtable_record_id`, `active`, `price` |
 | `telnyx_messages` | SMS tracking (direction, body, status, source, agent_name) |
 | `telnyx_calls` | Call tracking (duration, transcript, summary) |
 | `delivery_status` | Delivery updates (status, notes, location, updated_by) |
@@ -244,7 +244,7 @@ All routes served by the FastAPI app on Render.
 | `team_content.py` | `/api/team-content` | `POST /sync`, `POST /submit`, `GET /browse`, `POST /search` |
 | `reports.py` | `/api/reports` | `GET /daily/{date}`, `POST /daily/{date}` |
 | `events.py` | `/api/events` | `POST /ingest` |
-| `menu_scrape.py` | `/api/menu-scrape` | `POST /run` (Playwright + Telnyx OTP), `GET /current`, `GET /week/{date}` |
+| `airtable_menu.py` | `/api/menu` | `GET /items`, `POST /items`, `PUT /items/{id}`, `DELETE /items/{id}`, `POST /sync` (Airtable → Postgres) |
 
 ---
 
@@ -336,11 +336,6 @@ All routes served by the FastAPI app on Render.
 
 **Model:** All agent calls use `claude-sonnet-4-5-20250929`.
 
-### Build & Runtime — Playwright
+### Build & Runtime
 
-`scripts/render_build.sh` installs the Playwright Chromium headless shell at build time into `/opt/render/project/src/.playwright-browsers` (project-relative, persisted to the runtime container).  The script now uses `set -euo pipefail` so any install failure aborts the deploy visibly.  The browser install is split into two steps:
-
-1. `python -m playwright install-deps chromium` — system-level apt packages
-2. `python -m playwright install chromium` — browser binary
-
-As a self-healing fallback, the `startup_install_playwright` FastAPI startup event checks for the `chromium_headless_shell-*` binary at startup and re-runs the install if it is absent (e.g. after a playwright version bump that changes the browser path format).  On healthy deploys this check completes in milliseconds.
+`scripts/render_build.sh` installs Python dependencies, runs all pending migrations from `migrations/`, then runs the test suite.  Uses `set -euo pipefail` — any failure aborts the deploy.  Playwright is **not** used; no browser install step.
