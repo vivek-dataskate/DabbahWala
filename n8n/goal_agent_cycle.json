@@ -1,0 +1,97 @@
+{
+  "name": "[Claude — Inference] Goal-Oriented Agent Cycle",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily at 9 AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/goal-agent/run",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "run-goal-agent",
+      "name": "Run Goal Agent Full Cycle",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        320,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log the result summary\nconst result = $('Run Goal Agent Full Cycle').first().json;\nreturn [{\n  json: {\n    timestamp: result.timestamp,\n    phase: result.phase,\n    experiments_created: result.experiments_created,\n    experiments_started: result.experiments_started,\n    contacts_enrolled: result.contacts_enrolled,\n    experiments_concluded: result.experiments_concluded,\n    signals_discovered: result.signals_discovered,\n    orders_attributed: result.orders_attributed,\n    summary: `Goal Agent: +${result.experiments_created} new experiments, ${result.contacts_enrolled} contacts enrolled, ${result.experiments_concluded} concluded, ${result.signals_discovered} signals discovered`\n  }\n}];"
+      },
+      "id": "log-result",
+      "name": "Log Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Daily at 9 AM": {
+      "main": [
+        [
+          {
+            "node": "Run Goal Agent Full Cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Goal Agent Full Cycle": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Claude",
+      "id": "tag-claude"
+    },
+    {
+      "name": "Inference",
+      "id": "tag-inference"
+    }
+  ],
+  "pinData": {}
+}

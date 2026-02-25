@@ -360,7 +360,20 @@
       "file": "airtable_menu_sync.json",
       "note": "Pulls all records from Airtable 'Weekly Menu' table and POSTs to POST /api/menu/sync to upsert into weekly_menu_schedule in Postgres."
     },
-    "_group_system": "── System ────────────────────────────────────────────────",
+    "goal_agent_cycle": {
+      "id": "",
+      "name": "[Claude \u2014 Inference] Goal-Oriented Agent Cycle",
+      "tags": [
+        "DabbahWala",
+        "Claude",
+        "Inference"
+      ],
+      "schedule": "Daily at 9 AM",
+      "active": true,
+      "file": "goal_agent_cycle.json",
+      "note": "4-phase proactive experiment loop: HYPOTHESIZE (generate ideas) \u2192 EXPERIMENT (select cohorts, queue SMS) \u2192 MEASURE (check 72h conversions) \u2192 HARVEST (proven experiments \u2192 discovered_signals). Creates new signals instead of relying only on existing ones."
+    },
+    "_group_system": "\u2500\u2500 System \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
     "action_queue_executor": {
       "id": "RzR3ZNYlty7cuTDY",
       "name": "[System — Action] Action Queue Executor",
