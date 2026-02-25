@@ -6,7 +6,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, airtable_menu, auth, campaigns, broadcasts, chatbot, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, menu_sync, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, test_harness, webhooks
+from app.routers import agents, agent, airtable_menu, auth, campaigns, broadcasts, chatbot, competitor_agent, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, menu_sync, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, test_harness, webhooks
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
@@ -172,6 +172,7 @@ app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opportunities"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(goal_agent.router, prefix="/api/goal-agent", tags=["goal-agent"])
+app.include_router(competitor_agent.router, prefix="/api/competitor-agent", tags=["competitor-agent"])
 app.include_router(shipday_historical.router, prefix="/api/shipday", tags=["shipday"])
 app.include_router(shipday_sync.router,       prefix="/api/shipday", tags=["shipday"])
 app.include_router(daily_orders.router, prefix="/api/daily-orders", tags=["daily-orders"])
