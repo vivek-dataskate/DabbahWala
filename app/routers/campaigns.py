@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class BulkExecutedRequest(BaseModel):
+    queue_ids: list[int]
+
+
 @router.get("/pending", response_model=list[CampaignMove])
 def get_pending_campaigns():
     with get_cursor(commit=False) as cur:
@@ -193,10 +197,6 @@ def _load_campaign_json(campaign_name: str) -> tuple[dict, dict]:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Template file missing for {campaign_name}")
     return meta, json.loads(path.read_text())
-
-
-class BulkExecutedRequest(BaseModel):
-    queue_ids: list[int]
 
 
 class TemplateUpdate(BaseModel):
