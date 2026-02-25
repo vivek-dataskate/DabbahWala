@@ -42,7 +42,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "timeout": 60000
+        }
       },
       "id": "poll-instantly",
       "name": "Poll Instantly Events",
@@ -57,7 +59,8 @@
           "id": "instantly-api-key",
           "name": "Instantly API Key"
         }
-      }
+      },
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
