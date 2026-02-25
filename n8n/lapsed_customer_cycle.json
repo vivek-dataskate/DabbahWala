@@ -98,18 +98,11 @@
       ]
     },
     {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://hooks.slack.com/services/placeholder",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"Lapsed customer cycle complete!\\n- Processed: {{ $json.processed }}\\n- Actions: {{ JSON.stringify($json.action_summary) }}\\n- Errors: {{ ($json.errors || []).length }}\"\n}",
-        "options": {}
-      },
+      "parameters": {},
       "id": "notify-slack",
-      "name": "Notify Slack",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "Cycle Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
       "position": [
         1320,
         200

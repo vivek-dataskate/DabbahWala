@@ -56,6 +56,7 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. The marketing sys
 | File handling | python-multipart | CSV upload for daily orders |
 | MCP protocol | mcp (v1.3) | Claude Desktop tool integration |
 | Environment | python-dotenv | Configuration management |
+| Browser automation | playwright (v1.49) | Headless Chromium for weekly menu scraping from dabbahwala.com |
 
 ### Infrastructure
 
@@ -72,12 +73,13 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. The marketing sys
 | Service | Purpose |
 |---------|---------|
 | Anthropic Claude (Sonnet 4.5) | AI agent pipeline — inference, decision, orchestration, reporting |
-| Telnyx | SMS sending/receiving, voice call tracking, field agent message logging |
+| Telnyx | SMS sending/receiving, voice call tracking, field agent logging, OTP reading for menu scraper |
 | Instantly | Email campaign management — 5 lifecycle-mapped campaigns |
 | Airtable | CRM, field sales task queue, playbook rules, outcome tracking |
 | Shipday | Delivery tracking — order status, driver location, ETA |
 | Google Docs | Ground team notes, social media ad copies |
 | SMTP (Gmail/Outlook) | Daily report email delivery |
+| dabbahwala.com | Source for weekly menu data — scraped via Playwright with Telnyx OTP |
 
 ---
 
@@ -85,7 +87,7 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. The marketing sys
 
 ### Schema: `dabbahwala` (PostgreSQL 16)
 
-33 migrations define the complete schema. Tables are organized into four groups.
+54 migrations define the complete schema. Tables are organized into four groups.
 
 ### 3.1 Core Tables
 
@@ -112,6 +114,12 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. The marketing sys
 
 **`menu_item_aliases`** — Alias resolution for CSV imports
 - `id`, `alias_name`, `menu_item_id` (FK)
+
+**`weekly_menu_schedule`** — Weekly menu from dabbahwala.com (migration 054)
+- `id`, `week_start` (DATE — Monday of delivery week), `item_name`
+- `category`, `is_veg`, `description`, `image_url`
+- `scraped_at`, `metadata` (JSONB)
+- Unique constraint: `(week_start, item_name)`
 
 ### 3.2 Communication Tables
 
@@ -241,6 +249,7 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. The marketing sys
 | Team Content | `/api/team-content` | `routers/team_content.py` | ~200 |
 | Reports | `/api/reports` | `routers/reports.py` | ~80 |
 | Events | `/api/events` | `routers/events.py` | ~100 |
+| Menu Scrape | `/api/menu-scrape` | `routers/menu_scrape.py` | ~80 |
 
 ### 4.2 Admin Endpoints
 
@@ -375,7 +384,7 @@ The agent playbook (`agent_playbook` table, synced from Airtable) injects user-c
 
 ## 7. n8n Workflow Automation
 
-### 7.1 Workflow Inventory (15 total)
+### 7.1 Workflow Inventory (23 total)
 
 All workflows connect to the FastAPI backend at `https://dabbahwala-latest.onrender.com`.
 
@@ -383,6 +392,7 @@ All workflows connect to the FastAPI backend at `https://dabbahwala-latest.onren
 
 | Workflow | Schedule | What It Does |
 |----------|----------|-------------|
+| **Weekly Menu Scrape** | Every Monday 8 AM | Playwright (headless Chromium) navigates `dabbahwala.com/subscription-plan-build-your-own-box`. Enters phone `+18444322224`, polls Telnyx V2 API for OTP, fills code, scrapes all menu items. Upserts to `weekly_menu_schedule`. On success: logs to Airtable + emails `core@dabbahwala.com`. On failure: sends alert email. n8n ID: `xJ7UT2IDUQJBiztS`. |
 | **Telnyx Inbound Collector** | Every 30 min | Polls Telnyx API for inbound SMS/calls. For each message: `POST /api/telnyx/message`. Triggers real-time agent cycle via `POST /api/agents/cycle/run-for-contact`. |
 | **Shipday Delivery Collector** | Every 30 min | Polls Shipday API for delivery status updates. Maps Shipday statuses to DabbahWala delivery events. `POST /api/delivery/status`. |
 | **Daily Order Upload** | Daily 1 PM EST (Mon-Sat) | Fetches daily order CSV. Uploads via `POST /api/daily-orders/process`. Triggers full agent cycle via `POST /api/agents/cycle/run-all`. |
@@ -421,7 +431,7 @@ All workflows connect to the FastAPI backend at `https://dabbahwala-latest.onren
 
 ### 7.2 Version Control
 
-13 of 15 workflows are version-controlled as JSON files in `n8n/`. The GitHub Action `.github/workflows/sync_n8n.yml` auto-syncs these files to the n8n instance on every push to `main`.
+All 23 workflows are version-controlled as JSON files in `n8n/`. The GitHub Action `.github/workflows/sync_n8n.yml` auto-syncs these files to the n8n instance on every push to `main`.
 
 ---
 
@@ -633,8 +643,9 @@ Triggered on push to `main` when `n8n/**.json` files change:
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| PostgreSQL schema | Done | 33 migrations, all deployed |
-| FastAPI application | Done | 15 routers, ~80+ endpoints |
+| PostgreSQL schema | Done | 54 migrations, all deployed |
+| FastAPI application | Done | 16 routers, ~80+ endpoints |
+| Weekly menu scraper | Done | Playwright + Telnyx OTP, `weekly_menu_schedule` table, n8n Monday cron, success/failure email alerts |
 | Contact management | Done | CRUD, lifecycle tracking, phone/email matching |
 | Event ingestion | Done | All event types, stored procedures, audit trail |
 | Lifecycle rule engine | Done | SQL-based, hourly execution via n8n |
@@ -656,16 +667,17 @@ Triggered on push to `main` when `n8n/**.json` files change:
 
 ### Operational Metrics
 
-- **API endpoints:** ~80+
-- **Database tables:** 20+
+- **API endpoints:** ~85+
+- **Database tables:** 21+
 - **Stored functions:** 15+
-- **n8n workflows:** 15
+- **n8n workflows:** 23
 - **MCP tools:** 30+
 - **Claude agent calls per contact cycle:** 8 (3 inference + 4 decision + 1 orchestrator)
 - **Signal types detected:** 7
 - **Lifecycle segments:** 8
 - **Email campaigns:** 5
-- **Migration files:** 33
+- **Migration files:** 54
+- **Test files:** 2 (`test_shipday_sync.py`, `test_menu_scrape.py`)
 
 ---
 

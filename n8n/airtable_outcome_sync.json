@@ -81,7 +81,7 @@
               "rightValue": "",
               "operator": {
                 "type": "string",
-                "operation": "isNotEmpty"
+                "operation": "notEmpty"
               }
             }
           ],

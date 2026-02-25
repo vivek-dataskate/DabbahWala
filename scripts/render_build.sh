@@ -1,10 +1,20 @@
 #!/bin/bash
 # render_build.sh — Render build phase: install deps + run migrations
-set -uo pipefail
+set -euo pipefail
 
 echo "=== Installing Python dependencies ==="
 pip install --upgrade pip
 pip install -r requirements.txt
+
+echo ""
+echo "=== Installing Playwright Chromium browser ==="
+# Install into the project directory so it survives into the runtime container.
+# (~/.cache is build-only and does not carry over to the deployed instance.)
+export PLAYWRIGHT_BROWSERS_PATH=/opt/render/project/src/.playwright-browsers
+# Install system-level OS dependencies first (apt packages), then the browser
+# binary separately so any failure is clearly attributed to its step.
+python -m playwright install-deps chromium
+python -m playwright install chromium
 
 echo ""
 echo "=== Running database migrations ==="
@@ -96,3 +106,14 @@ if [ $FAILED -gt 0 ]; then
 fi
 
 echo "=== All migrations applied successfully ==="
+
+echo ""
+echo "=== Running test suite ==="
+# Run unit/integration tests. Tests are DB-mocked so they don't require a live DB.
+# Failures abort the deploy so broken code never reaches production.
+if python -m pytest tests/ -v --tb=short -q 2>&1; then
+    echo "=== All tests passed ==="
+else
+    echo "ERROR: Tests failed — aborting deploy"
+    exit 1
+fi

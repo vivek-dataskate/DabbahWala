@@ -110,36 +110,22 @@
       ]
     },
     {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://hooks.slack.com/services/placeholder",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"Daily orders processed!\\n- Date: {{ $json.date }}\\n- Orders: {{ $json.total_orders }}\\n- Revenue: ${{ $json.total_revenue }}\\n- New customers: {{ $json.new_contacts }}\\n- Opportunities: {{ $json.opportunities_created }}\"\n}",
-        "options": {}
-      },
+      "parameters": {},
       "id": "notify-success",
-      "name": "Notify Success",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "Upload Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
       "position": [
         1100,
         250
       ]
     },
     {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://hooks.slack.com/services/placeholder",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"Daily order upload had issues. Check logs.\"\n}",
-        "options": {}
-      },
+      "parameters": {},
       "id": "notify-failure",
-      "name": "Notify Failure",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "No Orders — Skip",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
       "position": [
         900,
         400

@@ -13,6 +13,7 @@ Python never calls Instantly — all external API calls go through n8n.
 """
 import json
 import logging
+import os
 from typing import Optional
 
 from fastapi import APIRouter, Request

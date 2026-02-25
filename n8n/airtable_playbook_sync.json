@@ -134,18 +134,11 @@
       ]
     },
     {
-      "parameters": {
-        "method": "POST",
-        "url": "=https://hooks.slack.com/services/placeholder",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"Playbook synced from Airtable!\\n- Synced: {{ $json.synced }}\\n- Created: {{ $json.created }}\\n- Updated: {{ $json.updated }}\\n- Deactivated: {{ $json.deactivated }}\"\n}",
-        "options": {}
-      },
+      "parameters": {},
       "id": "notify-success",
-      "name": "Notify Slack",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "name": "Sync Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
       "position": [
         1350,
         250

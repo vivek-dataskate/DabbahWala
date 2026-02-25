@@ -9,12 +9,13 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 | **Backend** | FastAPI (Python 3.11) on Render |
 | **Database** | PostgreSQL 16, `dabbahwala` schema, pgvector for semantic search |
 | **AI** | Claude Sonnet 4.5 — 4-layer agent pipeline (inference, decision, orchestrator, reporting) |
-| **Automation** | n8n (22 workflows, all active) on `digitalworker.dataskate.io` |
-| **SMS/Voice** | Telnyx — outbound SMS, inbound message/call ingestion, field agent logging |
+| **Automation** | n8n (23 workflows, all active) on `digitalworker.dataskate.io` |
+| **SMS/Voice** | Telnyx — outbound SMS, inbound message/call ingestion, OTP reading, field agent logging |
 | **Email** | Instantly — 5 lifecycle-mapped campaigns |
 | **CRM** | Airtable — field sales tasks, playbook rules, outcome tracking |
 | **Delivery** | Shipday — real-time delivery status polling |
 | **Content** | Google Docs — ground team notes, ad copies |
+| **Web Scraping** | Playwright (headless Chromium) — weekly menu scraping from dabbahwala.com |
 | **MCP** | Claude Desktop integration for ad-hoc marketing analysis |
 
 ## System Architecture
@@ -137,6 +138,13 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 | GET | `/api/team-content/browse` | Browse recent content |
 | POST | `/api/team-content/search` | Full-text search |
 
+### Weekly Menu Scrape (`/api/menu-scrape`)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/run` | Trigger Playwright scrape with Telnyx OTP — stores items in `weekly_menu_schedule` |
+| GET | `/current` | Return this week's scraped menu items |
+| GET | `/week/{YYYY-MM-DD}` | Return menu items for a specific week |
+
 ### Reports & Admin
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
@@ -147,7 +155,7 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 | POST | `/admin/query` | Read-only SQL (requires ADMIN_SECRET) |
 | POST | `/admin/exec` | Write SQL (requires ADMIN_SECRET) |
 
-## Database Schema (33 migrations)
+## Database Schema (54 migrations)
 
 | # | Migration | Purpose |
 |---|-----------|---------|
@@ -184,10 +192,17 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 | 031 | `instantly_campaign_routing_v2` | Final Instantly campaign UUIDs per lifecycle segment |
 | 032 | `agent_tables` | `inference_results`, `decision_recommendations`, `orchestrator_log`, `action_queue`, `customer_goals` |
 | 033 | `field_agent_sms` | `source` + `agent_name` columns on `telnyx_messages` |
+| 034–053 | *(various)* | Shipday historical, field agent reviews, broadcast jobs, chatbot RAG, chatbot doc meta, chatbot canned QA, orders delivery date, orders notes, Telnyx tracking view, team content types, Shipday communications, ground team evidence, active customer campaign, campaign routing fixes, engagement rollups 30d, Instantly campaigns & stats |
+| 054 | `weekly_menu_schedule` | Weekly menu items scraped from dabbahwala.com — keyed by `week_start` date |
 
-## n8n Workflows (22 active)
+## n8n Workflows (23 active)
 
 All workflows follow `[ExternalApp — FlowType] Name` taxonomy. Credential IDs are in `n8n/config.json`.
+
+**Implementation notes:**
+- **Telnyx from number:** Hardcoded as `+18444322224` in `broadcast_dispatch` / `sms_dispatch` / `weekly_menu_scrape` (n8n Variables not available on this instance)
+- **Slack nodes:** Replaced with NoOp placeholders in `airtable_playbook_sync`, `daily_order_upload`, `lapsed_customer_cycle` — not yet configured
+- **sms_dispatch** was recreated (old workflow ID missing); new ID is in `n8n/config.json`
 
 | Workflow | Schedule | Purpose |
 |----------|----------|---------|
@@ -214,6 +229,7 @@ All workflows follow `[ExternalApp — FlowType] Name` taxonomy. Credential IDs 
 | [Reporting] Daily Field Brief | Daily 7:30 AM | Generate field sales call list |
 | [Reporting] Daily Activity Report | Daily 8:00 AM | Claude-written HTML + CSV activity summary → Gmail |
 | [Reporting] Daily Outcome Report | Daily 8:30 AM | Claude-written HTML + CSV outcome summary → Gmail |
+| [Website] Weekly Menu Scrape | Every Monday 8 AM | Playwright scraper navigates dabbahwala.com, completes Telnyx SMS OTP, scrapes weekly menu into `weekly_menu_schedule` |
 
 ## Lifecycle Segments
 
@@ -275,6 +291,8 @@ One-click deploy via `render.yaml` blueprint. Auto-runs migrations on deploy.
 - **Database:** `dabbahwala-db` (PostgreSQL 16, Starter plan, Oregon)
 - **n8n:** Self-hosted at `digitalworker.dataskate.io`
 - **API URL:** `https://dabbahwala-latest.onrender.com`
+
+**Playwright on Render:** `scripts/render_build.sh` installs the Chromium headless shell into `/opt/render/project/src/.playwright-browsers` at build time (`install-deps` then `install`, with `set -euo pipefail` so failures abort the deploy).  A FastAPI startup event (`startup_install_playwright`) checks for the binary on every boot and self-heals by running `playwright install chromium` if it is missing — guarding against cached builds after a playwright version bump.
 
 ### Local Development
 

@@ -28,6 +28,8 @@ services:
         value: Field Sales Tasks
       - key: TELNYX_API_KEY
         sync: false
+      - key: PLAYWRIGHT_BROWSERS_PATH
+        value: /opt/render/project/src/.playwright-browsers
 
 databases:
   - name: dabbahwala-db

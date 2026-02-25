@@ -106,6 +106,7 @@
     },
     {
       "parameters": {
+        "operation": "get",
         "documentId": {
           "__rl": true,
           "value": "={{ $json.google_doc_id }}",
