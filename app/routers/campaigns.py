@@ -131,6 +131,50 @@ def get_active_contacts():
     return [dict(r) for r in rows]
 
 
+@router.get("/active-contacts-stats")
+def get_active_contacts_stats():
+    """Diagnostic: show how many contacts are excluded by each filter."""
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT
+                COUNT(*)                                                          AS total_contacts,
+                COUNT(*) FILTER (WHERE email IS NULL)                             AS no_email,
+                COUNT(*) FILTER (WHERE email LIKE '%%@app.placeholder.local')     AS placeholder_email,
+                COUNT(*) FILTER (WHERE lifecycle_segment = 'optout')              AS optout,
+                COUNT(*) FILTER (WHERE current_campaign IS NULL
+                                   AND email IS NOT NULL
+                                   AND email NOT LIKE '%%@app.placeholder.local'
+                                   AND lifecycle_segment != 'optout')             AS no_campaign,
+                COUNT(*) FILTER (WHERE current_campaign = 'APP_TO_DIRECT'
+                                   AND email IS NOT NULL
+                                   AND email NOT LIKE '%%@app.placeholder.local'
+                                   AND lifecycle_segment != 'optout')             AS app_to_direct,
+                COUNT(*) FILTER (WHERE current_campaign IS NOT NULL
+                                   AND current_campaign != 'APP_TO_DIRECT'
+                                   AND email IS NOT NULL
+                                   AND email NOT LIKE '%%@app.placeholder.local'
+                                   AND lifecycle_segment != 'optout')             AS returned_by_api
+            FROM contacts
+        """)
+        row = dict(cur.fetchone())
+
+        # Campaign distribution for contacts that pass all filters
+        cur.execute("""
+            SELECT current_campaign, COUNT(*) AS cnt
+            FROM contacts
+            WHERE current_campaign IS NOT NULL
+              AND current_campaign != 'APP_TO_DIRECT'
+              AND email IS NOT NULL
+              AND email NOT LIKE '%%@app.placeholder.local'
+              AND lifecycle_segment != 'optout'
+            GROUP BY current_campaign
+            ORDER BY cnt DESC
+        """)
+        campaign_dist = [dict(r) for r in cur.fetchall()]
+
+    return {**row, "campaign_distribution": campaign_dist}
+
+
 @router.post("/{queue_id}/executed")
 def mark_executed(queue_id: int):
     with get_cursor() as cur:
