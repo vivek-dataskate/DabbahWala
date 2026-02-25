@@ -51,7 +51,7 @@ TEST_FIRST_NAME     = "DWTest"
 TEST_LAST_NAME      = "Harness"
 TEST_ORDER_REF      = "TH-ORDER-TEST-001"
 
-LOCAL_BASE          = f"http://localhost:{os.getenv('API_PORT', '8000')}"
+LOCAL_BASE          = f"http://localhost:{os.getenv('PORT', os.getenv('API_PORT', '8000'))}"
 TELNYX_BASE         = "https://api.telnyx.com/v2"
 INSTANTLY_BASE      = "https://api.instantly.ai/api/v2"
 AIRTABLE_BASE       = "https://api.airtable.com/v0"
@@ -773,7 +773,7 @@ def _g7_intelligence(suite: TestSuite) -> None:
         with get_cursor(commit=False) as cur:
             cur.execute("""
                 SELECT COUNT(*) AS cnt FROM decision_log
-                WHERE created_at > NOW() - INTERVAL '24 hours'
+                WHERE decided_at > NOW() - INTERVAL '24 hours'
             """)
             row = cur.fetchone()
         cnt = row["cnt"] if row else 0
@@ -942,33 +942,34 @@ def _g9_airtable(suite: TestSuite) -> None:
         return {"status": sc}
     _run(suite, "airtable_playbook_sync", G, playbook_sync)
 
-    _airtable_task_id: list = []   # closure cell
-
     def field_task_create():
+        if not suite.test_contact_id:
+            raise AssertionError("No test contact — skipping airtable task enqueue test")
         from app.services.airtable_sync import create_field_sales_task
-        task_id = create_field_sales_task(
-            contact_name=f"{TEST_FIRST_NAME} {TEST_LAST_NAME}",
-            phone=TEST_PHONE,
-            reason="[TEST HARNESS] automated validation task",
-            priority="low",
-            notes="Created by test harness — will be deleted automatically",
-        )
-        assert task_id, "create_field_sales_task returned no ID"
-        _airtable_task_id.append(task_id)
-        return {"airtable_record_id": task_id}
-    _run(suite, "airtable_field_task_lifecycle", G, field_task_create)
-
-    if _airtable_task_id:
-        def field_task_delete():
-            tid = _airtable_task_id[0]
-            sc, body = _req(
-                "DELETE",
-                f"{AIRTABLE_BASE}/{AIRTABLE_BASE_ID}/Field%20Sales%20Tasks/{tid}",
-                headers=_airtable_headers(),
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS cnt FROM action_queue WHERE action_type = 'sync_airtable_task' AND contact_id = %s",
+                (suite.test_contact_id,),
             )
-            assert sc in (200, 204), f"Airtable delete returned {sc}: {str(body)[:300]}"
-            return {"deleted_record_id": tid}
-        _run(suite, "airtable_field_task_delete", G, field_task_delete)
+            before = (cur.fetchone() or {}).get("cnt", 0)
+        create_field_sales_task({
+            "id": suite.test_contact_id,
+            "first_name": TEST_FIRST_NAME,
+            "last_name": TEST_LAST_NAME,
+            "phone": TEST_PHONE,
+            "email": TEST_EMAIL,
+            "priority": "low",
+            "reason": "[TEST HARNESS] automated validation task",
+        })
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS cnt FROM action_queue WHERE action_type = 'sync_airtable_task' AND contact_id = %s",
+                (suite.test_contact_id,),
+            )
+            after = (cur.fetchone() or {}).get("cnt", 0)
+        assert after > before, f"No sync_airtable_task entry created in action_queue (before={before}, after={after})"
+        return {"action_queue_entries": after}
+    _run(suite, "airtable_field_task_lifecycle", G, field_task_create)
 
 
 # ─── GROUP 10: Action Queue ───────────────────────────────────────────────────
