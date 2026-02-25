@@ -115,6 +115,17 @@
         1100,
         420
       ]
+    },
+    {
+      "id": "72d103d8-1bcd-492d-b667-b08547292228",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -163,6 +174,17 @@
         [
           {
             "node": "No New Feedback — Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Sync Shipday Feedback",
             "type": "main",
             "index": 0
           }

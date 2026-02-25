@@ -132,7 +132,6 @@
       "note": "Polls action_queue for send_sms actions and dispatches via Telnyx API"
     },
     "broadcast_dispatch": {
-      "id": "oDEse7EvWHj6UVM4",
       "name": "[Telnyx — Action] Broadcast Dispatch",
       "tags": [
         "DabbahWala",
@@ -141,10 +140,10 @@
       ],
       "schedule": "Every 5 minutes",
       "file": "broadcast_dispatch.json",
-      "note": "Polls broadcast_recipients table and dispatches SMS (Telnyx) + email (SMTP)"
+      "note": "Polls broadcast_recipients table and dispatches SMS (Telnyx) + email (SMTP)",
+      "id": "oDEse7EvWHj6UVM4"
     },
     "broadcast_form": {
-      "id": "mUptDrymXZrtlrp8",
       "name": "[Telnyx — Form] Broadcast Form",
       "tags": [
         "DabbahWala",
@@ -153,7 +152,8 @@
       ],
       "schedule": "On form submission",
       "file": "broadcast_form.json",
-      "note": "n8n form UI for delay alerts and promo broadcasts. Calls Python API to create and queue the job."
+      "note": "n8n form UI for delay alerts and promo broadcasts. Calls Python API to create and queue the job.",
+      "id": "mUptDrymXZrtlrp8"
     },
     "_group_airtable": "── Airtable ──────────────────────────────────────────────",
     "airtable_playbook_sync": {
@@ -287,7 +287,6 @@
       "note": "Calls POST /api/agents/report/outcome → Claude writes HTML + CSV → n8n emails to REPORT_EMAIL_TO"
     },
     "daily_field_brief": {
-      "id": "kOI33cFH4bM8OCaf",
       "name": "[Reporting — Inference] Daily Field Brief",
       "tags": [
         "DabbahWala",
@@ -295,7 +294,8 @@
         "Inference"
       ],
       "schedule": "Daily at 7:30 AM",
-      "file": "daily_field_brief.json"
+      "file": "daily_field_brief.json",
+      "id": "kOI33cFH4bM8OCaf"
     },
     "_group_claude": "── Claude (AI Intelligence) ──────────────────────────────",
     "agent_orchestration_cron": {
@@ -335,7 +335,6 @@
       "note": "Calls POST /api/lifecycle/run — pure rules-based lifecycle routing, no Claude call"
     },
     "lapsed_customer_cycle": {
-      "id": "S3jSnWb3UTv9HmJL",
       "name": "[Claude — Decision] Lapsed Customer Daily Cycle",
       "tags": [
         "DabbahWala",
@@ -345,7 +344,8 @@
       "schedule": "Daily with random 0–8 hour offset",
       "active": true,
       "file": "lapsed_customer_cycle.json",
-      "note": "Persistent re-engagement cycle for lapsed customers. Infinite rotation with frequency escalation and creative copy variation."
+      "note": "Persistent re-engagement cycle for lapsed customers. Infinite rotation with frequency escalation and creative copy variation.",
+      "id": "S3jSnWb3UTv9HmJL"
     },
     "airtable_menu_sync": {
       "id": "baZV5ViA5lXNCTWR",
@@ -387,7 +387,6 @@
       "note": "Central action hub. Routes pending action_queue rows to external APIs: Airtable (sync_airtable_task, log_query_to_airtable), Instantly (push_instantly_lead, push_instantly_sequences), Google Drive (upload_google_drive), SMTP (send_email_report), Telnyx (send_sms)"
     },
     "chatbot_docs_reindex": {
-      "id": "7mn3Ys0xMmZnZQIC",
       "name": "[System — Maintenance] Chatbot Docs Reindex",
       "tags": [
         "DabbahWala",
@@ -395,7 +394,8 @@
         "Maintenance"
       ],
       "schedule": "Every Monday at 2 AM",
-      "file": "chatbot_docs_reindex.json"
+      "file": "chatbot_docs_reindex.json",
+      "id": "7mn3Ys0xMmZnZQIC"
     }
   },
   "google_docs": {

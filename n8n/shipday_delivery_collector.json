@@ -67,7 +67,7 @@
       ],
       "credentials": {
         "httpHeaderAuth": {
-          "id": "shipday-api-key",
+          "id": "hJjykZwBrqI2htyQ",
           "name": "Shipday API Key"
         }
       },
@@ -255,6 +255,17 @@
         2000,
         380
       ]
+    },
+    {
+      "id": "072a85c3-fc65-44a3-9e9e-b0c1ad7daf23",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -365,6 +376,17 @@
         [
           {
             "node": "Status Update Logged",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Time Window",
             "type": "main",
             "index": 0
           }

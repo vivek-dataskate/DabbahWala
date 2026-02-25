@@ -246,6 +246,17 @@
         880,
         400
       ]
+    },
+    {
+      "id": "95fcb152-5c15-4972-bd91-85d0859edcc0",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -301,9 +312,23 @@
       ]
     },
     "Route by Channel": {
-      "main": [
-        [{"node": "Send SMS via Telnyx", "type": "main", "index": 0}],
-        [{"node": "Send Email via Server SMTP", "type": "main", "index": 0}]
+      "sms": [
+        [
+          {
+            "node": "Send SMS via Telnyx",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ],
+      "email": [
+        [
+          {
+            "node": "Send Email via Server SMTP",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Send SMS via Telnyx": {
@@ -333,6 +358,17 @@
         [
           {
             "node": "Store SMS in Telnyx Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Pending Recipients",
             "type": "main",
             "index": 0
           }

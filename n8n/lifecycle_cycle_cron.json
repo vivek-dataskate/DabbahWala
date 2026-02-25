@@ -136,7 +136,7 @@
       },
       "credentials": {
         "httpHeaderAuth": {
-          "id": "instantly-api-key",
+          "id": "FKw9At5AkLdEmHHi",
           "name": "Instantly API Key"
         }
       },
@@ -238,7 +238,7 @@
       },
       "credentials": {
         "httpHeaderAuth": {
-          "id": "instantly-api-key",
+          "id": "FKw9At5AkLdEmHHi",
           "name": "Instantly API Key"
         }
       },
@@ -276,6 +276,17 @@
         880,
         400
       ]
+    },
+    {
+      "id": "fef184ff-9310-403c-abcf-6d5684fa9d9e",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -408,6 +419,17 @@
         [
           {
             "node": "Mark Campaign Executed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run Lifecycle Cycle",
             "type": "main",
             "index": 0
           }

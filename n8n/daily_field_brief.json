@@ -95,6 +95,17 @@
         880,
         400
       ]
+    },
+    {
+      "id": "2166f58f-f54d-409b-8677-2592ba6c5985",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -132,6 +143,17 @@
         [
           {
             "node": "Log No Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily Call List",
             "type": "main",
             "index": 0
           }

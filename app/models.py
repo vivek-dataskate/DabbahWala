@@ -31,15 +31,6 @@ class CampaignMove(BaseModel):
     to_campaign: str
 
 
-# --- SMS queue ---
-class SmsPending(BaseModel):
-    contact_id: int
-    contact_email: Optional[str] = None
-    phone: str
-    sms_level: int
-    lifecycle: str
-
-
 # --- Telnyx message ---
 class TelnyxMessageIn(BaseModel):
     contact_email: Optional[str] = None   # resolved from contact_phone if absent

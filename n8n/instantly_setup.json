@@ -61,6 +61,17 @@
         880,
         300
       ]
+    },
+    {
+      "id": "dbc211e1-9650-4b19-8dd9-d74a28b2ffd3",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -91,6 +102,17 @@
         [
           {
             "node": "Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "POST /api/campaigns/setup-instantly",
             "type": "main",
             "index": 0
           }

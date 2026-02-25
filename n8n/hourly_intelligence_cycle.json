@@ -312,6 +312,17 @@
         1860,
         450
       ]
+    },
+    {
+      "id": "52fdc9f7-cca2-4080-8221-d78696921ff0",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -440,6 +451,17 @@
         [
           {
             "node": "Mark Call Dispatched",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Poll Instantly Events",
             "type": "main",
             "index": 0
           }

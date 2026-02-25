@@ -93,6 +93,17 @@
         880,
         400
       ]
+    },
+    {
+      "id": "cf7426be-892e-4f16-812d-8d0b94d62ee7",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
     }
   ],
   "connections": {
@@ -130,6 +141,17 @@
         [
           {
             "node": "No Eligible Contacts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run Full Agent Cycle",
             "type": "main",
             "index": 0
           }
