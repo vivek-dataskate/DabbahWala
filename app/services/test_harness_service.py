@@ -288,7 +288,7 @@ def _g1_connectivity(suite: TestSuite) -> None:
         sc, body = _req(
             "GET",
             f"{SHIPDAY_BASE}/orders?startDate=2026-01-01&endDate=2026-01-02",
-            headers={"Authorization": f"Bearer {key}"},
+            headers={"Authorization": f"Basic {key}"},
         )
         assert sc in (200, 201, 400), f"Shipday API returned {sc}: {str(body)[:200]}"
         return {"status": sc}
