@@ -49,7 +49,6 @@ async def startup_ensure_schema():
     from app.db import get_cursor
     try:
         with get_cursor(commit=True) as cur:
-            cur.execute("SET LOCAL search_path TO dabbahwala")
             cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_date DATE")
             cur.execute("UPDATE orders SET delivery_date = order_date WHERE delivery_date IS NULL")
             cur.execute("ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT")

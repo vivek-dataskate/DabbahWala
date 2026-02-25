@@ -73,6 +73,7 @@ def get_cursor(commit=True):
     conn = get_connection()
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute("SET LOCAL search_path TO dabbahwala")
         yield cur
         if commit:
             conn.commit()
