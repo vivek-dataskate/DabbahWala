@@ -196,6 +196,7 @@ Tests the query engine and RAG chatbot.
 | `query_tier1_pipeline_snapshot` | `POST /api/query` with `pipeline_snapshot` returns answer |
 | `query_tier1_customer_lookup` | `POST /api/query` with `customer_lookup` finds test contact |
 | `chatbot_ask` | `POST /api/chatbot/ask` returns Claude-generated answer |
+| `chatbot_long_answer_not_truncated` | Complex chatbot question returns >200 chars (verifies max_tokens=4096) |
 | `opportunities_detect` | `GET /api/opportunities/detect` returns 200 |
 
 ---

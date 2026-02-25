@@ -1240,6 +1240,20 @@ def _g13_query_chatbot(suite: TestSuite) -> None:
         return {"question": b.get("question"), "answer_preview": (b.get("answer", ""))[:100]}
     _run(suite, "chatbot_ask", G, chatbot_ask)
 
+    def chatbot_long_answer_not_truncated():
+        """Verify chatbot returns complete answers for complex questions (max_tokens=4096)."""
+        sc, body = _local("POST", "/api/chatbot/ask",
+                           json_body={"question": "Why is a 4-layer AI pipeline better than a single AI call?"},
+                           timeout=CLAUDE_TIMEOUT)
+        assert sc == 200, f"chatbot/ask returned {sc}: {str(body)[:400]}"
+        b = body if isinstance(body, dict) else {}
+        answer = b.get("answer", "")
+        assert answer, "No answer returned"
+        # A complete answer to this question should be reasonably detailed (>200 chars)
+        assert len(answer) > 200, f"Answer appears truncated (only {len(answer)} chars): {answer[:100]}"
+        return {"answer_length": len(answer), "truncated": False}
+    _run(suite, "chatbot_long_answer_not_truncated", G, chatbot_long_answer_not_truncated)
+
     def opportunities_detect():
         """Verify signal detection endpoints are functional."""
         sc, body = _local("GET", "/api/opportunities/detect")
