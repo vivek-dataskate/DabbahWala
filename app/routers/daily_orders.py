@@ -502,6 +502,7 @@ async def process_daily_orders(
                         ),
                     })
                     airtable_tasks.append({
+                        'id': contact_id,
                         'first_name': first_name, 'last_name': _last_name,
                         'phone': phone or '', 'email': _email,
                         'priority': 'Hot', 'action_type': 'winback_follow_up',
@@ -529,6 +530,7 @@ async def process_daily_orders(
                         ),
                     })
                     airtable_tasks.append({
+                        'id': contact_id,
                         'first_name': first_name, 'last_name': _last_name,
                         'phone': phone or '', 'email': _email,
                         'priority': 'Hot', 'action_type': 'direct_order_pitch',
@@ -556,6 +558,7 @@ async def process_daily_orders(
                         ),
                     })
                     airtable_tasks.append({
+                        'id': contact_id,
                         'first_name': first_name, 'last_name': _last_name,
                         'phone': phone or '', 'email': _email,
                         'priority': 'Warm', 'action_type': 'subscription_pitch',
@@ -575,6 +578,7 @@ async def process_daily_orders(
                         'reasoning_snippet': _reason,
                     })
                     airtable_tasks.append({
+                        'id': contact_id,
                         'first_name': first_name, 'last_name': _last_name,
                         'phone': phone or '', 'email': _email,
                         'priority': 'Warm', 'action_type': 'upsell',
@@ -594,6 +598,7 @@ async def process_daily_orders(
                         'reasoning_snippet': _reason,
                     })
                     airtable_tasks.append({
+                        'id': contact_id,
                         'first_name': first_name, 'last_name': _last_name,
                         'phone': phone or '', 'email': _email,
                         'priority': 'Cold', 'action_type': 'loyalty_nurture',
@@ -643,6 +648,7 @@ async def process_daily_orders(
                     ),
                 })
                 airtable_tasks.append({
+                    'id': contact_id,
                     'first_name': first_n, 'last_name': last_n,
                     'phone': phone or '', 'email': '',
                     'priority': 'Warm', 'action_type': 'welcome_and_subscribe',
