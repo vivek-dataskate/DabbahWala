@@ -8,6 +8,16 @@ After making any code changes:
 3. Always target `main` as the base branch for PRs
 5. Branch names must start with `claude/` and end with the session ID suffix
 
+### E2E Test Update (mandatory on every commit)
+
+**Every commit that adds or modifies a feature must also:**
+1. Add the corresponding test(s) in `app/services/test_harness_service.py` inside the appropriate `_gN_*` function
+2. Register those tests in `TESTS.md` under the correct group table
+
+Use the **Group Selection Guide** in `TESTS.md` to pick the right group. If no existing group fits, create a new `_gN_*` function, add its call to `run_full_suite()`, and add a new section to `TESTS.md`.
+
+This applies to **every** commit — including bug fixes, new endpoints, schema changes, n8n workflow additions, and integration changes.
+
 ### Pre-PR Doc Check (mandatory)
 
 Before opening any PR, review the branch diff (`git diff main...HEAD`) and update docs if affected:
@@ -22,6 +32,7 @@ Before opening any PR, review the branch diff (`git diff main...HEAD`) and updat
 | Feature added or changed end-to-end | `FEATURES.md` — add/update the feature section |
 | Next migration number used | `CLAUDE.md` § Database Migrations (increment the number) |
 | n8n workflow count changed | `CLAUDE.md` § n8n Workflow Status |
+| Any new/modified feature (always) | `TESTS.md` + `app/services/test_harness_service.py` |
 
 If nothing in those categories changed, docs are fine as-is — no update needed.
 Commit doc updates in the same branch before opening the PR.
