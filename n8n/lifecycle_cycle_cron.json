@@ -326,7 +326,7 @@
         2380,
         360
       ],
-      "continueOnFail": true
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
@@ -338,8 +338,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2580,
-        360
+        3160,
+        240
       ]
     },
     {
@@ -351,8 +351,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2780,
-        360
+        3360,
+        240
       ]
     },
     {
@@ -375,8 +375,8 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        2980,
-        360
+        3560,
+        240
       ]
     },
     {
@@ -400,6 +400,89 @@
         460
       ],
       "parameters": {}
+    },
+    {
+      "id": "check-push-result",
+      "name": "Check Push Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2580,
+        360
+      ],
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\nconst prepared = $('Prepare Instantly Payload').item.json;\n\n// n8n puts the HTTP error message in item.error.message when onError=continueRegularOutput\nconst hasError = !!(item.error || (item.statusCode && item.statusCode >= 400));\nconst statusCode = item.statusCode || (hasError ? null : 200);\nconst errorMessage = hasError\n  ? (item.error?.message || item.message || JSON.stringify(item))\n  : null;\n\nreturn {\n  json: {\n    queue_id:      prepared.queue_id,\n    email:         prepared.email,\n    to_campaign:   prepared.to_campaign,\n    success:       !hasError,\n    status_code:   statusCode,\n    error_message: errorMessage,\n    response_body: JSON.stringify(item).slice(0, 2000)\n  }\n};"
+      }
+    },
+    {
+      "id": "push-succeeded",
+      "name": "Push Succeeded?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        360
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "success-check",
+              "leftValue": "={{ $json.success }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "log-push-attempt",
+      "name": "Log Push Attempt",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2960,
+        240
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/campaigns/log-push",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"queue_id\":     {{ $json.queue_id }},\n  \"email\":        {{ JSON.stringify($json.email) }},\n  \"to_campaign\":  {{ JSON.stringify($json.to_campaign) }},\n  \"success\":      {{ $json.success }},\n  \"status_code\":  {{ $json.status_code !== null ? $json.status_code : 'null' }},\n  \"error_message\":{{ JSON.stringify($json.error_message) }},\n  \"response_body\":{{ JSON.stringify($json.response_body) }}\n}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "log-failed-push",
+      "name": "Log Failed Push",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2960,
+        480
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/campaigns/log-push",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"queue_id\":     {{ $json.queue_id }},\n  \"email\":        {{ JSON.stringify($json.email) }},\n  \"to_campaign\":  {{ JSON.stringify($json.to_campaign) }},\n  \"success\":      false,\n  \"status_code\":  {{ $json.status_code !== null ? $json.status_code : 'null' }},\n  \"error_message\":{{ JSON.stringify($json.error_message) }},\n  \"response_body\":{{ JSON.stringify($json.response_body) }}\n}",
+        "options": {}
+      },
+      "continueOnFail": true
     }
   ],
   "connections": {
@@ -549,7 +632,7 @@
       "main": [
         [
           {
-            "node": "Extract Executed Queue ID",
+            "node": "Check Push Result",
             "type": "main",
             "index": 0
           }
@@ -587,6 +670,51 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Check Push Result": {
+      "main": [
+        [
+          {
+            "node": "Push Succeeded?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push Succeeded?": {
+      "main": [
+        [
+          {
+            "node": "Log Push Attempt",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log Failed Push",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Push Attempt": {
+      "main": [
+        [
+          {
+            "node": "Extract Executed Queue ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Failed Push": {
+      "main": [
+        []
       ]
     }
   },
