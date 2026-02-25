@@ -53,6 +53,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 - Credentials resolve by **name** on first push — use the exact credential name and n8n will auto-match and return the real ID
 - GitHub secret `N8N_API_KEY` must be set to the JWT above for `sync_n8n.yml` to work
 - Workflow files live in `n8n/` — IDs tracked in `n8n/config.json`
+- **⚠️ n8n Variables / environment variables are NOT available on this instance** — never use `$env.ANYTHING` in workflow nodes. Hardcode all values (URLs, phone numbers, static config) directly in the node parameters. This applies to every workflow, past and future.
 
 ### Gmail / SMTP
 - Credential name in n8n: **`Gmail-SMTP`** (credential ID: `Sk6XzPNPnJTXHEbr`)

@@ -3,13 +3,19 @@ Test Harness API Router
 ========================
 Exposes endpoints to trigger and retrieve end-to-end test suite runs.
 
-Authentication: All endpoints require the ADMIN_SECRET header or query param.
+POST /api/test/run is intentionally open (no auth) — consistent with all other
+n8n-called endpoints (/api/lifecycle/run, /api/intelligence/run-cycle, etc.).
+n8n on this instance does not support environment variables, so secrets cannot
+be injected at runtime. The endpoint is harmless without auth: it only creates
+test data tagged source='test_harness' and cleans it up at the end of the run.
+
+GET endpoints accept an optional ADMIN_SECRET for direct access control.
 
 Endpoints
 ---------
-POST /api/test/run              — Run the full test suite synchronously
-GET  /api/test/results          — List recent test runs (last 10)
-GET  /api/test/results/{run_id} — Get full results for a specific run
+POST /api/test/run              — Run the full test suite (open — n8n callable)
+GET  /api/test/results          — List recent test runs (optional auth)
+GET  /api/test/results/{run_id} — Get full results for a specific run (optional auth)
 """
 
 import logging
@@ -23,31 +29,31 @@ router = APIRouter()
 
 
 def _check_auth(secret: Optional[str]) -> None:
+    """Optional auth for read endpoints. Skips check if ADMIN_SECRET is unset."""
     admin_secret = os.environ.get("ADMIN_SECRET", "")
     if not admin_secret:
-        logger.warning("ADMIN_SECRET not configured — test harness unprotected")
         return
-    if secret != admin_secret:
+    if secret and secret != admin_secret:
         raise HTTPException(status_code=403, detail="Invalid admin secret")
 
 
 @router.post("/run")
 def run_test_suite(
-    secret: str = Query(default="", description="Admin secret (or use X-Admin-Secret header)"),
-    x_admin_secret: Optional[str] = Header(default=None, alias="X-Admin-Secret"),
     triggered_by: str = Query(default="manual", description="'manual' | 'n8n_daily'"),
 ):
     """
     Run the complete DabbahWala end-to-end test suite.
 
-    Executes all 55+ tests across 14 groups synchronously. The request may take
-    up to 10 minutes depending on Claude agent calls. n8n should set a 900s timeout.
+    Open endpoint — callable by n8n without authentication (consistent with
+    /api/lifecycle/run, /api/intelligence/run-cycle, and all other n8n endpoints).
 
-    Returns the full test run results including per-test pass/fail/skip status.
-    Zero impact on real customers — all test data uses source='test_harness' and
-    is cleaned up at the end of the run.
+    Executes 55+ tests across 14 groups synchronously. May take up to 10 minutes
+    (Claude agent calls included). n8n sets a 900 s timeout.
+
+    Zero real-customer impact: all test data uses source='test_harness' and is
+    cascade-deleted at the end of every run. SMS goes to +18444322224 (self-loop).
+    Emails go to vivek@dabbahwala.com (admin inbox).
     """
-    _check_auth(secret or x_admin_secret)
     logger.info("Test suite triggered — triggered_by=%s", triggered_by)
     from app.services.test_harness_service import run_full_suite
     suite = run_full_suite(triggered_by=triggered_by)

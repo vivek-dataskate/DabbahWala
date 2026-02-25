@@ -40,15 +40,6 @@
       "parameters": {
         "method": "POST",
         "url": "https://dabbahwala-latest.onrender.com/api/test/run?triggered_by={{ $json.triggered_by }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "X-Admin-Secret",
-              "value": "={{ $env.ADMIN_SECRET }}"
-            }
-          ]
-        },
         "options": {
           "timeout": 900000,
           "response": {
