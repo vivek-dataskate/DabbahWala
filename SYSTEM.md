@@ -223,12 +223,15 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `menu_sync.py` | `/api/menu-sync` | Menu suggestion agent endpoints |
 | `growth_agent.py` | `/api/growth` | Growth hacker agent endpoints |
 | `chatbot.py` | `/api/chatbot` | `POST /ask`, `GET /suggest`, `GET /history`, `POST /reindex` — RAG Q&A over project docs |
+| `auth.py` | _(root)_ | `GET /login`, `GET /auth/google`, `GET /auth/callback`, `GET /auth/me`, `GET /auth/logout` — Google OAuth2 for @dabbahwala.com accounts |
 
 ### Admin Endpoints
 
 | Endpoint | Auth | Purpose |
 |----------|------|---------|
 | `GET /health` | None | DB connectivity check |
+| `GET /dashboard` | Google OAuth (`@dabbahwala.com`) | Marketing intelligence dashboard — redirects to `/login` if unauthenticated |
+| `GET /menu-dashboard` | Google OAuth (`@dabbahwala.com`) | Menu management dashboard — redirects to `/login` if unauthenticated |
 | `POST /admin/migrate/{num}` | `ADMIN_SECRET` | Run a specific migration |
 | `POST /admin/query` | `ADMIN_SECRET` | Read-only SQL |
 | `POST /admin/exec` | `ADMIN_SECRET` | Write SQL |

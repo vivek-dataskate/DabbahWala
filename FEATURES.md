@@ -363,6 +363,22 @@ Every system, agent, integration, and automation workflow is automatically valid
 
 ---
 
+## 15. Dashboard Authentication (Google OAuth2)
+
+The marketing intelligence dashboard (`/dashboard`) and menu dashboard (`/menu-dashboard`) are protected by Google OAuth2. Only `@dabbahwala.com` Google accounts are permitted. Sessions are stored as HMAC-signed cookies (no database table required).
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `app/routers/auth.py` | OAuth2 flow: `/login`, `/auth/google`, `/auth/callback`, `/auth/me`, `/auth/logout` |
+| `app/login.html` | Login page with "Sign in with Google" button |
+| `app/main.py` | Guards `/dashboard` and `/menu-dashboard` — redirects to `/login` if unauthenticated |
+
+**Required env vars:** `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `SESSION_SECRET`, `BASE_URL`
+
+---
+
 ## 13. Claude Desktop MCP
 
 Marketing and ops team members can query live Postgres data conversationally in Claude Desktop without writing SQL — using 30+ purpose-built tools.
