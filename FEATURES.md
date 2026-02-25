@@ -3,25 +3,31 @@
 Each section describes a business-critical capability and the technical assets that deliver it.
 
 > **Navigation:** [README](README.md) · [System Reference](SYSTEM.md) · [Claude Instructions](CLAUDE.md)
+>
+> **Deep-dive reading:** [LIFECYCLE.md](LIFECYCLE.md) — how the lifecycle engine, intelligence engine, and AI pipeline work together and why all three are necessary to convert customers. Includes the full customer journey and the feedback loop.
 
 ---
 
 ## 1. Customer Lifecycle Management
 
-Contacts are automatically classified into 8 stages and moved between them based on order frequency, engagement signals, and time-based rules — without manual intervention.
+Contacts are automatically classified into 8 stages and moved between them based on order frequency, engagement signals, and time-based rules — without manual intervention. This determines which email campaign each contact receives at any given moment.
 
 **Stages:** `cold` → `engaged` → `new_customer` → `active_customer` → `cooling` → `lapsed_customer` → `reactivation_candidate` → `optout`
+
+This is a **pure SQL system — no Claude involved.** Transitions are driven by predicate rules evaluated hourly. See [LIFECYCLE.md §5](LIFECYCLE.md#5-engine-1--the-lifecycle-engine-sql-hourly) for the full rule table and stage descriptions.
+
+**How it relates to the other engines:** The lifecycle engine classifies contacts and routes them to the right email campaign. The Intelligence Engine (Feature 6) separately detects which contacts need urgent one-off action. The AI Agent Pipeline (Feature 2) personalises what to say to each contact. All three are needed — this engine handles the always-on email channel; the other two handle targeted individual outreach.
 
 **Assets**
 
 | Asset | Role |
 |-------|------|
 | `contacts.lifecycle_segment` | Current stage stored on every contact row |
-| `rules` table | Predicate SQL + action pairs defining when to transition |
+| `rules` table | Predicate SQL + action pairs defining when to transition — 7 base rules seeded in migration 013 |
 | `campaign_routing` table | Maps each lifecycle stage to an Instantly email campaign |
 | `decision_log` table | Audit trail of every stage transition |
-| `run_lifecycle_cycle()` stored proc | Main rule engine — evaluates predicates, transitions segments, queues campaigns |
-| `evaluate_rules()` stored proc | Core rule evaluation loop called by the above |
+| `run_lifecycle_cycle()` stored proc | Main rule engine — calls `refresh_engagement_rollups()` then `evaluate_rules()`, then counts queued campaigns |
+| `evaluate_rules()` stored proc | Core rule evaluation loop — iterates all contacts × all active rules, highest priority first |
 | `routers/lifecycle.py` | `POST /api/lifecycle/run` endpoint |
 | `[Claude] Lifecycle Cycle Runner` n8n | Fires `POST /api/lifecycle/run` every hour |
 | `[Airtable] Playbook Sync` n8n | Syncs user-configured rules into `agent_playbook` every 15 min |
@@ -36,7 +42,19 @@ Per-contact AI reasoning using 9 sequential Claude calls (Menu + 3 Inference + 4
 
 **Model routing:** Haiku for fast classification (Menu, Sentiment, Engagement, Stage, Channel); Sonnet for complex reasoning (Intent, Offer, Escalation, Orchestrator). Prompt caching (`cache_control: ephemeral`) on all system prompts gives a 90% token discount from contact #2 onward.
 
-**Playbook RAG:** Category filtering routes only relevant rule categories to each agent layer (inference/decision/messaging/exclusion). Hash-based in-memory cache avoids DB round-trips when playbook is unchanged.
+> ⚠️ **Naming note:** The Intelligence Cycle (Feature 6) has phases also called "Inference" and "Decision" — but those contain **zero Claude calls**. They are pure SQL. Only the layers listed here involve Claude. See [LIFECYCLE.md §4](LIFECYCLE.md#4-important-the-naming-collision).
+
+**How it differs from the other engines:** The Lifecycle Engine (Feature 1) routes contacts to email campaigns in bulk — it cannot write personalised copy or decide channels. The Intelligence Engine (Feature 6) finds who needs urgent attention — it cannot reason about an individual's history or craft a message. The AI Pipeline does the thing neither SQL engine can: read everything about one specific person and decide exactly what to say to them and how.
+
+**The Goal Object:** Every contact has at most one active goal (`convert_to_order` / `retain` / `reactivate`). The goal is passed into all 9 Claude calls so every agent knows what the pipeline is ultimately working toward for this person.
+
+**Layer 1 — Inference (Menu + 3 agents):** Menu Agent (what's on the menu this person likes), Sentiment Agent (emotional state), Intent Agent (readiness to order), Engagement Agent (activity trend). Together they answer: "Where is this customer right now?"
+
+**Layer 2 — Decision (4 agents):** Stage Agent, Channel Agent, Offer Agent, Escalation Agent. Together they answer: "Given where they are, what should we do — which channel, which angle, which offer, and does a human need to step in?"
+
+**Layer 3 — Orchestrator (1 Claude call):** Reads all four Layer 2 recommendations plus the latest delivery event. Outputs one action. Delivery guardrails take highest priority — a customer whose order just failed never gets a promo SMS; they get an escalation call.
+
+See [LIFECYCLE.md §7](LIFECYCLE.md#7-engine-3--the-ai-agent-pipeline-claude-every-3-h--real-time) for the full layer-by-layer breakdown including the 6-angle offer progression, escalation thresholds, and persistence rules.
 
 **Assets**
 
@@ -48,14 +66,14 @@ Per-contact AI reasoning using 9 sequential Claude calls (Menu + 3 Inference + 4
 | `decision_recommendations` table | Layer 2 outputs — stage, channel, offer, escalation |
 | `orchestrator_log` table | Layer 3 chosen action, full reasoning, guardrails applied |
 | `action_queue` table | Pending → executing → done/failed lifecycle for each action |
-| `agent_playbook` table | User-configured rules injected into Claude system prompts (synced from Airtable) |
+| `agent_playbook` table | User-configured rules injected into all 9 Claude system prompts (synced from Airtable every 15 min) |
 | `[Claude] Agent Orchestration` n8n | Daily sweep at 9 AM — dormant contacts not run in 72 h (cap 200) |
-| `[Telnyx] Inbound SMS Collector` n8n | Triggers real-time cycle per contact after inbound SMS/call |
+| `[Telnyx] Inbound SMS Collector` n8n | Triggers real-time single-contact cycle immediately after any inbound SMS/call |
 
-**Delivery guardrails (Layer 3 overrides):**
-- `delivered` → thank-you SMS with reorder nudge (24 h cooldown)
-- `delivery_failed` / `delivery_returned` → high-urgency Airtable escalation
-- `out_for_delivery` / `driver_assigned` → no action (order in flight)
+**Delivery guardrails (Layer 3 — checked before all other logic):**
+- `delivered` → thank-you SMS with reorder nudge (24 h cooldown if already contacted)
+- `delivery_failed` / `delivery_returned` → high-urgency Airtable escalation — relationship recovery before selling
+- `out_for_delivery` / `driver_assigned` → `none` — never interrupt an order in progress
 
 ---
 
@@ -131,32 +149,48 @@ Real-time delivery status from Shipday is ingested and used by the AI orchestrat
 
 ## 6. Marketing Intelligence Cycle
 
-A 5-phase rule-based engine runs once daily (7:00 AM) to detect signals across all contacts and generate opportunities for the action queue — without waiting for a specific inbound event. Poll window is 24 hours to match the daily cadence.
+A 5-phase SQL engine runs daily (7:00 AM) to detect behavioural signals across all contacts and generate **opportunity** records — without any Claude calls, without waiting for a specific inbound event. Poll window is 24 hours to match the daily cadence.
 
-**7 signal types detected:**
+> ⚠️ **Naming note:** Two phases are called "INFERENCE" and "DECISION." This is confusing because the AI Agent Pipeline (Feature 2) has layers with the same names. The Intelligence Cycle phases are **pure SQL** — no Claude anywhere. See [LIFECYCLE.md §4](LIFECYCLE.md#4-important-the-naming-collision).
 
-| Signal | Detection Logic |
-|--------|----------------|
-| `engaged_no_order` | 3+ opens/clicks in 7 days, no order in 7 days |
-| `new_customer_no_repeat` | Exactly 1 order, 5+ days since first, no repeat |
-| `lapsed_reengaged` | Lapsed segment + recent SMS reply or email click |
-| `reorder_intent` | Call transcript contains reorder keywords |
-| `app_customers_for_conversion` | Orders via app, never ordered direct |
-| `subscription_candidates` | 3+ one-time orders in 30 days, regular cadence |
-| `high_value_at_risk` | 5+ total orders, no order in 14+ days |
+**How it relates to the other engines:** The Lifecycle Engine (Feature 1) keeps contacts in the right email campaign. The Intelligence Engine finds the contacts who need urgent one-off action *right now* — it is the system's radar. The AI Agent Pipeline (Feature 2) then handles the personalised response for those contacts. Without the Intelligence Engine, there would be no mechanism to detect that a lapsed customer just clicked a link, or that a high-value customer hasn't ordered in 14 days, until the next scheduled batch cycle.
+
+**The 5 Phases (all SQL, zero Claude):**
+
+| Phase | What it actually does |
+|-------|----------------------|
+| **INTAKE** | Count events from the last 2 hours (email opens/clicks, SMS, calls, orders) — snapshot for reporting |
+| **EVIDENCE** | Recalculate every contact's 7d/30d engagement rollups (`refresh_engagement_rollups()`) |
+| **INFERENCE** (SQL, not Claude) | Run 7 SQL detection functions to find contacts matching behavioural patterns |
+| **DECISION** (SQL, not Claude) | Call `create_opportunity()` for each detected contact — write rows to `opportunities` table |
+| **EXECUTION** | Run `run_lifecycle_cycle()` — ensures stage transitions are current before any actions are dispatched |
+
+**7 SQL signals → opportunity actions:**
+
+| Signal | Detection | Action | Priority |
+|--------|-----------|--------|----------|
+| `engaged_no_order` | 3+ opens in 7 days, no order | Email | warm |
+| `new_customer_no_repeat` | 1 order, 5+ days ago, no repeat | SMS | warm |
+| `lapsed_reengaged` | Lapsed + recent SMS reply or click | Field sales call | hot |
+| `reorder_intent` | Reorder keywords in call transcript | SMS | hot |
+| `app_customers_for_conversion` | App source, no direct order in 30 days | SMS + campaign move | warm |
+| `subscription_candidates` | 3+ orders, no subscription | SMS subscription pitch | warm |
+| `high_value_at_risk` | 5+ orders, no order in 14+ days | Field sales call | hot |
+
+**Opportunities lifecycle:** `pending` → (n8n dispatches) → `dispatched` → (field agent records result in Airtable) → `outcome_recorded`. Outcomes feed back into AI agent reasoning as the contact's success/failure history. See [LIFECYCLE.md §8](LIFECYCLE.md#8-what-is-an-opportunity) for full details.
 
 **Assets**
 
 | Asset | Role |
 |-------|------|
-| `routers/intelligence.py` | 5-phase cycle: INTAKE → EVIDENCE → INFERENCE → DECISION → EXECUTION |
-| `opportunities` table | One row per detected opportunity (`pending` → `dispatched` → `outcome_recorded`) |
-| `engagement_rollups` table | 7-day/30-day rolling metrics per contact |
-| `refresh_engagement_rollups()` stored proc | Recalculates rollups from raw events |
-| `create_opportunity()` stored proc | Creates opportunity with deduplication |
+| `routers/intelligence.py` | 5-phase cycle endpoint (`POST /api/intelligence/run-cycle`) |
+| `opportunities` table | One row per detected opportunity with action, priority, reason, suggested message, confidence |
+| `engagement_rollups` table | 7-day/30-day rolling metrics per contact — refreshed every cycle |
+| `refresh_engagement_rollups()` stored proc | Recalculates rollups from raw events table |
+| `create_opportunity()` stored proc | Creates opportunity with deduplication (no duplicate pending opportunities per contact) |
 | `routers/opportunities.py` | CRUD + detection endpoints |
-| `[Claude] Daily Intelligence Cycle` n8n | Fires `POST /api/intelligence/run-cycle` daily at 7:00 AM |
-| `[Instantly] Campaign Performance` n8n | Ingests Instantly email events into DB hourly |
+| `[Claude] Daily Intelligence Cycle` n8n | Fires `POST /api/intelligence/run-cycle` daily at 7:00 AM (24 h poll window) |
+| `[Instantly] Campaign Performance` n8n | Ingests Instantly email events into DB hourly so EVIDENCE phase has fresh data |
 
 ---
 

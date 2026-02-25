@@ -3,6 +3,8 @@
 Complete technical reference for the DabbahWala automated marketing platform.
 
 > **Navigation:** [README](README.md) · [Features](FEATURES.md) · [Claude Instructions](CLAUDE.md)
+>
+> **Deep-dive reading:** [LIFECYCLE.md](LIFECYCLE.md) — plain-language explanation of how the lifecycle engine, intelligence engine, and AI pipeline work together to convert customers, including why all three are necessary and not redundant.
 
 ---
 
@@ -243,6 +245,8 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 
 **Model routing:** Sonnet (`claude-sonnet-4-5-20250929`) for complex reasoning (Intent, Offer, Escalation, Orchestrator); Haiku (`claude-haiku-4-5-20251001`) for fast classification (Menu, Sentiment, Engagement, Stage, Channel).
 
+> ⚠️ **Naming note:** The Intelligence Cycle (§7) also uses the words "Inference" and "Decision" as phase names, but those phases contain **zero Claude calls** — they are pure SQL. The layers described here are the only place in the system where Claude is actually called. See [LIFECYCLE.md §4](LIFECYCLE.md#4-important-the-naming-collision) for the full disambiguation.
+
 **Prompt caching:** All system prompts are sent as cacheable content blocks (`cache_control: ephemeral`). The static prefix (role instructions + playbook) is identical across contacts, giving a 90% token discount from contact #2 onward in a batch.
 
 **Playbook RAG:** Each agent layer receives only the relevant playbook categories (inference agents: exclusion+priority+inference; decision agents: exclusion+priority+decision+messaging; orchestrator: exclusion+priority only).
@@ -265,7 +269,7 @@ Stored in: `inference_results`
 
 ### Layer 2 — Decision (4 agents)
 
-Input: contact profile + full Layer 1 inference bundle.
+Input: contact profile + full Layer 1 output bundle.
 
 | Agent | Model | Tool | Output |
 |-------|-------|------|--------|
@@ -278,28 +282,36 @@ Stored in: `decision_recommendations`
 
 ### Layer 3 — Orchestrator (1 Sonnet call)
 
-Input: all Layer 2 recommendations + latest delivery event.
+Input: all four Layer 2 recommendations + latest delivery event + recent action history.
 
-**Delivery-aware guardrails (highest priority):**
-- `delivered` → warm thank-you SMS with reorder nudge (skip if contacted in last 24 h)
-- `delivery_failed` / `delivery_returned` → escalate to Airtable as high urgency
-- `out_for_delivery` / `driver_assigned` → do nothing (order in flight)
+The Orchestrator is the final decision-maker. It reads everything and outputs **one action**. When the four decision agents disagree or a delivery event changes everything, the Orchestrator arbitrates.
+
+**Delivery-aware guardrails (checked first, override everything):**
+
+| Delivery event | Forced action |
+|---------------|--------------|
+| `delivered` | Warm thank-you SMS with reorder nudge (skip if already contacted in last 24 h) |
+| `delivery_failed` / `delivery_returned` | `escalate_airtable` with urgency=high — relationship recovery before any selling |
+| `out_for_delivery` / `driver_assigned` | `none` — never interrupt an order in progress |
 
 **General guardrails:**
 - Max 1 contact per 24 h on same channel
 - Max 3 SMS per week per contact
 - Escalation always beats automation
-- `not_interested` → always `none`
+- `intent=not_interested` → `none` unless escalation urgency is high
+- `priority_override=do_not_contact` → `none`, no exceptions
 
-Output: one `chosen_action` inserted into `action_queue`.
+**Persistence:** No-response is never a reason to stop. The Orchestrator keeps rotating channels indefinitely. The only permanent reason to output `none` is explicit optout or do-not-contact override.
+
+Output: one `chosen_action` (`send_sms` / `move_campaign` / `escalate_airtable` / `none`) inserted into `action_queue`.
 Stored in: `orchestrator_log`
 
-### Layer 4 — Report Agents (daily)
+### Layer 4 — Report Agents (2 Claude calls, daily, not per-contact)
 
 | Agent | Schedule | Output |
 |-------|----------|--------|
-| **Activity Report** | Daily 8:00 AM | Claude-generated HTML summary of agent runs, actions, escalations — emailed with CSV |
-| **Outcome Report** | Daily 8:30 AM | Claude-generated HTML summary of orders, opens, conversions — emailed with CSV |
+| **Activity Report** | Daily 8:00 AM | Claude-generated HTML summary of agent runs, actions queued, SMS/calls sent, field agent performance — emailed with CSV |
+| **Outcome Report** | Daily 8:30 AM | Claude-generated HTML summary of orders, opens, conversions, menu trends, field agent scorecard — emailed with CSV |
 
 ### Daily Sweep Endpoint
 
@@ -307,42 +319,50 @@ Stored in: `orchestrator_log`
 
 ### Playbook Injection
 
-The `agent_playbook` table (synced from Airtable every 15 min) injects user-configured rules into Claude system prompts:
+The `agent_playbook` table (synced from Airtable every 15 min) injects user-configured rules into the system prompt of **every** Layer 1, 2, and 3 agent. Users can change AI behaviour without any code changes.
 
-| Category | Example |
-|----------|---------|
-| `exclusion` | "Never contact contacts tagged 'do_not_disturb'" |
-| `priority` | "Prioritise contacts with 3+ orders" |
-| `inference` | "If SMS mentions 'price', classify as price_sensitive" |
-| `decision` | "Always use SMS for reactivation, never email" |
-| `messaging` | "Include delivery slot info in thank-you messages" |
+| Category | Example effect |
+|----------|---------------|
+| `exclusion` | Overrides everything — "Never contact contacts tagged 'do_not_disturb'" |
+| `priority` | Biases reasoning — "Prioritise contacts with 3+ orders over cold leads" |
+| `inference` | Shapes classification — "If SMS mentions 'price', always classify as price_sensitive" |
+| `decision` | Directs actions — "Always use SMS for reactivation, never email" |
+| `messaging` | Controls copy style — "Include delivery slot info in all thank-you messages" |
 | `general` | Open-ended instructions |
 
 ---
 
 ## 7. Intelligence Cycle
 
-**5-phase daily cycle (`/api/intelligence/run-cycle`) — runs at 7:00 AM**
+**5-phase daily cycle (`/api/intelligence/run-cycle`) — runs at 7:00 AM — zero Claude calls, pure SQL throughout.**
 
-| Phase | What It Does |
-|-------|-------------|
-| **INTAKE** | Poll Instantly for email events (opens, clicks, replies) in last 24 h; count recent Telnyx SMS/calls |
-| **EVIDENCE** | Refresh 7-day engagement rollups; calculate lifecycle distribution snapshot |
-| **INFERENCE** | Detect 7 signal types (see below) |
-| **DECISION** | Create opportunities from high-confidence signals; queue campaign moves; queue SMS |
-| **EXECUTION** | Run lifecycle rule engine (`run_lifecycle_cycle()`); prepare dispatch batches |
+> ⚠️ **Naming note:** Two of the five phases are called "INFERENCE" and "DECISION." These names are misleading because they share labels with layers in the Claude Agent Pipeline (§6). They are completely different — the Intelligence Cycle phases are pure SQL functions that scan all contacts at once; the Agent Pipeline layers are per-contact Claude AI calls. See [LIFECYCLE.md §4](LIFECYCLE.md#4-important-the-naming-collision) for the full disambiguation.
 
-### Signal Types
+### What it does
 
-| Signal | Detection Logic |
-|--------|----------------|
-| `engaged_no_order` | 3+ opens/clicks in 7 days, no order in 7 days |
-| `new_customer_no_repeat` | Exactly 1 order, 5+ days since first, no repeat |
-| `lapsed_reengaged` | Lapsed segment + recent SMS reply or email click |
-| `reorder_intent` | Call transcript contains reorder keywords |
-| `app_customers_for_conversion` | Orders via app, never ordered direct |
-| `subscription_candidates` | 3+ one-time orders in 30 days, regular cadence |
-| `high_value_at_risk` | 5+ total orders, no order in 14+ days |
+The Intelligence Cycle scans every contact in the database each hour to find behavioural patterns — contacts who are ready to act but haven't been reached yet. When it finds a match, it writes an **opportunity** record to the database. n8n then dispatches that opportunity to the right channel.
+
+### The 5 Phases
+
+| Phase | What It Does | Claude? |
+|-------|-------------|---------|
+| **INTAKE** | Count all events in the last 2 hours across the system (email opens/clicks from Instantly, SMS/calls from Telnyx, orders). Snapshot only — no action taken. | No |
+| **EVIDENCE** | Call `refresh_engagement_rollups()` to recalculate every contact's rolling 7-day and 30-day engagement metrics (`opens_7d`, `clicks_7d`, etc.). These metrics are what all signal detection queries read. | No |
+| **INFERENCE** (SQL signal detection) | Run 7 SQL functions that identify contacts matching specific behavioural patterns. The name "Inference" here means pattern matching in SQL, not Claude reasoning. | No |
+| **DECISION** (opportunity creation) | For each contact found by INFERENCE, call `create_opportunity()` — a SQL stored function — to write a row to the `opportunities` table with the action, priority, and suggested message. | No |
+| **EXECUTION** | Call `run_lifecycle_cycle()` to run the lifecycle rule engine and ensure stage transitions are up to date. Count pending opportunities and campaign moves for the cycle summary. | No |
+
+### The 7 SQL Signal Types
+
+| Signal | SQL Detection Logic | Action created |
+|--------|--------------------|-|
+| `engaged_no_order` | `opens_7d >= 3` AND no order in 7 days | Email (warm, confidence 0.75) |
+| `new_customer_no_repeat` | Exactly 1 total order, first order 5+ days ago | SMS (warm, confidence 0.80) |
+| `lapsed_reengaged` | In `lapsed_customer` segment AND recent SMS reply or email click | Field sales call (hot, confidence 0.90) |
+| `reorder_intent` | Call transcript contains reorder keywords | SMS (hot, confidence 0.92) |
+| `app_customers_for_conversion` | `primary_source` is a food delivery app AND no direct order in 30 days | SMS + campaign move (warm, confidence 0.82) |
+| `subscription_candidates` | 3+ total orders AND no subscription type | SMS subscription pitch (warm, confidence 0.78) |
+| `high_value_at_risk` | 5+ total orders AND no order in 14+ days AND not already lapsed/optout | Field sales call (hot, confidence 0.88) |
 
 ---
 

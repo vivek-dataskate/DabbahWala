@@ -6,6 +6,7 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 
 | Document | Contents |
 |----------|---------|
+| [LIFECYCLE.md](LIFECYCLE.md) | **Start here** — plain-language explanation of how the lifecycle engine, intelligence engine, and AI pipeline work together to convert customers. Includes the customer journey, opportunity lifecycle, feedback loop, and why all three engines are necessary. |
 | [SYSTEM.md](SYSTEM.md) | Full technical reference — stack, schema, API layer, agent pipeline, n8n workflows, deployment |
 | [FEATURES.md](FEATURES.md) | Business features and the assets (code, DB tables, workflows) that power each one |
 | [CLAUDE.md](CLAUDE.md) | Git workflow, credentials, deployment notes for Claude Code sessions |
