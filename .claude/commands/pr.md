@@ -14,6 +14,11 @@ Create a PR, merge it to main, and clean up the branch — all via the GitHub AP
 
 ## Workflow
 
+### 0. Update docs first
+
+Run `/update-docs` — review the branch diff and update SYSTEM.md, FEATURES.md, and CLAUDE.md as needed.
+Commit any doc changes before proceeding.
+
 ### 1. Sync & verify
 
 ```bash

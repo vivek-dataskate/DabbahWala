@@ -8,6 +8,25 @@ After making any code changes:
 3. Always target `main` as the base branch for PRs
 5. Branch names must start with `claude/` and end with the session ID suffix
 
+### Pre-PR Doc Check (mandatory)
+
+Before opening any PR, review the branch diff (`git diff main...HEAD`) and update docs if affected:
+
+| Changed | Update |
+|---------|--------|
+| Schema, stored procs, migrations | `SYSTEM.md` § Database Schema |
+| New/modified API routes or routers | `SYSTEM.md` § API Layer |
+| Agent pipeline logic | `SYSTEM.md` § Claude AI Agent Pipeline |
+| n8n workflow added/changed | `SYSTEM.md` § n8n Workflow Layer + `FEATURES.md` relevant feature |
+| External service integration | `SYSTEM.md` § External Service Integrations |
+| Feature added or changed end-to-end | `FEATURES.md` — add/update the feature section |
+| Next migration number used | `CLAUDE.md` § Database Migrations (increment the number) |
+| n8n workflow count changed | `CLAUDE.md` § n8n Workflow Status |
+
+If nothing in those categories changed, docs are fine as-is — no update needed.
+Commit doc updates in the same branch before opening the PR.
+Use `/update-docs` to run the check interactively.
+
 ### GitHub Token
 The `GITHUB_TOKEN` is stored in `~/.claude/CLAUDE.md` (global memory, never commit it to the repo).
 If the env var is empty, read it from that file and use it directly in API calls.
