@@ -112,10 +112,10 @@ def get_push_log(limit: int = 100, success: Optional[bool] = None, verify: bool 
                     lead = data[0] if isinstance(data, list) and data else data
                     actual_campaign = lead.get("campaign")
                     try:
-                    rr = _get_routing_row(row.get("to_campaign") or "")
-                    expected_campaign = rr.get("instantly_campaign_id")
-                except Exception:
-                    expected_campaign = None
+                        rr = _get_routing_row(row.get("to_campaign") or "")
+                        expected_campaign = rr.get("instantly_campaign_id")
+                    except Exception:
+                        expected_campaign = None
                     row["instantly_found"] = True
                     row["instantly_campaign"] = actual_campaign
                     row["instantly_campaign_match"] = (actual_campaign == expected_campaign) if expected_campaign else None
