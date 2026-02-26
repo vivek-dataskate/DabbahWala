@@ -234,6 +234,24 @@ Tests the query engine and RAG chatbot.
 
 ---
 
+## Group 16 — Team Content, Reports Generate & Playbook CRUD (`16_content_reports_playbook`)
+
+Tests the team content submission/sync/browse endpoints, the SQL daily report generate endpoint, and the full playbook rule lifecycle (create → update → delete).
+
+| Test Name | What It Checks |
+|-----------|----------------|
+| `team_content_submit` | `POST /api/team-content/submit` stores an observation and returns `{status: stored, id}` |
+| `team_content_browse` | `GET /api/team-content/browse?content_type=observation` returns `{content, count}` |
+| `team_content_sync` | `POST /api/team-content/sync` ingests a simulated Google Docs document |
+| `reports_generate_endpoint` | `POST /api/reports/daily/{date}` calls the `generate_daily_report` stored proc |
+| `playbook_rules_list` | `GET /api/playbook/rules` returns list of active rules |
+| `playbook_rule_create` | `POST /api/playbook/rules` creates a test rule and returns `{id, status: created}` |
+| `playbook_rule_update` | `PUT /api/playbook/rules/{id}` updates the test rule and returns `{status: updated}` |
+| `playbook_rule_delete` | `DELETE /api/playbook/rules/{id}` soft-deletes the test rule; verifies it leaves active list |
+| `playbook_rules_for_prompt` | `GET /api/playbook/rules/for-prompt` returns `{rule_count, prompt_section}` |
+
+---
+
 ## Group 14 — Data Cleanup (`14_cleanup`)
 
 Always runs last, even if earlier groups fail. Removes all test data.

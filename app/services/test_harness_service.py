@@ -26,6 +26,7 @@ Test groups
 13. Self-Service & Chatbot    — query categories, tier-1 SQL query, chatbot ask
 14. Cleanup                   — delete all test data from DB
 15. Competitor Agent          — schema check, list runs, list experiments
+16. Team Content/Reports/Playbook CRUD — team content sync/submit/browse, reports generate, playbook CRUD
 """
 
 import json
@@ -1602,6 +1603,142 @@ def _g15_competitor_agent(suite: TestSuite) -> None:
     _run(suite, "goal_hypothesis_hash_schema", G, goal_hypothesis_hash_column)
 
 
+# ─── GROUP 16: Team Content, Reports Generate & Playbook CRUD ─────────────────
+
+def _g16_content_reports_playbook(suite: TestSuite) -> None:
+    G = "16_content_reports_playbook"
+
+    # ── Team Content ──────────────────────────────────────────────────────────
+
+    def team_content_submit():
+        """POST /api/team-content/submit — store a team observation."""
+        sc, body = _local("POST", "/api/team-content/submit", json_body={
+            "content_type": "observation",
+            "content": "Test harness observation — automated E2E test run",
+            "author": "test_harness",
+            "title": "E2E Test Observation",
+        })
+        assert sc == 200, f"team-content/submit returned {sc}: {str(body)[:300]}"
+        b = body if isinstance(body, dict) else {}
+        assert b.get("status") == "stored", f"Expected status=stored, got: {b}"
+        assert b.get("id"), "No id in response"
+        return {"id": b.get("id"), "content_type": b.get("content_type")}
+    _run(suite, "team_content_submit", G, team_content_submit)
+
+    def team_content_browse():
+        """GET /api/team-content/browse — list recent content."""
+        sc, body = _local("GET", "/api/team-content/browse?content_type=observation&limit=5")
+        assert sc == 200, f"team-content/browse returned {sc}: {str(body)[:300]}"
+        b = body if isinstance(body, dict) else {}
+        assert "content" in b, f"Missing 'content' key in response: {b}"
+        return {"item_count": b.get("count", 0)}
+    _run(suite, "team_content_browse", G, team_content_browse)
+
+    def team_content_sync():
+        """POST /api/team-content/sync — simulate a Google Docs sync call."""
+        sc, body = _local("POST", "/api/team-content/sync", json_body={
+            "documents": [
+                {
+                    "google_doc_id": "test_harness_doc_E2E_001",
+                    "content_type": "ground_note",
+                    "title": "E2E Test Ground Note",
+                    "body": "This is an automated test ground note from the E2E test harness.",
+                    "author": "test_harness",
+                }
+            ]
+        })
+        assert sc == 200, f"team-content/sync returned {sc}: {str(body)[:300]}"
+        b = body if isinstance(body, dict) else {}
+        assert b.get("synced") == 1, f"Expected synced=1, got: {b}"
+        return {"created": b.get("created", 0), "updated": b.get("updated", 0)}
+    _run(suite, "team_content_sync", G, team_content_sync)
+
+    # ── Reports Generate ──────────────────────────────────────────────────────
+
+    def reports_generate_endpoint():
+        """POST /api/reports/daily/{date} — generate a daily SQL report."""
+        from datetime import date as _date
+        today = _date.today().isoformat()
+        sc, body = _local("POST", f"/api/reports/daily/{today}")
+        # Returns 200 (generated) or 404 (no data) or 500 (stored proc issue) — 200/404 acceptable
+        assert sc in (200, 404, 500), f"POST /api/reports/daily returned unexpected status {sc}"
+        return {"status": sc, "date": today}
+    _run(suite, "reports_generate_endpoint", G, reports_generate_endpoint)
+
+    # ── Playbook CRUD ─────────────────────────────────────────────────────────
+
+    created_rule_id = [None]  # mutable container for sharing between closures
+
+    def playbook_rules_list():
+        """GET /api/playbook/rules — list active rules."""
+        sc, body = _local("GET", "/api/playbook/rules")
+        assert sc == 200, f"playbook/rules GET returned {sc}: {str(body)[:300]}"
+        assert isinstance(body, list), f"Expected list of rules, got: {type(body)}"
+        return {"rule_count": len(body)}
+    _run(suite, "playbook_rules_list", G, playbook_rules_list)
+
+    def playbook_rule_create():
+        """POST /api/playbook/rules — create a test rule."""
+        sc, body = _local("POST", "/api/playbook/rules", json_body={
+            "rule_name": "E2E Test Rule — automated",
+            "category": "general",
+            "instruction": "This rule was created by the E2E test harness and can be safely deleted.",
+            "priority": 1,
+            "is_active": True,
+            "created_by": "test_harness",
+        })
+        assert sc == 200, f"playbook/rules POST returned {sc}: {str(body)[:300]}"
+        b = body if isinstance(body, dict) else {}
+        assert b.get("id"), f"No id in create response: {b}"
+        assert b.get("status") == "created", f"Expected status=created, got: {b}"
+        created_rule_id[0] = b["id"]
+        return {"id": b["id"], "status": b["status"]}
+    _run(suite, "playbook_rule_create", G, playbook_rule_create)
+
+    def playbook_rule_update():
+        """PUT /api/playbook/rules/{id} — update the test rule."""
+        if not created_rule_id[0]:
+            raise AssertionError("No rule id from create step")
+        sc, body = _local("PUT", f"/api/playbook/rules/{created_rule_id[0]}", json_body={
+            "rule_name": "E2E Test Rule — automated (updated)",
+            "category": "general",
+            "instruction": "Updated by E2E test harness.",
+            "priority": 1,
+            "is_active": True,
+            "created_by": "test_harness",
+        })
+        assert sc == 200, f"playbook/rules PUT returned {sc}: {str(body)[:300]}"
+        b = body if isinstance(body, dict) else {}
+        assert b.get("status") == "updated", f"Expected status=updated, got: {b}"
+        return {"id": b.get("id"), "status": b["status"]}
+    _run(suite, "playbook_rule_update", G, playbook_rule_update)
+
+    def playbook_rule_delete():
+        """DELETE /api/playbook/rules/{id} — soft-delete the test rule."""
+        if not created_rule_id[0]:
+            raise AssertionError("No rule id from create step")
+        sc, body = _local("DELETE", f"/api/playbook/rules/{created_rule_id[0]}")
+        assert sc == 200, f"playbook/rules DELETE returned {sc}: {str(body)[:300]}"
+        b = body if isinstance(body, dict) else {}
+        assert b.get("status") == "deactivated", f"Expected status=deactivated, got: {b}"
+        # Verify it no longer appears in active rules list
+        sc2, rules = _local("GET", "/api/playbook/rules")
+        active_ids = [r.get("id") for r in (rules if isinstance(rules, list) else [])]
+        assert created_rule_id[0] not in active_ids, "Deleted rule still appears in active rules list"
+        return {"id": b.get("id"), "status": b["status"], "removed_from_active": True}
+    _run(suite, "playbook_rule_delete", G, playbook_rule_delete)
+
+    def playbook_rules_for_prompt():
+        """GET /api/playbook/rules/for-prompt — formatted rules for Claude."""
+        sc, body = _local("GET", "/api/playbook/rules/for-prompt")
+        assert sc == 200, f"playbook/rules/for-prompt returned {sc}: {str(body)[:300]}"
+        b = body if isinstance(body, dict) else {}
+        assert "rule_count" in b, f"Missing 'rule_count' in response: {b}"
+        assert "prompt_section" in b, f"Missing 'prompt_section' in response: {b}"
+        return {"rule_count": b["rule_count"], "has_prompt_section": bool(b.get("prompt_section"))}
+    _run(suite, "playbook_rules_for_prompt", G, playbook_rules_for_prompt)
+
+
 # ─── GROUPS 18–21: n8n Flow Integration Tests (real DB, all branches) ────────
 
 def _g18_n8n_daily_order_flow(suite: TestSuite) -> None:
@@ -2376,8 +2513,6 @@ def _g21_n8n_menu_sync_flow(suite: TestSuite) -> None:
         assert total_rules > 0, "No rules returned for prompt — agent pipeline will run without rules"
         return {"categories": list(body.keys()), "total_rules": total_rules}
     _run(suite, "playbook_for_prompt_has_rules", G, playbook_for_prompt_has_rules)
-
-
 
 
 
@@ -3263,6 +3398,7 @@ def run_full_suite(triggered_by: str = "manual") -> TestSuite:
         _g12_reports(suite)
         _g13_query_chatbot(suite)
         _g15_competitor_agent(suite)
+        _g16_content_reports_playbook(suite)
         _g18_n8n_daily_order_flow(suite)
         _g19_n8n_action_queue_all_routes(suite)
         _g20_n8n_broadcast_flow(suite)

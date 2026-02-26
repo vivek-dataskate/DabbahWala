@@ -16,6 +16,7 @@ n8n workflow:
   2. POST /api/playbook/sync with all active records
   3. Playbook is cached and injected into Claude's system prompt
 """
+import logging
 import os
 
 from fastapi import APIRouter, Request
@@ -23,6 +24,7 @@ from pydantic import BaseModel
 
 from app.db import get_cursor
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -124,6 +126,7 @@ def get_rules_for_prompt():
 @router.post("/rules", response_model=dict)
 async def create_rule(rule: PlaybookRule):
     """Create a new playbook rule."""
+    logger.info("create_rule — rule_name=%r category=%s priority=%d", rule.rule_name, rule.category, rule.priority)
     with get_cursor(commit=True) as cur:
         cur.execute(
             "INSERT INTO agent_playbook (rule_name, category, instruction, priority, is_active, created_by) "
@@ -132,12 +135,14 @@ async def create_rule(rule: PlaybookRule):
              rule.priority, rule.is_active, rule.created_by)
         )
         row = cur.fetchone()
+        logger.info("create_rule — inserted id=%d", row['id'])
         return {"id": row['id'], "status": "created"}
 
 
 @router.put("/rules/{rule_id}")
 async def update_rule(rule_id: int, rule: PlaybookRule):
     """Update an existing playbook rule."""
+    logger.info("update_rule — id=%d rule_name=%r category=%s priority=%d", rule_id, rule.rule_name, rule.category, rule.priority)
     with get_cursor(commit=True) as cur:
         cur.execute(
             "UPDATE agent_playbook SET rule_name = %s, category = %s, instruction = %s, "
@@ -151,6 +156,7 @@ async def update_rule(rule_id: int, rule: PlaybookRule):
 @router.delete("/rules/{rule_id}")
 def delete_rule(rule_id: int):
     """Soft-delete a rule (deactivate it)."""
+    logger.info("delete_rule — id=%d (soft-delete)", rule_id)
     with get_cursor(commit=True) as cur:
         cur.execute(
             "UPDATE agent_playbook SET is_active = false, updated_at = now() WHERE id = %s",
@@ -184,6 +190,7 @@ async def sync_from_airtable(request: Request):
     """
     body = await request.json()
     records = body.get('records', [])
+    logger.info("sync_from_airtable — received %d records", len(records))
 
     created = 0
     updated = 0
@@ -238,6 +245,10 @@ async def sync_from_airtable(request: Request):
                 )
                 deactivated += 1
 
+    logger.info(
+        "sync_from_airtable — done: synced=%d created=%d updated=%d deactivated=%d",
+        len(records), created, updated, deactivated,
+    )
     return PlaybookSyncResult(
         synced=len(records),
         created=created,
