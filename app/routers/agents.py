@@ -431,31 +431,21 @@ def _current_week_start() -> date:
 
 
 def _fetch_current_menu() -> list:
-    """Fetch this week's menu items for agent personalisation.
-
-    Falls back to the active menu_items catalogue if no weekly snapshot exists.
-    """
+    """Fetch active menu items from menu_catalog for agent personalisation."""
     try:
         with get_cursor(commit=False) as cur:
-            week_start = _current_week_start()
             cur.execute(
                 """
-                SELECT mi.item_name, mi.category, mi.is_veg, wm.price, wm.is_featured
-                FROM weekly_menu wm
-                JOIN menu_items mi ON mi.id = wm.menu_item_id
-                WHERE wm.week_start = %s
-                ORDER BY wm.is_featured DESC, wm.display_order NULLS LAST
+                SELECT item_name, category, is_veg, price
+                FROM   menu_catalog
+                WHERE  active = TRUE
+                ORDER  BY category NULLS LAST, item_name
+                LIMIT  30
                 """,
-                (week_start,),
             )
             rows = cur.fetchall()
-            if not rows:
-                cur.execute(
-                    "SELECT item_name, category, is_veg FROM menu_items WHERE is_active = true LIMIT 20"
-                )
-                rows = cur.fetchall()
         items = [dict(r) for r in rows]
-        logger.debug("Fetched %d menu items for week_start=%s", len(items), week_start)
+        logger.debug("Fetched %d active menu items from menu_catalog", len(items))
         return items
     except Exception as e:
         logger.warning("Could not fetch current menu: %s — menu agent will skip", e)

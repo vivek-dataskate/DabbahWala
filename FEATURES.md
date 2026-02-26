@@ -117,11 +117,10 @@ A CSV file of the day's orders is uploaded every afternoon and automatically cre
 | `routers/daily_orders.py` | `POST /api/daily-orders/process` — 5-step CSV pipeline |
 | `orders` table | Order records (ref, date, amount, slot, type) |
 | `order_items` table | Line items per order |
-| `menu_items` table | Master menu catalog (137 items) |
-| `menu_item_aliases` table | CSV dish name → canonical menu item resolution |
+| `menu_catalog` table | Active menu catalog (Airtable-synced, 126 items) |
 | `[Orders] Daily CSV Upload` n8n | Uploads daily CSV at 1 PM EST (Mon–Sat) |
 
-**5-step menu item resolution:** exact match → alias lookup → normalized match → fuzzy match (85% threshold) → create new item
+**Menu item resolution:** case-insensitive direct match on `menu_catalog.item_name`; new items auto-created in catalog if not found
 
 **Post-upload triggers:** lifecycle run → opportunity detection → agent cycle for new/returning contacts
 
@@ -222,19 +221,19 @@ A 5-phase SQL engine runs daily (7:00 AM) to detect behavioural signals across a
 
 ## 7. Menu Management
 
-The weekly menu is maintained by staff in Airtable and automatically synced to Postgres hourly. Claude uses the live menu to personalise every outreach message — anchoring to favourites, bridging to items the customer has never tried.
+The menu catalog is maintained by staff in Airtable ("Menu Catalog" table) — one row per item. Claude uses the live active catalog to personalise every outreach message, anchoring to favourites and bridging to untried items. Deleting a row from Airtable automatically marks the item as discarded in Postgres on the next daily sync. All price and status changes are tracked in `menu_catalog_history`.
 
 **Assets**
 
 | Asset | Role |
 |-------|------|
-| Airtable "Weekly Menu" table | Staff-editable source of truth (Name, Category, Is Veg, Price, Active) |
-| `weekly_menu_schedule` table | Postgres mirror, keyed by `(week_start, item_name)` |
-| `routers/airtable_menu.py` | CRUD endpoints — `GET/POST/PUT/DELETE /api/menu/items`, `POST /api/menu/sync` |
-| `routers/menu_sync.py` | `GET /api/menu/current` used by the agent pipeline to load this week's menu |
-| `[Airtable] Menu Sync` n8n | Pulls all Airtable records → upserts Postgres daily at 6:30 AM (ID: `baZV5ViA5lXNCTWR`) |
-| `current_menu` field | Injected into every Claude contact profile — full this-week menu |
-| `new_to_customer_this_week` field | Items from `current_menu` that the customer has never ordered; used to spark curiosity |
+| Airtable "Menu Catalog" table (`tblmZBNdQvmFcvVai`) | Source of truth — active items only (Item Name, Category, Is Veg, Price, Added Date) |
+| `menu_catalog` table | Postgres mirror — one row per item, permanent; includes `active`, `discarded_date`, `airtable_record_id` |
+| `menu_catalog_history` table | Audit trail — `added`, `price_change`, `discarded`, `field_update` events |
+| `routers/airtable_menu.py` | `GET /api/menu/items`, `GET /api/menu/items/inactive`, `GET /api/menu/items/{id}/history`, `POST /api/menu/sync` |
+| `[Airtable] Menu Catalog Sync` n8n | Daily 6:30 AM — upserts from Airtable + detects deletions (ID: `baZV5ViA5lXNCTWR`) |
+| `current_menu` field | Injected into every Claude contact profile — all active catalog items |
+| `new_to_customer` field | Active items the customer has never ordered; used to spark curiosity |
 
 ---
 
@@ -415,7 +414,7 @@ Every system, agent, integration, and automation workflow is automatically valid
 
 ## 15. Dashboard Authentication (Google OAuth2)
 
-The marketing intelligence dashboard (`/dashboard`) and menu dashboard (`/menu-dashboard`) are protected by Google OAuth2. Only `@dabbahwala.com` Google accounts are permitted. Sessions are stored as HMAC-signed cookies (no database table required).
+The marketing intelligence dashboard (`/dashboard`) is protected by Google OAuth2. Only `@dabbahwala.com` Google accounts are permitted. Sessions are stored as HMAC-signed cookies (no database table required). Menu management is handled directly in Airtable (no separate web dashboard).
 
 **Assets**
 

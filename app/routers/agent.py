@@ -141,28 +141,14 @@ def build_contact_profile(cur, contact_id: int) -> dict:
     """, (contact_id,))
     pending_opps = [dict(r) for r in cur.fetchall()]
 
-    # ── This week's menu ──────────────────────────────────────────────────
-    # Prefer the weekly snapshot; fall back to the full active catalog.
-    from datetime import date, timedelta
-    today = date.today()
-    week_start = today - timedelta(days=today.weekday())
-
+    # ── Current active menu ────────────────────────────────────────────────
     cur.execute(
-        """SELECT item_name, category, is_veg, price, is_featured
-           FROM weekly_menu
-           WHERE week_start = %s
-           ORDER BY is_featured DESC, display_order""",
-        (week_start,),
+        """SELECT item_name, category, is_veg, price, false AS is_featured
+           FROM menu_catalog
+           WHERE active = TRUE
+           ORDER BY category NULLS LAST, item_name""",
     )
     current_menu = [dict(r) for r in cur.fetchall()]
-
-    if not current_menu:
-        cur.execute(
-            """SELECT item_name, category, is_veg, avg_price AS price, false AS is_featured
-               FROM menu_items WHERE is_active = true
-               ORDER BY category, item_name"""
-        )
-        current_menu = [dict(r) for r in cur.fetchall()]
 
     # Items on this week's menu the customer has NEVER ordered before
     ordered_names = {i['item_name'].lower() for i in fav_items}

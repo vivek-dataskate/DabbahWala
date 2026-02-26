@@ -93,16 +93,10 @@ def _get_baseline(cur) -> dict:
 
 
 def _get_current_menu(cur) -> list[str]:
-    today = date.today()
-    week_start = today - timedelta(days=today.weekday())
     cur.execute(
-        "SELECT item_name, category, is_veg FROM weekly_menu WHERE week_start = %s",
-        (week_start,),
+        "SELECT item_name, category, is_veg FROM menu_catalog WHERE active = TRUE ORDER BY category NULLS LAST, item_name",
     )
     rows = cur.fetchall()
-    if not rows:
-        cur.execute("SELECT item_name, category, is_veg FROM menu_items WHERE is_active = true")
-        rows = cur.fetchall()
     return [f"{r['item_name']} ({'veg' if r['is_veg'] else 'non-veg'}, {r['category']})" for r in rows]
 
 

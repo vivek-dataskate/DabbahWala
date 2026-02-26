@@ -177,22 +177,13 @@ async def download_shipday_csv(file_id: str):
 
 
 def _load_menu_lookup(cur) -> tuple:
-    """Load alias table + master menu items into lookup dicts.
+    """Load menu_catalog into lookup dicts for CSV dish name resolution.
     Returns (alias_map, master_norm_map, master_set).
+    alias_map is empty — alias resolution now uses case-insensitive matching on item_name.
     """
-    # alias table: csv_name -> canonical_name
-    alias_map = {}
-    try:
-        cur.execute("SELECT alias, canonical_name FROM menu_item_aliases")
-        for r in cur.fetchall():
-            alias_map[r['alias']] = r['canonical_name']
-            alias_map[r['alias'].strip()] = r['canonical_name']
-        logger.debug("Loaded %d menu aliases", len(alias_map))
-    except Exception as e:
-        logger.warning("menu_item_aliases table not accessible: %s — proceeding without aliases", e)
+    alias_map = {}  # no separate alias table; kept for API compatibility
 
-    # master menu items: normalized -> actual name
-    cur.execute("SELECT id, item_name, category, is_veg, avg_price FROM menu_items WHERE is_active = true")
+    cur.execute("SELECT id, item_name, category, is_veg, price FROM menu_catalog WHERE active = true")
     master_rows = cur.fetchall()
     master_set = {r['item_name'] for r in master_rows}
     master_norm = {}
@@ -200,7 +191,7 @@ def _load_menu_lookup(cur) -> tuple:
         norm = r['item_name'].strip().lower()
         master_norm[norm] = r['item_name']
 
-    logger.debug("Loaded %d active menu items and %d aliases for dish resolution", len(master_set), len(alias_map))
+    logger.debug("Loaded %d active menu items for dish resolution", len(master_set))
     return alias_map, master_norm, master_set
 
 
@@ -629,18 +620,18 @@ async def process_daily_orders(
                 if dish in master_set:
                     menu_matched += 1
                 else:
-                    # New item not in master — create with price from CSV
+                    # New item not in catalog — add with price from CSV
                     cur.execute(
-                        "INSERT INTO menu_items (item_name, avg_price) VALUES (%s, %s) "
+                        "INSERT INTO menu_catalog (item_name, price, added_date) VALUES (%s, %s, CURRENT_DATE) "
                         "ON CONFLICT (item_name) DO NOTHING", (dish, price)
                     )
                     master_set.add(dish)
                     menu_created += 1
 
                 cur.execute(
-                    "INSERT INTO order_items (order_id, menu_item_id, item_name, quantity, unit_price, line_total) "
-                    "VALUES (%s, (SELECT id FROM menu_items WHERE item_name = %s LIMIT 1), %s, %s, %s, %s)",
-                    (order_db_id, dish, dish, qty, price, line_total)
+                    "INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) "
+                    "VALUES (%s, %s, %s, %s, %s)",
+                    (order_db_id, dish, qty, price, line_total)
                 )
                 item_count += 1
 

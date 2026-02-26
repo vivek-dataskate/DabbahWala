@@ -81,12 +81,14 @@ If the env var is empty, read it from that file and use it directly in API calls
 ### Airtable
 - API key: stored in Render env as `AIRTABLE_API_KEY` and in `~/.claude/CLAUDE.md` (never commit to repo)
 - Base ID: `appuy2VTIao6XVpIW`
-- Menu table: **`Weekly Menu`** — fields: Name, Category, Is Veg, Description, Image URL, Week Start, Active, Price
+- Menu table: **`Menu Catalog`** (table ID: `tblmZBNdQvmFcvVai`) — fields: Item Name, Category, Is Veg, Description, Image URL, Price, Added Date
+  - Airtable = active items only; deleting a row marks it discarded in Postgres (via daily sync)
+  - History tracked in `menu_catalog_history` in Postgres
 
 ### n8n Workflow Status
 - All **26 workflows** active as of 2026-02-26 (24 scheduled + 2 manual-only)
 - `[Claude — Inference] Competitor Research Agent` (ID: TBD — activate after first push) added 2026-02-25
-- `[Airtable — Evidence] Menu Sync` (ID: `baZV5ViA5lXNCTWR`) replaced the old Playwright weekly scrape
+- `[Airtable — Evidence] Menu Catalog Sync` (ID: `baZV5ViA5lXNCTWR`) — per-item catalog sync with deletion detection + history, daily 6:30 AM
 - `[System — Test] Daily E2E Test Suite` (ID: `M7bwNMGrUMRvAHH4`) — daily 5 AM E2E test runner, added 2026-02-25
 - `[Telnyx — Evidence] SMS Historical Import` (ID: `YANIKsHk767NDEXL`) — manual one-shot MDR backfill, added 2026-02-26
 - `[Telnyx — Evidence] Inbound SMS Collector` updated to use MDR endpoint (`/v2/reports/messaging/message_detail_records`) — fixes 404 from invalid `/v2/messages` list endpoint

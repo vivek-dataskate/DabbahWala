@@ -122,7 +122,7 @@ INPUTS
 
 ```
 Events  ──→  Agent Pipeline (4 layers)  ──→  Action Queue  ──→  n8n Executors  ──→  Telnyx / Airtable / Instantly
-Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule table  ──→  /menu-dashboard
+Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table (+ menu_catalog_history)
 ```
 
 ---
@@ -138,12 +138,9 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `contacts` | Master customer record — email, phone, lifecycle_segment, channel flags, order counts, `source` (origin tag e.g. `test_harness`, `shipday`, `import`); active campaign derived via JOIN to `campaign_routing` |
 | `events` | Raw event log — order_placed, email_open, sms_received, delivery_failed, etc. |
 | `orders` | Order records — order_ref, total_amount, delivery_slot, order_type |
-| `order_items` | Line items — menu_item_id, quantity, unit_price |
-| `menu_items` | Master menu catalog — item_name, category, is_veg, avg_price |
-| `menu_item_aliases` | CSV dish name → canonical menu item mapping |
-| `weekly_menu` | Weekly menu snapshot keyed by `(week_start, item_name)` — `is_featured`, `display_order`, `price`, FK to `menu_items` |
-| `weekly_menu_schedule` | Airtable-driven weekly menu, keyed by `(week_start, item_name)`, includes `airtable_record_id`, `active`, `price` |
-| `menu_sync_log` | Audit log of each menu scrape/sync attempt — source, items found/upserted, status, error |
+| `order_items` | Line items — item_name, quantity, unit_price (menu_item_id retained as bare BIGINT for legacy rows) |
+| `menu_catalog` | Per-item menu catalog (Airtable is source of truth) — item_name, category, is_veg, price, active, added_date, discarded_date, airtable_record_id |
+| `menu_catalog_history` | Audit trail of every price/activation/discard change per item — change_type ('added','price_change','discarded','field_update'), old_value, new_value |
 
 ### Communication Tables
 
@@ -245,8 +242,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `team_content.py` | `/api/team-content` | `POST /sync`, `POST /submit`, `GET /browse`, `POST /search` |
 | `reports.py` | `/api/reports` | `GET /daily/{date}`, `POST /daily/{date}` |
 | `events.py` | `/api/events` | `POST /ingest` |
-| `airtable_menu.py` | `/api/menu` | `GET /items`, `POST /sync` (Airtable → Postgres) |
-| `menu_sync.py` | `/api/menu-sync` | Menu suggestion agent endpoints |
+| `airtable_menu.py` | `/api/menu` | `GET /items`, `GET /items/inactive`, `GET /items/{id}/history`, `POST /sync` (Airtable → Postgres, two-phase: upsert + deletion detection) |
 | `growth_agent.py` | `/api/growth` | Growth hacker agent endpoints |
 | `goal_agent.py` | `/api/goal-agent` | `POST /run`, `/hypothesize`, `/experiment`, `/measure`, `/harvest`; `GET /experiments`, `/signals`, `/runs` |
 | `competitor_agent.py` | `/api/competitor-agent` | `POST /run` (full cycle: parse emails + scrape sites + generate + inject); `GET /runs`, `/experiments` |
@@ -259,7 +255,6 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 |----------|------|---------|
 | `GET /health` | None | DB connectivity check |
 | `GET /dashboard` | Google OAuth (`@dabbahwala.com`) | Marketing intelligence dashboard — redirects to `/login` if unauthenticated |
-| `GET /menu-dashboard` | Google OAuth (`@dabbahwala.com`) | Menu management dashboard — redirects to `/login` if unauthenticated |
 | `POST /admin/migrate/{num}` | `ADMIN_SECRET` | Run a specific migration |
 | `POST /admin/query` | `ADMIN_SECRET` | Read-only SQL |
 | `POST /admin/exec` | `ADMIN_SECRET` | Write SQL |
@@ -412,7 +407,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 
 | Group | Workflow | Schedule | Purpose |
 |-------|----------|----------|---------|
-| **Airtable** | Menu Sync | Hourly | Pull Airtable "Weekly Menu" → `POST /api/menu/sync` → `weekly_menu_schedule` |
+| **Airtable** | Menu Catalog Sync | Daily 6:30 AM | Pull Airtable "Menu Catalog" → `POST /api/menu/sync` → upsert `menu_catalog`, detect deletions → mark discarded + record history |
 | **Airtable** | Playbook Sync | Every 15 min | Sync rules from Airtable → `agent_playbook` table |
 | **Airtable** | Outcome Sync | Every 15 min | Pull Airtable field sales outcomes → update opportunities |
 | **Airtable** | Marketing Query Form | On-demand (form submit) | n8n form → `POST /api/query` → Claude inference → logs to Airtable |
@@ -487,8 +482,8 @@ A contact's current campaign is always derived via `JOIN campaign_routing ON lif
 ### Airtable
 
 - **Base ID:** `appuy2VTIao6XVpIW`
-- **Weekly Menu** table: staff edit menu items here → hourly n8n sync → `weekly_menu_schedule`
-  - Fields: Name, Category, Is Veg, Description, Image URL, Week Start, Active, Price
+- **Menu Catalog** table (`tblmZBNdQvmFcvVai`): staff manage active items here → daily 6:30 AM n8n sync → `menu_catalog` (deleting a row marks it discarded in Postgres)
+  - Fields: Item Name, Category, Is Veg, Description, Image URL, Price, Added Date
 - **Field Sales Tasks:** escalated opportunities appear as Airtable records; agents update outcomes
 - **Playbook Rules:** user-configurable; synced every 15 min to `agent_playbook`
 
