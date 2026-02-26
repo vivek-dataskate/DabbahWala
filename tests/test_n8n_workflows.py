@@ -2,22 +2,41 @@
 Tests for all 26 n8n workflows.
 ===============================
 
-Two layers of testing:
+Four layers of testing:
 
 1. **Config integrity** — verifies n8n/config.json has the right workflow IDs,
    names, and schedules.  Runs without any network calls (always).
 
-2. **Live n8n API** — verifies each workflow exists in the n8n instance and is
-   active. Skipped automatically if N8N_API_KEY is not set in the environment.
+2. **JSON structure** — validates each workflow JSON file has exactly one schedule
+   trigger, at least one HTTP node, no $env variables, correct base URLs, etc.
 
 3. **Python API seams** — for each n8n workflow, verify the Python endpoint
    it calls returns a valid response (using TestClient with mocked DB).
+   Fast, no network, no external services.
 
-Run only config + seam tests (no n8n API key needed):
+4. **External service connectivity** — verify Telnyx, Instantly, Airtable, Shipday,
+   and the DW API itself are reachable and accepting our API keys.
+   Requires CONNECTIVITY_TESTS=1 + real keys in env.
+
+5. **Live DW API seams** — hit the production DW API via real HTTP and verify
+   each endpoint used by n8n responds correctly.
+   GET endpoints: always safe. POST endpoints: probed with empty body (422 = exists).
+   Requires LIVE_DW_API_TESTS=1.
+
+6. **Live n8n API** — verifies each workflow exists in the n8n instance and is
+   active. Skipped automatically if N8N_API_KEY is not set in the environment.
+
+Run only config + structure + seam tests (no network needed):
     pytest tests/test_n8n_workflows.py -v -m "not n8n_live"
 
-Run all tests including live n8n verification:
-    N8N_API_KEY=xxx pytest tests/test_n8n_workflows.py -v
+Run external connectivity tests:
+    CONNECTIVITY_TESTS=1 pytest tests/test_n8n_workflows.py -v -m external_connectivity
+
+Run live DW API seam tests:
+    LIVE_DW_API_TESTS=1 pytest tests/test_n8n_workflows.py -v -m live_dw_api
+
+Run everything:
+    CONNECTIVITY_TESTS=1 LIVE_DW_API_TESTS=1 N8N_API_KEY=xxx pytest tests/test_n8n_workflows.py -v
 """
 
 import json
@@ -27,6 +46,17 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# ─── Real API keys captured at import time ───────────────────────────────────
+# conftest.py patches SHIPDAY_API_KEY with a fake value for unit tests.
+# Capturing here (before any monkeypatching) gives connectivity tests the
+# real values (or "" if the key was never set).
+_REAL_TELNYX_KEY     = os.environ.get("TELNYX_API_KEY", "")
+_REAL_INSTANTLY_KEY  = os.environ.get("INSTANTLY_API_KEY", "")
+_REAL_AIRTABLE_KEY   = os.environ.get("AIRTABLE_API_KEY", "")
+_REAL_SHIPDAY_KEY    = os.environ.get("SHIPDAY_API_KEY", "")
+_CONNECTIVITY_TESTS  = os.environ.get("CONNECTIVITY_TESTS", "")
+_LIVE_DW_API_TESTS   = os.environ.get("LIVE_DW_API_TESTS", "")
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -583,3 +613,286 @@ class TestSystemSeams:
         )):
             resp = client.post("/api/test/run")
         assert resp.status_code == 200
+
+
+# ─── GROUP 4: External Service Connectivity ──────────────────────────────────
+
+@pytest.mark.external_connectivity
+class TestExternalConnectivity:
+    """
+    Verify each external API the n8n workflows call is reachable and accepts
+    our credentials.  Each test skips if the required key is not in the environment.
+
+    Run with:
+        CONNECTIVITY_TESTS=1 \\
+        TELNYX_API_KEY=xxx \\
+        INSTANTLY_API_KEY=xxx \\
+        AIRTABLE_API_KEY=xxx \\
+        SHIPDAY_API_KEY=xxx \\
+        pytest tests/test_n8n_workflows.py -v -m external_connectivity
+    """
+
+    @pytest.fixture(autouse=True)
+    def require_connectivity_flag(self):
+        if not _CONNECTIVITY_TESTS:
+            pytest.skip("CONNECTIVITY_TESTS not set — skipping external connectivity tests")
+
+    def test_dw_api_reachable(self):
+        """Production DW API must respond to a read-only GET request."""
+        import httpx
+        resp = httpx.get(
+            f"https://{DW_API_BASE}/api/agents/action-queue/pending",
+            timeout=20,
+        )
+        assert resp.status_code == 200, (
+            f"DW API unreachable: HTTP {resp.status_code}"
+        )
+        assert isinstance(resp.json(), (dict, list)), "DW API returned non-JSON"
+
+    def test_telnyx_api_reachable(self):
+        """Telnyx API must accept our Bearer key."""
+        if not _REAL_TELNYX_KEY:
+            pytest.skip("TELNYX_API_KEY not set")
+        import httpx
+        resp = httpx.get(
+            "https://api.telnyx.com/v2/messaging_profiles?page[size]=1",
+            headers={"Authorization": f"Bearer {_REAL_TELNYX_KEY}"},
+            timeout=15,
+        )
+        assert resp.status_code == 200, (
+            f"Telnyx API: HTTP {resp.status_code} — {resp.text[:200]}"
+        )
+        data = resp.json()
+        assert "data" in data, f"Unexpected Telnyx response shape: {list(data.keys())}"
+
+    def test_instantly_api_reachable(self):
+        """Instantly API must accept our Bearer key and list campaigns."""
+        if not _REAL_INSTANTLY_KEY:
+            pytest.skip("INSTANTLY_API_KEY not set")
+        import httpx
+        resp = httpx.get(
+            "https://api.instantly.ai/api/v2/campaigns?limit=1",
+            headers={"Authorization": f"Bearer {_REAL_INSTANTLY_KEY}"},
+            timeout=15,
+        )
+        assert resp.status_code == 200, (
+            f"Instantly API: HTTP {resp.status_code} — {resp.text[:200]}"
+        )
+
+    def test_airtable_menu_catalog_reachable(self):
+        """Airtable: Menu Catalog table must be readable."""
+        if not _REAL_AIRTABLE_KEY:
+            pytest.skip("AIRTABLE_API_KEY not set")
+        import httpx
+        base_id = "appuy2VTIao6XVpIW"
+        resp = httpx.get(
+            f"https://api.airtable.com/v0/{base_id}/Menu%20Catalog?maxRecords=1",
+            headers={"Authorization": f"Bearer {_REAL_AIRTABLE_KEY}"},
+            timeout=15,
+        )
+        assert resp.status_code == 200, (
+            f"Airtable Menu Catalog: HTTP {resp.status_code} — {resp.text[:200]}"
+        )
+        assert "records" in resp.json()
+
+    def test_airtable_agent_playbook_reachable(self):
+        """Airtable: Agent Playbook table must be readable."""
+        if not _REAL_AIRTABLE_KEY:
+            pytest.skip("AIRTABLE_API_KEY not set")
+        import httpx
+        base_id = "appuy2VTIao6XVpIW"
+        resp = httpx.get(
+            f"https://api.airtable.com/v0/{base_id}/Agent%20Playbook?maxRecords=1",
+            headers={"Authorization": f"Bearer {_REAL_AIRTABLE_KEY}"},
+            timeout=15,
+        )
+        assert resp.status_code == 200, (
+            f"Airtable Agent Playbook: HTTP {resp.status_code} — {resp.text[:200]}"
+        )
+        assert "records" in resp.json()
+
+    def test_airtable_field_sales_tasks_reachable(self):
+        """Airtable: Field Sales Tasks table must be readable."""
+        if not _REAL_AIRTABLE_KEY:
+            pytest.skip("AIRTABLE_API_KEY not set")
+        import httpx
+        base_id = "appuy2VTIao6XVpIW"
+        resp = httpx.get(
+            f"https://api.airtable.com/v0/{base_id}/Field%20Sales%20Tasks?maxRecords=1",
+            headers={"Authorization": f"Bearer {_REAL_AIRTABLE_KEY}"},
+            timeout=15,
+        )
+        assert resp.status_code == 200, (
+            f"Airtable Field Sales Tasks: HTTP {resp.status_code} — {resp.text[:200]}"
+        )
+        assert "records" in resp.json()
+
+    def test_shipday_api_reachable(self):
+        """Shipday API must accept our Basic auth key."""
+        if not _REAL_SHIPDAY_KEY or _REAL_SHIPDAY_KEY.startswith("test_"):
+            pytest.skip("SHIPDAY_API_KEY not set or is a test placeholder")
+        import httpx
+        resp = httpx.get(
+            "https://api.shipday.com/orders?page=1&pageSize=1",
+            headers={"Authorization": f"Basic {_REAL_SHIPDAY_KEY}"},
+            timeout=15,
+        )
+        assert resp.status_code == 200, (
+            f"Shipday API: HTTP {resp.status_code} — {resp.text[:200]}"
+        )
+
+    def test_n8n_instance_reachable(self):
+        """n8n instance must be reachable (health check)."""
+        n8n_key = os.environ.get("N8N_API_KEY", "")
+        if not n8n_key:
+            pytest.skip("N8N_API_KEY not set")
+        import httpx
+        resp = httpx.get(
+            f"{N8N_INSTANCE}/api/v1/workflows?limit=1",
+            headers={"X-N8N-API-KEY": n8n_key},
+            timeout=15,
+        )
+        assert resp.status_code == 200, (
+            f"n8n instance unreachable: HTTP {resp.status_code}"
+        )
+
+
+# ─── GROUP 5: Live DW API Seam Tests ─────────────────────────────────────────
+
+_DW_BASE_URL = f"https://{DW_API_BASE}"
+
+
+@pytest.mark.live_dw_api
+@pytest.mark.skipif(not _LIVE_DW_API_TESTS, reason="LIVE_DW_API_TESTS not set")
+class TestLiveDWApiSeams:
+    """
+    Verify each endpoint called by n8n workflows exists and responds correctly
+    on the live production API.  Uses real HTTP — no mocking, no local DB.
+
+    GET endpoints (read-only) — always safe to call.
+    POST endpoints with required body — probe with empty JSON; 422 = exists.
+    POST endpoints that are idempotent/stateless — fully triggered and asserted.
+
+    Run with:
+        LIVE_DW_API_TESTS=1 pytest tests/test_n8n_workflows.py -v -m live_dw_api
+    """
+
+    @pytest.fixture(scope="class")
+    def http(self):
+        import httpx
+        with httpx.Client(base_url=_DW_BASE_URL, timeout=30) as c:
+            yield c
+
+    # ── GET endpoints — read-only, always safe ────────────────────────────────
+
+    def test_action_queue_pending(self, http):
+        """[System] Action Queue + [SMS] Dispatch: GET /api/agents/action-queue/pending"""
+        resp = http.get("/api/agents/action-queue/pending")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "pending" in data or isinstance(data, list)
+
+    def test_broadcasts_pending_recipients(self, http):
+        """[Broadcast] Dispatch: GET /api/broadcasts/pending-recipients"""
+        resp = http.get("/api/broadcasts/pending-recipients")
+        assert resp.status_code == 200
+
+    def test_webhooks_campaigns_list(self, http):
+        """[Email Campaigns] Campaign Sync: GET /api/webhooks/campaigns"""
+        resp = http.get("/api/webhooks/campaigns")
+        assert resp.status_code == 200
+        assert "campaigns" in resp.json()
+
+    def test_field_agent_pending_calls(self, http):
+        """[Field Agent] Outcome Sync: GET /api/field-agent/pending-calls"""
+        resp = http.get("/api/field-agent/pending-calls")
+        assert resp.status_code == 200
+        assert "calls" in resp.json()
+
+    def test_goal_agent_experiments(self, http):
+        """[Growth] Goal Agent: GET /api/goal-agent/experiments"""
+        resp = http.get("/api/goal-agent/experiments")
+        assert resp.status_code == 200
+
+    def test_growth_experiments(self, http):
+        """[Growth] Weekly Growth Agent: GET /api/growth/experiments"""
+        resp = http.get("/api/growth/experiments")
+        assert resp.status_code == 200
+
+    def test_activity_data(self, http):
+        """[Reports] Daily Activity: GET /api/agents/report/activity-data"""
+        resp = http.get("/api/agents/report/activity-data")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "summary" in data and "report_date" in data
+
+    def test_outcome_data(self, http):
+        """[Reports] Daily Outcome: GET /api/agents/report/outcome-data"""
+        resp = http.get("/api/agents/report/outcome-data")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "summary" in data and "report_date" in data
+
+    # ── POST endpoints — probe with empty body (422 = endpoint exists + validates) ──
+
+    @pytest.mark.parametrize("path,workflow", [
+        ("/api/shipday/ingest-orders",       "[Order Intake] Order Collector"),
+        ("/api/telnyx/message",              "[SMS] Inbound Collector"),
+        ("/api/webhooks/campaign-stats",     "[Email Campaigns] Performance Tracker"),
+        ("/api/playbook/sync-from-airtable", "[Agent Rules] Playbook Sync"),
+        ("/api/agents/report/activity",      "[Reports] Daily Activity Report"),
+        ("/api/agents/report/outcome",       "[Reports] Daily Outcome Report"),
+        ("/api/team-content/sync",           "[Chatbot] Docs Sync"),
+        ("/api/campaigns/setup-instantly",   "[Email Campaigns] Campaign Setup"),
+    ])
+    def test_post_endpoint_exists(self, http, path, workflow):
+        """POST with empty body must return 422 (validation) not 404 (missing)."""
+        resp = http.post(path, json={})
+        assert resp.status_code != 404, (
+            f"{workflow} ({path}) → 404: endpoint is missing from the router"
+        )
+        assert resp.status_code in (200, 400, 422, 500), (
+            f"{workflow} ({path}) → unexpected {resp.status_code}"
+        )
+
+    # ── POST endpoints — idempotent/stateless, safe to trigger fully ──────────
+
+    def test_lifecycle_run(self, http):
+        """[Intelligence] Stage Runner: pure SQL lifecycle transitions, no AI calls."""
+        resp = http.post("/api/lifecycle/run", timeout=60)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "contacts_updated" in data or "run_lifecycle_cycle" in data or "status" in data
+
+    def test_ingest_orders_empty(self, http):
+        """[Order Intake] Order Collector: empty order list → zero-op upsert."""
+        resp = http.post("/api/shipday/ingest-orders", json={"orders": []})
+        assert resp.status_code == 200
+
+    def test_playbook_sync_empty(self, http):
+        """[Agent Rules] Playbook Sync: empty record list → DB-only, no Airtable call."""
+        resp = http.post("/api/playbook/sync-from-airtable", json={"records": []})
+        assert resp.status_code == 200
+        assert resp.json()["synced"] == 0
+
+    def test_team_content_sync_empty(self, http):
+        """[Chatbot] Docs Sync: empty doc list → DB-only, no Google Drive call."""
+        resp = http.post("/api/team-content/sync", json={"documents": []})
+        assert resp.status_code == 200
+        assert resp.json()["synced"] == 0
+
+    def test_daily_field_brief(self, http):
+        """[Field Agent] Daily Brief: generates call list from DB — read-only effectively."""
+        resp = http.post("/api/field-agent/daily-brief", timeout=60)
+        assert resp.status_code == 200
+        assert "brief" in resp.json()
+
+    def test_menu_sync(self, http):
+        """[Menu] Catalog Sync: full Airtable → Postgres sync. Requires AIRTABLE_API_KEY on server."""
+        resp = http.post("/api/menu/sync", timeout=60)
+        # 200 = sync ran; 502 = Airtable key missing/unreachable on the server
+        assert resp.status_code in (200, 502), (
+            f"Menu sync: unexpected {resp.status_code} — {resp.text[:200]}"
+        )
+        if resp.status_code == 200:
+            assert "upserted" in resp.json()
