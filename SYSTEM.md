@@ -236,7 +236,7 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 | `contacts.py` | `/api/contacts` | `PATCH /{id}/priority`, `PATCH /{id}/notes` |
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |
 | `campaigns.py` | `/api/campaigns` | `GET /pending` (returns first/last name), `GET /active-contacts` (contacts with active campaign derived from lifecycle_segment via campaign_routing JOIN — for Instantly seed), `GET /active-contacts-stats` (diagnostic — filter exclusion counts + campaign distribution), `POST /log-push` (record Instantly push result), `GET /push-log` (diagnostic — filter by success, optional ?verify cross-checks against Instantly API), `POST /repair-push` (background: re-push leads that have campaign=null in Instantly), `POST /bulk-executed` (batch mark), `POST /{id}/executed`, `POST /bulk-push-to-instantly` (background: push all pending campaign_queue moves directly to Instantly, deduplicated by email), `GET /analytics`, `GET /templates`, `GET /templates/{name}`, `PUT /templates/{name}`, `POST /templates/{name}/rewrite`, `POST /setup-instantly` |
-| `sms.py` | `/api/telnyx` | `POST /message`, `POST /call`, `POST /field-agent-message` (renamed from `telnyx.py`) |
+| `sms.py` | `/api/telnyx` | `POST /message` (auto-creates contact + stores message for unknown inbound numbers so Observer has full context), `POST /call`, `POST /field-agent-message` (renamed from `telnyx.py`) |
 | `webhooks.py` | `/api/webhooks` | `POST /instantly` (Instantly email events), `POST /telnyx` (Telnyx inbound SMS push webhook), `POST /shipday` / `GET /shipday` (Shipday delivery status), `POST /sync-campaigns`, `GET /campaigns`, `POST /campaign-stats` |
 | `delivery.py` | `/api/delivery` | `POST /status` |
 | `playbook.py` | `/api/playbook` | `GET /rules`, `POST /rules`, `POST /sync-from-airtable` |
@@ -454,6 +454,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 - Inbound SMS collected via two mechanisms:
   - **Real-time**: `POST /api/webhooks/telnyx` — configure in Telnyx → Messaging Profiles → Webhooks → Inbound URL: `https://dabbahwala-latest.onrender.com/api/webhooks/telnyx`
   - **Polling fallback**: Telnyx Inbound Collector n8n workflow polls MDR every 30 min (`GET /v2/reports/messaging/message_detail_records`)
+- **Unknown inbound contacts**: `POST /api/telnyx/message` auto-creates the contact (phone, lifecycle=cold, source=Inbound) and stores the message body before firing the agent cycle — so Observer reads the actual SMS text and Advisor/Orchestrator can respond in context immediately
 - Historic SMS backfill: `[Telnyx — Evidence] SMS Historical Import` workflow (manual, one-shot; MDR retains ~90 days)
 - Call recordings polled every 30 min via `GET /v2/recordings`
 - Call transcripts stored with duration, transcript, AI summary
