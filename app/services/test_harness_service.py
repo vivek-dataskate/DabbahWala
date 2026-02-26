@@ -1342,7 +1342,6 @@ def _g11_orders(suite: TestSuite) -> None:
         return {"pending_campaign_moves": pending_count, "bulk_push_endpoint_ok": True}
     _run(suite, "campaigns_bulk_push_to_instantly_endpoint", G, campaigns_bulk_push_to_instantly_endpoint)
 
-
 # ─── GROUP 12: Reports ────────────────────────────────────────────────────────
 
 def _g12_reports(suite: TestSuite) -> None:
