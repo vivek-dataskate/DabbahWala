@@ -52,6 +52,23 @@ If the env var is empty, read it from that file and use it directly in API calls
 - Next available migration number: **006**
 - Use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for idempotency
 
+### Migration strategy — update existing files when possible
+
+The 5 consolidated files represent the full DB state. Prefer editing them over adding new numbered files:
+
+| Change type | File to update |
+|---|---|
+| New table, column, or index | `002_tables.sql` |
+| New or modified stored function | `003_functions.sql` |
+| New trigger or view | `004_triggers_views.sql` |
+| Seed / reference data change | `005_seed.sql` |
+| New enum value | `001_schema_types.sql` |
+
+Only create a new numbered file (e.g. `006_*.sql`) for changes that **cannot be safely merged** into an existing file:
+- One-time data backfills
+- Destructive `DROP` / `ALTER … DROP COLUMN` statements
+- Any change that must run exactly once and would be wrong to re-run
+
 ## Credentials & Integrations
 
 ### n8n
