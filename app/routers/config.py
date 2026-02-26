@@ -60,7 +60,7 @@ def _check_admin_secret(x_admin_secret: str | None) -> None:
 # ---------------------------------------------------------------------------
 # GET /api/credentials
 # ---------------------------------------------------------------------------
-@router.get("/")
+@router.get("")
 def get_credentials(x_admin_secret: str | None = Header(default=None)):
     """
     Return all runtime credentials as JSON.

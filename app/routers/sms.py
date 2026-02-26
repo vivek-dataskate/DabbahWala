@@ -55,6 +55,15 @@ def _resolve_email(phone: str | None, email: str | None) -> str:
     return row["email"]
 
 
+@router.get("/pending")
+def get_pending_sms():
+    """Return contacts with pending SMS sends (calls get_pending_sms DB function)."""
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT * FROM get_pending_sms()")
+        rows = [dict(r) for r in cur.fetchall()]
+    return {"pending": rows, "count": len(rows)}
+
+
 @router.post("/message", response_model=IdResponse)
 def store_message(payload: TelnyxMessageIn):
     # For inbound SMS, we have from_number (customer phone) but not email — resolve it

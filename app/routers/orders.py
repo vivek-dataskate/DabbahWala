@@ -554,6 +554,162 @@ def import_pipeline_status():
 
 # ─── Shipday Feedback Sync (was shipday_sync.py) ──────────────────────────────
 
+def _fetch_order_detail(api_key: str, shipday_order_id: str) -> Optional[dict]:
+    url = f"{SHIPDAY_API_BASE}/orders/{shipday_order_id}"
+    headers = {"Authorization": f"Basic {api_key}", "Content-Type": "application/json"}
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.get(url, headers=headers)
+            if resp.status_code == 404:
+                return None
+            resp.raise_for_status()
+            return resp.json()
+    except Exception as e:
+        logger.warning("Shipday order %s fetch failed: %s", shipday_order_id, e)
+        return None
+
+
+def _store_order_communications(shipday_order_id: str, order: dict, occurred_at: Optional[str]) -> list:
+    stored = []
+    with get_cursor(commit=True) as cur:
+        feedback = (order.get("feedback") or "").strip()
+        if feedback:
+            cur.execute(
+                "SELECT store_shipday_communication(%s, 'customer_feedback', %s, NULL, %s::jsonb, %s::timestamptz)",
+                (shipday_order_id, feedback, json.dumps({"raw_feedback": feedback}), occurred_at),
+            )
+            stored.append("customer_feedback")
+        instr = (order.get("deliveryInstruction") or "").strip()
+        if instr:
+            cur.execute(
+                "SELECT store_shipday_communication(%s, 'delivery_instruction', %s, NULL, %s::jsonb, %s::timestamptz)",
+                (shipday_order_id, instr, json.dumps({"raw_instruction": instr}), occurred_at),
+            )
+            stored.append("delivery_instruction")
+        pod = order.get("proofOfDelivery") or {}
+        pic_paths = pod.get("picturePaths") or []
+        sig_path = (pod.get("signaturePath") or "").strip()
+        all_urls = ([sig_path] if sig_path else []) + [p for p in pic_paths if p]
+        if all_urls:
+            cur.execute(
+                "SELECT store_shipday_communication(%s, 'proof_of_delivery', NULL, %s::text[], %s::jsonb, %s::timestamptz)",
+                (shipday_order_id, all_urls, json.dumps({"proof_of_delivery": pod}), occurred_at),
+            )
+            stored.append("proof_of_delivery")
+    return stored
+
+
+def _create_feedback_opportunity(contact_id: int, shipday_order_id: str, sentiment: str) -> None:
+    if sentiment == "negative":
+        priority, reason, suggested_msg = (
+            "hot",
+            "Customer left negative delivery feedback. Reach out with apology and recovery offer.",
+            "Hi! We saw your recent DabbahWala delivery didn't meet expectations — we're really sorry. Can we make it right?",
+        )
+    elif sentiment == "positive":
+        priority, reason, suggested_msg = (
+            "warm",
+            "Customer left positive feedback — strike while iron is hot with a re-order nudge.",
+            "Hi! So glad you enjoyed your DabbahWala delivery! We'd love to cook for you again.",
+        )
+    else:
+        return
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO opportunities (contact_id, action, priority, reason, suggested_message, confidence_score, status)
+                   VALUES (%s, 'send_sms', %s, %s, %s, %s, 'pending') ON CONFLICT DO NOTHING""",
+                (contact_id, priority, reason, suggested_msg, 0.85 if sentiment == "negative" else 0.70),
+            )
+    except Exception as e:
+        logger.warning("Failed to create feedback opportunity for contact %s: %s", contact_id, e)
+
+
+_feedback_sync_state: dict = {
+    "running": False, "started_at": None, "orders_checked": 0,
+    "orders_with_comms": 0, "feedback_positive": 0, "feedback_negative": 0,
+    "feedback_neutral": 0, "opportunities_created": 0, "errors": 0, "completed_at": None,
+}
+
+
+def _run_feedback_sync(days_back: int = 7, all_historical: bool = False) -> None:
+    global _feedback_sync_state
+    api_key = os.environ.get("SHIPDAY_API_KEY", "") or os.environ.get("SHIPDAY_KEY", "")
+    if not api_key:
+        logger.error("Feedback sync: SHIPDAY_API_KEY not set — aborting")
+        _feedback_sync_state["running"] = False
+        return
+    _feedback_sync_state.update({
+        "running": True, "started_at": datetime.now(timezone.utc).isoformat(),
+        "orders_checked": 0, "orders_with_comms": 0, "feedback_positive": 0,
+        "feedback_negative": 0, "feedback_neutral": 0, "opportunities_created": 0,
+        "errors": 0, "completed_at": None,
+    })
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days_back)
+    try:
+        with get_cursor(commit=False) as cur:
+            if all_historical:
+                cur.execute(
+                    """SELECT sor.shipday_order_id, sor.contact_id, sor.actual_delivery
+                       FROM shipday_orders_raw sor
+                       WHERE sor.shipday_status IN ('COMPLETED','DELIVERED') AND sor.contact_id IS NOT NULL
+                         AND NOT EXISTS (SELECT 1 FROM shipday_communications sc
+                                         WHERE sc.shipday_order_id=sor.shipday_order_id AND sc.comm_type='customer_feedback')
+                       ORDER BY sor.actual_delivery DESC NULLS LAST"""
+                )
+            else:
+                cur.execute(
+                    """SELECT sor.shipday_order_id, sor.contact_id, sor.actual_delivery
+                       FROM shipday_orders_raw sor
+                       WHERE sor.shipday_status IN ('COMPLETED','DELIVERED') AND sor.contact_id IS NOT NULL
+                         AND (sor.actual_delivery >= %s OR sor.synced_at >= %s)
+                         AND NOT EXISTS (SELECT 1 FROM shipday_communications sc
+                                         WHERE sc.shipday_order_id=sor.shipday_order_id AND sc.comm_type='customer_feedback')
+                       ORDER BY sor.actual_delivery DESC NULLS LAST""",
+                    (cutoff, cutoff),
+                )
+            pending = [dict(r) for r in cur.fetchall()]
+        for row in pending:
+            order_id = row["shipday_order_id"]
+            contact_id = row["contact_id"]
+            occurred_at = row["actual_delivery"].isoformat() if row["actual_delivery"] else None
+            try:
+                order = _fetch_order_detail(api_key, order_id)
+                _feedback_sync_state["orders_checked"] += 1
+                if not order:
+                    continue
+                stored = _store_order_communications(order_id, order, occurred_at)
+                if stored:
+                    _feedback_sync_state["orders_with_comms"] += 1
+                if "customer_feedback" in stored:
+                    with get_cursor(commit=False) as cur:
+                        cur.execute(
+                            "SELECT sentiment FROM shipday_communications WHERE shipday_order_id=%s AND comm_type='customer_feedback'",
+                            (order_id,),
+                        )
+                        sr = cur.fetchone()
+                    sentiment = sr["sentiment"] if sr else "neutral"
+                    if sentiment == "positive":
+                        _feedback_sync_state["feedback_positive"] += 1
+                    elif sentiment == "negative":
+                        _feedback_sync_state["feedback_negative"] += 1
+                    else:
+                        _feedback_sync_state["feedback_neutral"] += 1
+                    _create_feedback_opportunity(contact_id, order_id, sentiment)
+                    if sentiment in ("positive", "negative"):
+                        _feedback_sync_state["opportunities_created"] += 1
+                time.sleep(0.25)
+            except Exception as e:
+                _feedback_sync_state["errors"] += 1
+                logger.warning("Feedback sync: order %s failed: %s", order_id, e)
+    except Exception as e:
+        logger.error("Feedback sync crashed: %s", e, exc_info=True)
+        _feedback_sync_state["errors"] += 1
+    finally:
+        _feedback_sync_state["running"] = False
+        _feedback_sync_state["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+
 class FeedbackSyncRequest(BaseModel):
     days_back:          int  = 7
     run_in_background:  bool = True
@@ -574,8 +730,8 @@ async def sync_feedback(req: FeedbackSyncRequest, background_tasks: BackgroundTa
     Runs in the background by default — check /api/shipday/feedback-stats
     for progress and results.
     """
-    if _sync_state["running"]:
-        return {"status": "already_running", "state": _sync_state}
+    if _feedback_sync_state["running"]:
+        return {"status": "already_running", "state": _feedback_sync_state}
 
     if req.run_in_background:
         background_tasks.add_task(_run_feedback_sync, req.days_back, req.all_historical)
