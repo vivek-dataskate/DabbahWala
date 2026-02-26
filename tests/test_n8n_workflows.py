@@ -154,7 +154,145 @@ class TestConfigIntegrity:
         assert len(ids) == len(set(ids)), "Duplicate workflow IDs found in config.json"
 
 
-# ─── GROUP 2: Live n8n API (skipped without N8N_API_KEY) ─────────────────────
+# ─── GROUP 2: Per-workflow JSON Structure (always runs) ───────────────────────
+
+N8N_DIR = Path(__file__).parent.parent / "n8n"
+DW_API_BASE = "dabbahwala-latest.onrender.com"
+
+# Known external API domains — URLs on these hosts are not our DW API
+_EXTERNAL_DOMAINS = {
+    "api.instantly.ai",
+    "api.telnyx.com",
+    "api.airtable.com",
+    "api.shipday.com",
+    "api.anthropic.com",
+}
+
+# Build a flat list of (key, filename) pairs for parametrize
+_WORKFLOW_FILES = [
+    (key, meta["file"])
+    for key, meta in json.loads((CONFIG_PATH).read_text())["workflows"].items()
+    if not key.startswith("_")
+]
+
+
+@pytest.fixture(scope="module")
+def all_workflow_jsons():
+    """Load all 26 workflow JSON files once."""
+    result = {}
+    for key, fname in _WORKFLOW_FILES:
+        fpath = N8N_DIR / fname
+        assert fpath.exists(), f"Workflow file missing: {fname}"
+        result[key] = json.loads(fpath.read_text())
+    return result
+
+
+class TestWorkflowJsonStructure:
+    """
+    Validate each of the 26 n8n workflow JSON files on disk.
+    Tests run without any network calls.
+    """
+
+    @pytest.mark.parametrize("key,fname", _WORKFLOW_FILES)
+    def test_file_is_valid_json(self, key, fname):
+        """Each workflow file must parse as valid JSON."""
+        fpath = N8N_DIR / fname
+        assert fpath.exists(), f"File missing: {fname}"
+        data = json.loads(fpath.read_text())
+        assert "nodes" in data, f"{fname} has no 'nodes' key"
+
+    @pytest.mark.parametrize("key,fname", _WORKFLOW_FILES)
+    def test_has_exactly_one_schedule_trigger(self, key, fname, all_workflow_jsons):
+        """Every active workflow must have exactly one scheduleTrigger node."""
+        wf = all_workflow_jsons[key]
+        triggers = [
+            n for n in wf["nodes"]
+            if n.get("type") == "n8n-nodes-base.scheduleTrigger"
+        ]
+        assert len(triggers) == 1, (
+            f"{fname}: expected 1 scheduleTrigger, found {len(triggers)}"
+        )
+
+    @pytest.mark.parametrize("key,fname", _WORKFLOW_FILES)
+    def test_has_at_least_one_http_node(self, key, fname, all_workflow_jsons):
+        """Every workflow must make at least one HTTP request."""
+        wf = all_workflow_jsons[key]
+        http_nodes = [
+            n for n in wf["nodes"]
+            if n.get("type") == "n8n-nodes-base.httpRequest"
+        ]
+        assert len(http_nodes) >= 1, f"{fname}: no HTTP request nodes found"
+
+    @pytest.mark.parametrize("key,fname", _WORKFLOW_FILES)
+    def test_no_env_variables_used(self, key, fname):
+        """No workflow may use $env.ANYTHING — all config must be hardcoded."""
+        raw = (N8N_DIR / fname).read_text()
+        env_uses = [line.strip() for line in raw.splitlines() if "$env." in line]
+        assert not env_uses, (
+            f"{fname} uses $env variables (not supported on this instance): {env_uses[:3]}"
+        )
+
+    @pytest.mark.parametrize("key,fname", _WORKFLOW_FILES)
+    def test_dw_api_calls_use_correct_base_url(self, key, fname, all_workflow_jsons):
+        """HTTP nodes calling our API must use dabbahwala-latest.onrender.com."""
+        wf = all_workflow_jsons[key]
+        bad_nodes = []
+        for n in wf["nodes"]:
+            if n.get("type") != "n8n-nodes-base.httpRequest":
+                continue
+            url = n.get("parameters", {}).get("url", "")
+            # Skip calls to known external services (they legitimately use /api/ paths)
+            if any(d in url for d in _EXTERNAL_DOMAINS):
+                continue
+            # Check that our /api/ calls go to the right base URL
+            if "/api/" in url and DW_API_BASE not in url:
+                bad_nodes.append(f"{n['name']}: {url[:80]}")
+        assert not bad_nodes, (
+            f"{fname}: HTTP nodes with /api/ path not pointing to {DW_API_BASE}:\n"
+            + "\n".join(bad_nodes)
+        )
+
+    @pytest.mark.parametrize("key,fname", _WORKFLOW_FILES)
+    def test_has_credentials_bootstrap_node(self, key, fname, all_workflow_jsons):
+        """
+        Workflows that call external APIs must use a 'Get Credentials' node with
+        httpHeaderAuth (DW Admin Secret) to bootstrap API keys at runtime.
+
+        Workflows that only call our DW API (dabbahwala-latest.onrender.com) are
+        exempt — they don't need external credentials.
+        """
+        wf = all_workflow_jsons[key]
+        # Check if any HTTP nodes make calls to external APIs (not our DW API)
+        external_http_nodes = [
+            n for n in wf["nodes"]
+            if n.get("type") == "n8n-nodes-base.httpRequest"
+            and n.get("parameters", {}).get("url", "")
+            and DW_API_BASE not in n.get("parameters", {}).get("url", "")
+        ]
+        if not external_http_nodes:
+            return  # Only calls our DW API — credential bootstrap not required
+
+        cred_nodes = [
+            n for n in wf["nodes"]
+            if n.get("type") == "n8n-nodes-base.httpRequest"
+            and "httpHeaderAuth" in n.get("credentials", {})
+        ]
+        assert len(cred_nodes) >= 1, (
+            f"{fname}: calls external APIs {[n['name'] for n in external_http_nodes]} "
+            "but has no httpHeaderAuth credentials node — "
+            "needs 'Get Credentials' bootstrap node with DW Admin Secret"
+        )
+
+    @pytest.mark.parametrize("key,fname", _WORKFLOW_FILES)
+    def test_node_names_are_unique_within_workflow(self, key, fname, all_workflow_jsons):
+        """Node names must be unique within a workflow to avoid confusing expression refs."""
+        wf = all_workflow_jsons[key]
+        names = [n["name"] for n in wf["nodes"]]
+        dupes = [n for n in names if names.count(n) > 1]
+        assert not dupes, f"{fname}: duplicate node names: {list(set(dupes))}"
+
+
+# ─── GROUP 3: Live n8n API (skipped without N8N_API_KEY) ─────────────────────
 
 pytestmark_live = pytest.mark.n8n_live
 
@@ -241,10 +379,11 @@ class TestSMSSeams:
     """[SMS] workflows call: /api/telnyx/message, /api/agents/action-queue/pending."""
 
     def test_record_message_endpoint(self, client):
-        cur = _mk_cur(fetchone={"id": 1})
+        # Provide contact_email so _resolve_email returns immediately without a DB call
+        cur = _mk_cur(fetchone={"store_telnyx_message": 42})
         with patch("app.routers.sms.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
             resp = client.post("/api/telnyx/message", json={
-                "contact_phone": "+12145550001",
+                "contact_email": "test@example.com",
                 "direction": "inbound",
                 "from_number": "+18444322224",
                 "to_number": "+12145550001",
@@ -334,10 +473,9 @@ class TestFieldAgentSeams:
         assert "calls" in resp.json()
 
     def test_daily_brief_endpoint(self, client):
-        cur = _mk_cur(rows=[])
-        with patch("app.routers.field_agent.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)), \
-             patch("app.routers.field_agent.create_field_sales_task", return_value=None), \
-             patch("app.routers.field_agent._claude", return_value=MagicMock()):
+        # Return empty contact list from the stored proc — endpoint short-circuits early
+        cur = _mk_cur(fetchone={"get_top_contacts_to_call": []})
+        with patch("app.routers.field_agent.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
             resp = client.post("/api/field-agent/daily-brief")
         assert resp.status_code == 200
         assert "brief" in resp.json()
@@ -360,11 +498,13 @@ class TestMenuSeams:
 
     def test_menu_sync_endpoint(self, client):
         cur = _mk_cur(fetchone=None, rows=[])
-        with patch("app.routers.menu.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
-            resp = client.post("/api/menu/sync", json={"items": []})
+        # Mock _airtable_list_all so no real Airtable HTTP request is made
+        with patch("app.routers.menu._airtable_list_all", return_value=[]), \
+             patch("app.routers.menu.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/menu/sync")
         assert resp.status_code == 200
         data = resp.json()
-        assert "synced" in data
+        assert "upserted" in data
 
 
 class TestGrowthSeams:
@@ -393,15 +533,13 @@ class TestReportSeams:
 
     def test_report_activity_no_key(self, client, monkeypatch):
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-        resp = client.post("/api/agents/report/activity")
+        resp = client.post("/api/agents/report/activity", json={})
         assert resp.status_code in (200, 500)
 
     def test_report_activity_data_endpoint(self, client):
-        cur = _mk_cur(fetchone={"orders_today": 10, "revenue_today": 99.0,
-                                "new_contacts": 3, "emails_sent": 50,
-                                "email_opens": 20, "sms_sent": 5,
-                                "lifecycle_transitions": 2, "opportunities_created": 1})
-        with patch("app.routers.agents.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
+        # _fetch_activity_data makes many sequential DB calls — patch it directly
+        with patch("app.routers.agents._fetch_activity_data",
+                   return_value=({"event_counts": {}, "actions_queued": 0}, [])):
             resp = client.get("/api/agents/report/activity-data")
         assert resp.status_code == 200
 
@@ -417,7 +555,12 @@ class TestChatbotSeams:
         assert resp.json()["synced"] == 0
 
     def test_chatbot_reindex_endpoint(self, client):
-        with patch("app.routers.chatbot.sync_docs_and_reindex", return_value={"status": "ok", "total_chunks": 0, "files_indexed": [], "docs_changed": 0, "chips_rebuilding": False}):
+        with patch("app.routers.chatbot._load_md_files", return_value=[{"source": "test.md"}]), \
+             patch("app.routers.chatbot._compute_docs_hash", return_value="abc123"), \
+             patch("app.routers.chatbot._get_stored_docs_hash", return_value="abc123"), \
+             patch("app.routers.chatbot._do_index", return_value=5), \
+             patch("app.routers.chatbot._save_last_indexed_at"), \
+             patch("app.routers.chatbot._save_docs_hash"):
             resp = client.post("/api/chatbot/reindex")
         assert resp.status_code == 200
 
@@ -434,7 +577,8 @@ class TestSystemSeams:
 
     def test_feature_tests_run_endpoint(self, client):
         """POST /api/test/run — verify the test harness HTTP endpoint exists."""
-        with patch("app.routers.test_harness.run_full_suite", return_value=MagicMock(
+        # run_full_suite is imported lazily inside the endpoint, so patch at source
+        with patch("app.services.test_harness_service.run_full_suite", return_value=MagicMock(
             to_dict=lambda: {"run_id": "test", "summary": {}, "groups": []},
         )):
             resp = client.post("/api/test/run")
