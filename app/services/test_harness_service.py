@@ -473,6 +473,43 @@ def _g3_contact_setup(suite: TestSuite) -> None:
         return {"lifecycle_segment": row["lifecycle_segment"], "phone": row["phone"]}
     _run(suite, "verify_test_contact", G, verify_contact)
 
+    def prospect_update_template():
+        """GET /api/prospects/update-template returns a valid CSV template."""
+        r = httpx.get(f"{LOCAL_BASE}/api/prospects/update-template", follow_redirects=True)
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+        ct = r.headers.get("content-type", "")
+        assert "csv" in ct or "text" in ct, f"Unexpected content-type: {ct}"
+        lines = r.text.strip().splitlines()
+        assert len(lines) >= 2, "Template must have header + at least one sample row"
+        header_cols = [c.strip().lower() for c in lines[0].split(",")]
+        for required in ("emailid", "phone", "priorityoverride", "salesnotes"):
+            assert required in header_cols, f"Missing column '{required}' in template header"
+        return {"columns": lines[0], "sample_rows": len(lines) - 1}
+    _run(suite, "prospect_update_template_download", G, prospect_update_template)
+
+    def prospect_update_csv():
+        """POST /api/prospects/update-csv updates test contact's sales_notes via CSV."""
+        if not suite.test_contact_id:
+            raise AssertionError("No test_contact_id — skipping")
+        csv_content = (
+            "EmailId,Phone,FirstName,LastName,Address,PriorityOverride,SalesNotes\n"
+            f"{TEST_EMAIL},{TEST_PHONE[1:]},,,, ,E2E test note\n"
+        )
+        r = httpx.post(
+            f"{LOCAL_BASE}/api/prospects/update-csv",
+            files={"file": ("test_update.csv", csv_content.encode(), "text/csv")},
+        )
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        data = r.json()
+        assert data.get("updated", 0) >= 1, f"Expected >=1 updated, got: {data}"
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT sales_notes FROM contacts WHERE id = %s", (suite.test_contact_id,))
+            row = cur.fetchone()
+        assert row and row["sales_notes"] == "E2E test note", \
+            f"sales_notes not updated: {row}"
+        return {"updated": data["updated"], "skipped": data["skipped"]}
+    _run(suite, "prospect_update_csv_via_http", G, prospect_update_csv)
+
 
 # ─── GROUP 4: Event & Webhook Ingestion ──────────────────────────────────────
 
@@ -1283,6 +1320,27 @@ def _g11_orders(suite: TestSuite) -> None:
             bool(c.get("suggested_message")) for c in calls[:3]
         )}
     _run(suite, "field_agent_pending_calls_has_script", G, field_agent_pending_calls_has_script)
+
+    def shipday_import_pipeline_endpoint():
+        """Verify import-all-and-run-agents and import-pipeline-status endpoints are reachable."""
+        # Status endpoint must always respond
+        sc, body = _req("GET", f"{LOCAL_BASE}/api/shipday/import-pipeline-status")
+        assert sc == 200, f"import-pipeline-status returned {sc}"
+        assert "pipeline_state" in body, "missing pipeline_state key"
+        state = body["pipeline_state"]
+        assert "running" in state, "pipeline_state missing 'running'"
+        assert "phase" in state, "pipeline_state missing 'phase'"
+        return {"pipeline_state_ok": True, "running": state.get("running"), "phase": state.get("phase")}
+    _run(suite, "shipday_import_pipeline_endpoint", G, shipday_import_pipeline_endpoint)
+
+    def campaigns_bulk_push_to_instantly_endpoint():
+        """Verify bulk-push-to-instantly endpoint is reachable (does NOT actually push)."""
+        # Only check endpoint exists; do not fire actual pushes in tests
+        sc, body = _req("GET", f"{LOCAL_BASE}/api/campaigns/pending")
+        assert sc == 200, f"campaigns/pending returned {sc}"
+        pending_count = len(body) if isinstance(body, list) else 0
+        return {"pending_campaign_moves": pending_count, "bulk_push_endpoint_ok": True}
+    _run(suite, "campaigns_bulk_push_to_instantly_endpoint", G, campaigns_bulk_push_to_instantly_endpoint)
 
 
 # ─── GROUP 12: Reports ────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from app.config import ANTHROPIC_API_KEY, INSTANTLY_API_KEY
@@ -131,11 +131,172 @@ def get_active_contacts():
     return [dict(r) for r in rows]
 
 
+@router.get("/active-contacts-stats")
+def get_active_contacts_stats():
+    """Diagnostic: show how many contacts are excluded by each filter."""
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT
+                COUNT(*)                                                          AS total_contacts,
+                COUNT(*) FILTER (WHERE email IS NULL)                             AS no_email,
+                COUNT(*) FILTER (WHERE email LIKE '%%@app.placeholder.local')     AS placeholder_email,
+                COUNT(*) FILTER (WHERE lifecycle_segment = 'optout')              AS optout,
+                COUNT(*) FILTER (WHERE current_campaign IS NULL
+                                   AND email IS NOT NULL
+                                   AND email NOT LIKE '%%@app.placeholder.local'
+                                   AND lifecycle_segment != 'optout')             AS no_campaign,
+                COUNT(*) FILTER (WHERE current_campaign = 'APP_TO_DIRECT'
+                                   AND email IS NOT NULL
+                                   AND email NOT LIKE '%%@app.placeholder.local'
+                                   AND lifecycle_segment != 'optout')             AS app_to_direct,
+                COUNT(*) FILTER (WHERE current_campaign IS NOT NULL
+                                   AND current_campaign != 'APP_TO_DIRECT'
+                                   AND email IS NOT NULL
+                                   AND email NOT LIKE '%%@app.placeholder.local'
+                                   AND lifecycle_segment != 'optout')             AS returned_by_api
+            FROM contacts
+        """)
+        row = dict(cur.fetchone())
+
+        # Campaign distribution for contacts that pass all filters
+        cur.execute("""
+            SELECT current_campaign, COUNT(*) AS cnt
+            FROM contacts
+            WHERE current_campaign IS NOT NULL
+              AND current_campaign != 'APP_TO_DIRECT'
+              AND email IS NOT NULL
+              AND email NOT LIKE '%%@app.placeholder.local'
+              AND lifecycle_segment != 'optout'
+            GROUP BY current_campaign
+            ORDER BY cnt DESC
+        """)
+        campaign_dist = [dict(r) for r in cur.fetchall()]
+
+    return {**row, "campaign_distribution": campaign_dist}
+
+
 @router.post("/{queue_id}/executed")
 def mark_executed(queue_id: int):
     with get_cursor() as cur:
         cur.execute("SELECT mark_campaign_executed(%s)", (queue_id,))
         return {"status": "ok"}
+
+
+@router.post("/bulk-push-to-instantly")
+def bulk_push_to_instantly(background_tasks: BackgroundTasks, batch_size: int = 5, delay_ms: int = 2000):
+    """
+    Directly push all pending campaign_queue entries to Instantly.
+    Runs in background — poll /api/campaigns/push-log for progress.
+    Skips contacts with placeholder emails or APP_TO_DIRECT campaign.
+    """
+    if not INSTANTLY_API_KEY:
+        raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
+
+    with get_cursor(commit=False) as cur:
+        cur.execute("SELECT count(*) as cnt FROM campaign_queue WHERE status = 'pending'")
+        pending_count = cur.fetchone()["cnt"]
+
+    background_tasks.add_task(_run_bulk_push, batch_size, delay_ms)
+    return {"status": "started", "pending_moves": pending_count, "batch_size": batch_size}
+
+
+def _run_bulk_push(batch_size: int, delay_ms: int) -> None:
+    """Background: push all pending campaign moves to Instantly in batches."""
+    import time
+    headers = {
+        "Authorization": f"Bearer {INSTANTLY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    pushed = 0
+    skipped = 0
+    errors = 0
+
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT cq.id as queue_id, c.email, c.first_name, c.last_name,
+                   cq.to_campaign, cr.instantly_campaign_id
+            FROM campaign_queue cq
+            JOIN contacts c ON c.id = cq.contact_id
+            LEFT JOIN campaign_routing cr ON cr.lifecycle_segment = c.lifecycle_segment
+            WHERE cq.status = 'pending'
+              AND c.email IS NOT NULL
+              AND c.email NOT LIKE '%@app.placeholder.local'
+              AND cq.to_campaign != 'APP_TO_DIRECT'
+            ORDER BY cq.created_at
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+
+    logger.info("bulk_push_to_instantly: %d eligible moves to process", len(rows))
+
+    seen_emails = set()
+    for row in rows:
+        email = (row.get("email") or "").lower()
+        campaign_id = row.get("instantly_campaign_id")
+        queue_id = row["queue_id"]
+
+        if email in seen_emails:
+            # Mark duplicate as executed without pushing
+            with get_cursor() as cur:
+                cur.execute(
+                    "UPDATE campaign_queue SET status='executed', executed_at=now() WHERE id=%s",
+                    (queue_id,),
+                )
+            skipped += 1
+            continue
+        seen_emails.add(email)
+
+        if not campaign_id:
+            skipped += 1
+            _log_push(queue_id, row.get("email"), row.get("to_campaign"), False, None, "No Instantly campaign_id for lifecycle segment")
+            continue
+
+        payload = {
+            "email": row.get("email"),
+            "first_name": row.get("first_name") or "",
+            "last_name": row.get("last_name") or "",
+            "campaign_id": campaign_id,
+        }
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.post(
+                    "https://api.instantly.ai/api/v2/leads",
+                    headers=headers,
+                    json=payload,
+                )
+            success = resp.status_code < 400
+            _log_push(queue_id, row.get("email"), row.get("to_campaign"), success, resp.status_code, None if success else resp.text[:500])
+            if success:
+                with get_cursor() as cur:
+                    cur.execute(
+                        "UPDATE campaign_queue SET status='executed', executed_at=now() WHERE id=%s",
+                        (queue_id,),
+                    )
+                pushed += 1
+            else:
+                errors += 1
+        except Exception as e:
+            errors += 1
+            _log_push(queue_id, row.get("email"), row.get("to_campaign"), False, None, str(e)[:200])
+
+        if pushed % batch_size == 0 and pushed > 0:
+            time.sleep(delay_ms / 1000)
+
+    logger.info("bulk_push_to_instantly done: pushed=%d skipped=%d errors=%d", pushed, skipped, errors)
+
+
+def _log_push(queue_id, email, to_campaign, success, status_code, error_message):
+    try:
+        with get_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO campaign_push_log
+                    (queue_id, email, to_campaign, success, status_code, error_message)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (queue_id, email, to_campaign, success, status_code, error_message),
+            )
+    except Exception:
+        pass
 
 
 # ── Campaign email template editor ─────────────────────────────────────────────
