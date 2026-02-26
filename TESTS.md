@@ -7,36 +7,36 @@ Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
 
 | File | Router Covered | Tests |
 |------|----------------|-------|
-| `test_agents.py` | `agents.py` | 18 — cycle run, report data, action queue CRUD, goals, run-all-lapsed, run-all, activity/outcome reports, do-not-contact |
+| `test_agents.py` | `agents.py` | 26 — cycle run, report data, action queue CRUD, goals, run-all-lapsed, run-all, activity/outcome reports, do-not-contact, _fetch_playbook_rules, _filter_playbook, _fetch_contact 404 |
 | `test_auth.py` | `auth.py` | 26 — session create/decode/tamper/expire, login, Google OAuth redirect, callback, auth/me, logout |
 | `test_broadcasts.py` | `broadcasts.py` | 19 — create, delay-alert, queue, list, pending-recipients, recipients sent/failed, get job, validation |
-| `test_campaigns.py` | `campaigns.py` | 23 — pending, log-push, push-log, bulk-executed, active-contacts, stats, analytics, templates CRUD, rewrite (Claude), bulk-push, repair-push |
-| `test_chatbot.py` | `chatbot.py` | 8 — ask, empty question, no key, history, suggest, reindex |
+| `test_campaigns.py` | `campaigns.py` | 35 — pending, log-push, push-log, bulk-executed, active-contacts, stats, analytics, templates CRUD, rewrite (Claude), bulk-push, repair-push, push_lead_to_instantly, _get_routing_rows/row, analytics error handling |
+| `test_chatbot.py` | `chatbot.py` | 24 — ask, empty question, no key, history, suggest, reindex, _split_chunks, _compute_docs_hash, _last_indexed_at, _relevant_chunks, _lookup_canned, _find_cached_answer |
 | `test_competitor_agent.py` | `competitor_agent.py` | 5 — run no key, run mocked, list runs, list experiments |
 | `test_contacts.py` | `contacts.py` | 4 — priority high/do_not_contact, invalid priority, update notes |
-| `test_daily_orders.py` | `daily_orders.py` | 12 — process CSV, empty CSV, new contacts, phone match, skip dups, download CSV, summary |
+| `test_daily_orders.py` | `daily_orders.py` | 27 — process CSV, empty CSV, new contacts, phone match, skip dups, download CSV, summary, normalize_phone/name/dish, _parse_delivery_slot |
 | `test_delivery.py` | `delivery.py` | 8 — record by email/phone, neither, unknown phone, stored proc args, missing status, proc 404 |
 | `test_events.py` | `events.py` | 4 — ingest with email/phone, no contact, missing event_type |
 | `test_field_agent.py` | `field_agent.py` | 8 — analyze-call 404/success, daily-brief empty/success, reviews, scorecard, pending-calls |
 | `test_goal_agent.py` | `goal_agent.py` | 18 — hypothesize, experiment, measure, harvest, run (all phases), experiments, signals, runs |
 | `test_growth_agent.py` | `growth_agent.py` | 14 — run-cycle launch/skip (small cohort/empty design), measure, experiments, insights, baseline |
-| `test_intelligence.py` | `intelligence.py` | 14 — run-cycle 5 phases, pending-actions, ingest-instantly-events various scenarios |
+| `test_intelligence.py` | `intelligence.py` | 22 — run-cycle 5 phases, pending-actions, ingest-instantly-events, _phase_collect, _phase_profile, _phase_signal, _phase_dispatch |
 | `test_lifecycle.py` | `lifecycle.py` | 3 — run returns counts, zero contacts, DB error |
-| `test_menu.py` | `menu.py` | 7 — active/inactive items, history, sync new/update/Airtable error |
+| `test_menu.py` | `menu.py` | 19 — active/inactive items, history 404/empty, sync new/update/discard/error, _to_airtable_fields, _from_airtable_record |
 | `test_n8n_workflows.py` | n8n config + seams | 294 — config integrity (26 expected workflows), JSON structure (31 files), Python API seams, live n8n (62 skipped w/o key) |
 | `test_opportunities.py` | `opportunities.py` | 9 — detect all 4 types, create, pending, dispatched, outcome |
-| `test_orders.py` | `orders.py` | 22 — ingest-orders, sync-status, top-calls, import pipeline, sync-feedback, feedback-stats |
+| `test_orders.py` | `orders.py` | 29 — ingest-orders, sync-status, top-calls, import pipeline, sync-feedback, feedback-stats, _sync_one_order (JSON/dict/None), run-migration 404, pipeline-status |
 | `test_playbook.py` | `playbook.py` | 11 — list rules, for-prompt, create, update, delete, airtable sync |
-| `test_prospects.py` | `prospects.py` | 5 — template, update-template, add prospect, add duplicate, missing name |
-| `test_query.py` | `query.py` | 9 — categories, pipeline_snapshot, daily_summary, customer_lookup, execute-opportunity |
+| `test_prospects.py` | `prospects.py` | 16 — template, update-template, add prospect, add duplicate, missing name, upload-csv (add/update/skip), update-csv (update/skip/invalid) |
+| `test_query.py` | `query.py` | 49 — all 20 category handlers, tone endpoint, customer_lookup (phone/name/multiple), communication_history, ground_team_notes, ad_copies, submit_input, team_notes, sms/email performance, activity/outcome report, broadcast_history, free_form no-key, pipeline_snapshot |
 | `test_reports.py` | `reports.py` | 5 — get existing, get missing→404, generate, invalid date |
-| `test_schedules.py` | `schedules.py` | 7 — auth required, list (mocked n8n), update interval/cron/invalid |
+| `test_schedules.py` | `schedules.py` | 22 — auth required, list (mocked n8n), update interval/cron/invalid, _parse_schedule (all fields), _build_interval (all fields) |
 | `test_shipday_sync.py` | `shipday_sync.py` / `orders.py` | 29 — classify_sentiment, fetch/store communications, feedback sync endpoint/stats, run_feedback_sync |
-| `test_sms.py` | `sms.py` | 12 — inbound/outbound message, auto-create contact, delivery staff skip, call, field-agent message, pending |
+| `test_sms.py` | `sms.py` | 23 — inbound/outbound message, auto-create contact, delivery staff skip, call, field-agent message, pending, _resolve_email (email/phone/404/400), contact-not-found in stored proc |
 | `test_team_content.py` | `team_content.py` | 9 — sync new/existing/empty, submit, browse, search |
 | `test_webhooks.py` | `webhooks.py` | 25 — list campaigns, campaign-stats, Instantly event/unknown, Telnyx inbound, Shipday auth/delivered/failed/ping |
 
-**Total unit tests: 628 passing, 62 skipped (live API — activate with env vars), 49% code coverage**
+**Total unit tests: 773 passing, 62 skipped (live API — activate with env vars), 62% code coverage**
 
 To run with live API tests:
 ```bash
