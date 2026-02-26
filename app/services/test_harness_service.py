@@ -917,7 +917,7 @@ def _g8_instantly(suite: TestSuite) -> None:
         for name in ["instantly_campaigns_list", "instantly_all_5_campaigns",
                      "instantly_lead_add", "instantly_lead_verify",
                      "instantly_analytics", "instantly_lead_remove",
-                     "instantly_campaign_sync_endpoint"]:
+                     "instantly_campaign_routing_list"]:
             _skip(suite, name, G, "INSTANTLY_API_KEY not set")
         return
 
@@ -1000,21 +1000,15 @@ def _g8_instantly(suite: TestSuite) -> None:
         return {"status": sc, "campaign_id": cid}
     _run(suite, "instantly_analytics", G, analytics)
 
-    def campaign_sync_endpoint():
-        """Verify the /api/webhooks/sync-campaigns endpoint accepts campaign data."""
-        sc, body = _local("POST", "/api/webhooks/sync-campaigns", json_body={
-            "campaigns": [
-                {
-                    "id": "test-campaign-id-001",
-                    "name": "DW-NurtureSlow-ColdContacts",
-                    "status": "active",
-                }
-            ]
-        })
-        # 200 or 422 (validation) both indicate the endpoint exists
-        assert sc in (200, 201, 422), f"sync-campaigns returned {sc}: {body}"
-        return {"status": sc}
-    _run(suite, "instantly_campaign_sync_endpoint", G, campaign_sync_endpoint)
+    def campaign_routing_list():
+        """Verify /api/webhooks/campaigns returns campaigns from campaign_routing (single source of truth)."""
+        sc, body = _local("GET", "/api/webhooks/campaigns")
+        assert sc == 200, f"GET /api/webhooks/campaigns returned {sc}: {body}"
+        campaigns = (body or {}).get("campaigns", [])
+        assert len(campaigns) > 0, "campaign_routing returned no campaigns"
+        assert all(c.get("campaign_id") for c in campaigns), "Some campaigns missing instantly_id"
+        return {"status": sc, "campaign_count": len(campaigns)}
+    _run(suite, "instantly_campaign_routing_list", G, campaign_routing_list)
 
     def lead_remove():
         """Cleanup: remove test email from Instantly campaign."""

@@ -111,7 +111,11 @@ def get_push_log(limit: int = 100, success: Optional[bool] = None, verify: bool 
                     data = r.json()
                     lead = data[0] if isinstance(data, list) and data else data
                     actual_campaign = lead.get("campaign")
-                    expected_campaign = (_CAMPAIGN_META.get(row.get("to_campaign") or "", {}) or {}).get("instantly_id")
+                    try:
+                    rr = _get_routing_row(row.get("to_campaign") or "")
+                    expected_campaign = rr.get("instantly_campaign_id")
+                except Exception:
+                    expected_campaign = None
                     row["instantly_found"] = True
                     row["instantly_campaign"] = actual_campaign
                     row["instantly_campaign_match"] = (actual_campaign == expected_campaign) if expected_campaign else None
@@ -137,7 +141,7 @@ def repair_push(background_tasks: BackgroundTasks, hours: int = 24):
     Re-push leads that were previously logged as successful but landed in
     Instantly with campaign=null (caused by stale campaign_routing IDs).
     Pulls distinct email+campaign pairs from push_log within the last N hours
-    and re-posts each to Instantly using _CAMPAIGN_META for the correct campaign ID.
+    and re-posts each to Instantly using campaign_routing for the correct campaign ID.
     """
     if not INSTANTLY_API_KEY:
         raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
@@ -161,7 +165,7 @@ def repair_push(background_tasks: BackgroundTasks, hours: int = 24):
 
 
 def _run_repair_push(rows: list[dict]) -> None:
-    """Background: re-push leads to Instantly using correct campaign IDs from _CAMPAIGN_META."""
+    """Background: re-push leads to Instantly using correct campaign IDs from campaign_routing."""
     import time
     headers = {
         "Authorization": f"Bearer {INSTANTLY_API_KEY}",
@@ -173,15 +177,19 @@ def _run_repair_push(rows: list[dict]) -> None:
 
     for row in rows:
         campaign_name = row.get("to_campaign") or ""
-        meta = _CAMPAIGN_META.get(campaign_name)
-        if not meta:
+        try:
+            rr = _get_routing_row(campaign_name)
+            instantly_id = rr.get("instantly_campaign_id")
+        except Exception:
+            instantly_id = None
+        if not instantly_id:
             skipped += 1
             continue
         payload = {
             "email": row["email"],
             "first_name": row.get("first_name") or "",
             "last_name": row.get("last_name") or "",
-            "campaign_id": meta["instantly_id"],
+            "campaign_id": instantly_id,
         }
         try:
             with httpx.Client(timeout=15.0) as client:
@@ -217,7 +225,7 @@ def mark_bulk_executed(payload: BulkExecutedRequest):
 
 @router.get("/active-contacts")
 def get_active_contacts():
-    """Return all contacts with a current campaign — used for one-time Instantly bulk seed."""
+    """Return all contacts with an active campaign assignment (derived from lifecycle_segment)."""
     with get_cursor(commit=False) as cur:
         cur.execute("""
             SELECT c.id AS contact_id,
@@ -225,13 +233,14 @@ def get_active_contacts():
                    c.first_name,
                    c.last_name,
                    c.phone,
-                   c.current_campaign
+                   cr.default_campaign AS current_campaign,
+                   cr.instantly_campaign_id
             FROM contacts c
-            WHERE c.current_campaign IS NOT NULL
-              AND c.current_campaign != 'APP_TO_DIRECT'
+            JOIN campaign_routing cr ON cr.lifecycle_segment = c.lifecycle_segment
+            WHERE cr.instantly_campaign_id IS NOT NULL
               AND c.email IS NOT NULL
               AND c.email NOT LIKE '%@app.placeholder.local'
-              AND c.lifecycle_segment != 'optout'
+              AND c.lifecycle_segment NOT IN ('optout', 'cooling')
             ORDER BY c.id
         """)
         rows = cur.fetchall()
@@ -245,37 +254,27 @@ def get_active_contacts_stats():
     with get_cursor(commit=False) as cur:
         cur.execute("""
             SELECT
-                COUNT(*)                                                          AS total_contacts,
-                COUNT(*) FILTER (WHERE email IS NULL)                             AS no_email,
-                COUNT(*) FILTER (WHERE email LIKE '%%@app.placeholder.local')     AS placeholder_email,
-                COUNT(*) FILTER (WHERE lifecycle_segment = 'optout')              AS optout,
-                COUNT(*) FILTER (WHERE current_campaign IS NULL
+                COUNT(*)                                                              AS total_contacts,
+                COUNT(*) FILTER (WHERE email IS NULL)                                 AS no_email,
+                COUNT(*) FILTER (WHERE email LIKE '%%@app.placeholder.local')         AS placeholder_email,
+                COUNT(*) FILTER (WHERE lifecycle_segment = 'optout')                  AS optout,
+                COUNT(*) FILTER (WHERE lifecycle_segment = 'cooling')                 AS cooling,
+                COUNT(*) FILTER (WHERE lifecycle_segment NOT IN ('optout','cooling')
                                    AND email IS NOT NULL
-                                   AND email NOT LIKE '%%@app.placeholder.local'
-                                   AND lifecycle_segment != 'optout')             AS no_campaign,
-                COUNT(*) FILTER (WHERE current_campaign = 'APP_TO_DIRECT'
-                                   AND email IS NOT NULL
-                                   AND email NOT LIKE '%%@app.placeholder.local'
-                                   AND lifecycle_segment != 'optout')             AS app_to_direct,
-                COUNT(*) FILTER (WHERE current_campaign IS NOT NULL
-                                   AND current_campaign != 'APP_TO_DIRECT'
-                                   AND email IS NOT NULL
-                                   AND email NOT LIKE '%%@app.placeholder.local'
-                                   AND lifecycle_segment != 'optout')             AS returned_by_api
+                                   AND email NOT LIKE '%%@app.placeholder.local')     AS returned_by_api
             FROM contacts
         """)
         row = dict(cur.fetchone())
 
-        # Campaign distribution for contacts that pass all filters
+        # Campaign distribution for contacts that pass all filters (derived from lifecycle_segment)
         cur.execute("""
-            SELECT current_campaign, COUNT(*) AS cnt
-            FROM contacts
-            WHERE current_campaign IS NOT NULL
-              AND current_campaign != 'APP_TO_DIRECT'
-              AND email IS NOT NULL
-              AND email NOT LIKE '%%@app.placeholder.local'
-              AND lifecycle_segment != 'optout'
-            GROUP BY current_campaign
+            SELECT cr.default_campaign AS current_campaign, COUNT(*) AS cnt
+            FROM contacts c
+            JOIN campaign_routing cr ON cr.lifecycle_segment = c.lifecycle_segment
+            WHERE c.email IS NOT NULL
+              AND c.email NOT LIKE '%%@app.placeholder.local'
+              AND c.lifecycle_segment NOT IN ('optout', 'cooling')
+            GROUP BY cr.default_campaign
             ORDER BY cnt DESC
         """)
         campaign_dist = [dict(r) for r in cur.fetchall()]
@@ -464,38 +463,32 @@ def _wrap_body(inner_html: str) -> str:
     """Wrap inner email body with the DabbahWala branded HTML template."""
     return _TEMPLATE_HEADER + inner_html + _TEMPLATE_FOOTER
 
-_CAMPAIGN_META: dict[str, dict] = {
-    "NURTURE_SLOW": {
-        "label": "DW-NurtureSlow-ColdContacts",
-        "json_file": "nurture_slow.json",
-        "instantly_id": "76a88797-961a-47b6-af11-77e2211c4e73",
-    },
-    "PROMO_STANDARD": {
-        "label": "DW-PromoStandard-ActiveEngaged",
-        "json_file": "promo_standard.json",
-        "instantly_id": "f3e2d621-9bf2-4130-bc1c-f8168fc44e1e",
-    },
-    "ACTIVE_CUSTOMER": {
-        "label": "DW-ActiveCustomer",
-        "json_file": "promo_standard.json",  # reuse promo_standard sequences until dedicated copy is made
-        "instantly_id": "c763e229-f633-468b-bfe4-7f9a4fd21036",
-    },
-    "PROMO_AGGRESSIVE": {
-        "label": "DW-PromoAggressive-LapsedCustomers",
-        "json_file": "promo_aggressive.json",
-        "instantly_id": "87d44ff1-8720-4c1d-92ff-b827970f323f",
-    },
-    "NEW_CUSTOMER_ONBOARDING": {
-        "label": "DW-NewCustomerOnboarding",
-        "json_file": "new_customer_onboarding.json",
-        "instantly_id": "8a5ccbfb-500d-4060-ad99-76aa0159bbf2",
-    },
-    "REACTIVATION": {
-        "label": "DW-Reactivation-LongDormant",
-        "json_file": "reactivation.json",
-        "instantly_id": "69c84455-d9b8-437f-b249-8325d23798e6",
-    },
-}
+# ── campaign_routing helpers (single source of truth) ────────────────────────
+
+def _get_routing_rows() -> list[dict]:
+    """Return all rows from campaign_routing as dicts."""
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT default_campaign, instantly_campaign_id, instantly_campaign_name, template_file
+            FROM campaign_routing
+            WHERE instantly_campaign_id IS NOT NULL
+            ORDER BY lifecycle_segment
+        """)
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _get_routing_row(campaign_name: str) -> dict:
+    """Return the campaign_routing row for campaign_name or raise 404."""
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT default_campaign, instantly_campaign_id, instantly_campaign_name, template_file
+            FROM campaign_routing
+            WHERE default_campaign = %s
+        """, (campaign_name,))
+        row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"Unknown campaign: {campaign_name}")
+    return dict(row)
 
 
 def push_lead_to_instantly(
@@ -511,11 +504,15 @@ def push_lead_to_instantly(
     n8n's Action Queue Executor will pick this up and call Instantly directly.
     Returns True if enqueued, False if campaign is unknown.
     """
-    meta = _CAMPAIGN_META.get(campaign_name)
-    if not meta:
+    try:
+        row = _get_routing_row(campaign_name)
+    except HTTPException:
+        return False
+    instantly_id = row.get("instantly_campaign_id")
+    if not instantly_id:
         return False
     payload = {
-        "instantly_campaign_id": meta["instantly_id"],
+        "instantly_campaign_id": instantly_id,
         "campaign_name": campaign_name,
         "email": email,
         "first_name": first_name,
@@ -539,14 +536,15 @@ def push_lead_to_instantly(
 
 
 def _load_campaign_json(campaign_name: str) -> tuple[dict, dict]:
-    """Return (meta, parsed_json) or raise HTTPException."""
-    meta = _CAMPAIGN_META.get(campaign_name)
-    if not meta:
-        raise HTTPException(status_code=404, detail=f"Unknown campaign: {campaign_name}")
-    path = _DATA_DIR / meta["json_file"]
+    """Return (routing_row, parsed_json) or raise HTTPException."""
+    row = _get_routing_row(campaign_name)
+    template_file = row.get("template_file")
+    if not template_file:
+        raise HTTPException(status_code=404, detail=f"No template_file set for campaign: {campaign_name}")
+    path = _DATA_DIR / template_file
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Template file missing for {campaign_name}")
-    return meta, json.loads(path.read_text())
+    return row, json.loads(path.read_text())
 
 
 class TemplateUpdate(BaseModel):
@@ -567,7 +565,7 @@ class RewriteRequest(BaseModel):
 @router.get("/analytics")
 def get_campaign_analytics():
     """
-    Fetch live analytics for all 5 campaigns from Instantly API v2.
+    Fetch live analytics for all campaigns from Instantly API v2.
     Returns per-campaign: total leads, emails sent, open rate, reply rate, bounces.
     """
     if not INSTANTLY_API_KEY:
@@ -576,8 +574,10 @@ def get_campaign_analytics():
     headers = {"Authorization": f"Bearer {INSTANTLY_API_KEY}"}
     results = []
 
-    for name, meta in _CAMPAIGN_META.items():
-        campaign_id = meta["instantly_id"]
+    for row in _get_routing_rows():
+        campaign_id = row["instantly_campaign_id"]
+        name = row["default_campaign"]
+        label = row.get("instantly_campaign_name") or name
         try:
             resp = httpx.get(
                 "https://api.instantly.ai/api/v2/campaigns/analytics",
@@ -587,11 +587,10 @@ def get_campaign_analytics():
             )
             resp.raise_for_status()
             raw = resp.json()
-            # API returns a list; grab the first (matching) item
             item = raw[0] if isinstance(raw, list) and raw else (raw if isinstance(raw, dict) else {})
             results.append({
                 "campaign_name": name,
-                "label": meta["label"],
+                "label": label,
                 "instantly_id": campaign_id,
                 "total_leads": int(item.get("leads_count") or item.get("total_leads_count") or 0),
                 "emails_sent": int(item.get("emails_sent_count") or item.get("total_sent_count") or 0),
@@ -603,7 +602,7 @@ def get_campaign_analytics():
         except Exception as e:
             results.append({
                 "campaign_name": name,
-                "label": meta["label"],
+                "label": label,
                 "instantly_id": campaign_id,
                 "error": str(e)[:200],
             })
@@ -615,17 +614,20 @@ def get_campaign_analytics():
 def list_campaign_templates():
     """List all campaign scenarios with their step counts."""
     result = []
-    for name, meta in _CAMPAIGN_META.items():
-        path = _DATA_DIR / meta["json_file"]
+    for row in _get_routing_rows():
+        name = row["default_campaign"]
+        template_file = row.get("template_file") or ""
         total_steps = 0
-        if path.exists():
-            data = json.loads(path.read_text())
-            seqs = data.get("sequences", [])
-            total_steps = len(seqs[0].get("steps", [])) if seqs else 0
+        if template_file:
+            path = _DATA_DIR / template_file
+            if path.exists():
+                data = json.loads(path.read_text())
+                seqs = data.get("sequences", [])
+                total_steps = len(seqs[0].get("steps", [])) if seqs else 0
         result.append({
             "campaign_name": name,
-            "label": meta["label"],
-            "instantly_id": meta["instantly_id"],
+            "label": row.get("instantly_campaign_name") or name,
+            "instantly_id": row.get("instantly_campaign_id"),
             "total_steps": total_steps,
         })
     return result
@@ -658,8 +660,8 @@ def get_campaign_template(campaign_name: str, step: int = 0, variant: int = 0):
     ]
     return {
         "campaign_name": campaign_name,
-        "label": meta["label"],
-        "instantly_id": meta["instantly_id"],
+        "label": meta.get("instantly_campaign_name") or campaign_name,
+        "instantly_id": meta.get("instantly_campaign_id"),
         "total_steps": len(steps),
         "step_index": step,
         "total_variants": len(variants),
@@ -690,7 +692,7 @@ def update_campaign_template(campaign_name: str, payload: TemplateUpdate):
     # Update local JSON
     variants[payload.variant_index]["subject"] = payload.subject
     variants[payload.variant_index]["body"] = payload.body
-    path = _DATA_DIR / meta["json_file"]
+    path = _DATA_DIR / meta["template_file"]
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False))
 
     # Enqueue a sequences push to n8n — deep-copy seqs and wrap each email step body
@@ -706,7 +708,7 @@ def update_campaign_template(campaign_name: str, payload: TemplateUpdate):
                         if "body" in variant:
                             variant["body"] = _wrap_body(variant["body"])
         action_payload = {
-            "instantly_campaign_id": meta["instantly_id"],
+            "instantly_campaign_id": meta["instantly_campaign_id"],
             "campaign_name": campaign_name,
             "sequences": seqs_to_push,
         }
@@ -740,9 +742,8 @@ def rewrite_template_with_claude(campaign_name: str, payload: RewriteRequest):
     """
     import anthropic
 
-    meta = _CAMPAIGN_META.get(campaign_name)
-    if not meta:
-        raise HTTPException(status_code=404, detail=f"Unknown campaign: {campaign_name}")
+    meta = _get_routing_row(campaign_name)
+    label = meta.get("instantly_campaign_name") or campaign_name
 
     body_plain = re.sub(r"<[^>]+>", " ", payload.body).strip()
     body_plain = re.sub(r"\s{2,}", " ", body_plain)
@@ -751,7 +752,7 @@ def rewrite_template_with_claude(campaign_name: str, payload: RewriteRequest):
 
     prompt = f"""You are editing a campaign email for DabbahWala — a home-style Indian food delivery kitchen in Michigan.
 
-Campaign: {meta['label']}
+Campaign: {label}
 Email step: {payload.step_index + 1}
 
 CURRENT SUBJECT: {payload.subject}
@@ -763,7 +764,7 @@ Rewrite this email to be more compelling while:
 - Keeping the DabbahWala brand voice: genuine, warm, non-pushy, never salesy
 - Preserving {{{{firstName|there}}}} and {{{{RANDOM | option | option}}}} Instantly merge-tag syntax exactly
 - Using <div> tags for paragraphs (Instantly HTML format)
-- Matching the purpose of the "{meta['label']}" campaign
+- Matching the purpose of the "{label}" campaign
 - Keeping a similar length
 
 Return ONLY a valid JSON object with two keys — "subject" and "body" — no other text:
@@ -796,16 +797,6 @@ Return ONLY a valid JSON object with two keys — "subject" and "body" — no ot
 # ── One-time setup: tag existing campaigns + create ACTIVE_CUSTOMER ──────────
 
 _DABBAHWALA_TAG = "Dabbahwala"
-
-# The DabbahWala campaigns that exist in Instantly — keep in sync with _CAMPAIGN_META
-_EXISTING_CAMPAIGN_IDS: list[str] = [
-    "76a88797-961a-47b6-af11-77e2211c4e73",  # NURTURE_SLOW
-    "f3e2d621-9bf2-4130-bc1c-f8168fc44e1e",  # PROMO_STANDARD
-    "87d44ff1-8720-4c1d-92ff-b827970f323f",  # PROMO_AGGRESSIVE
-    "8a5ccbfb-500d-4060-ad99-76aa0159bbf2",  # NEW_CUSTOMER_ONBOARDING
-    "69c84455-d9b8-437f-b249-8325d23798e6",  # REACTIVATION
-    "c763e229-f633-468b-bfe4-7f9a4fd21036",  # ACTIVE_CUSTOMER
-]
 
 # DW sending schedule (mirrors promo_standard.json)
 _DW_SCHEDULE = {
@@ -1002,11 +993,11 @@ def _get_all_account_emails(headers: dict) -> list[str]:
 def setup_instantly_campaigns():
     """
     Idempotent setup endpoint:
-      0. Deletes duplicate campaigns in Instantly (keeps canonical IDs from _CAMPAIGN_META)
+      0. Deletes duplicate campaigns in Instantly (keeps canonical IDs from campaign_routing)
       1. Gets or creates the 'Dabbahwala' custom tag
       2. Tags all campaigns with it
       3. Pushes full HTML-wrapped sequences + settings + email_accounts in one PATCH per campaign
-      4. Persists ACTIVE_CUSTOMER campaign ID to campaign_routing DB row
+      4. Persists any newly created campaign IDs back to campaign_routing
     """
     if not INSTANTLY_API_KEY:
         raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
@@ -1016,12 +1007,11 @@ def setup_instantly_campaigns():
         "Content-Type": "application/json",
     }
 
+    # Load canonical campaign data from campaign_routing (single source of truth)
+    routing_rows = _get_routing_rows()
+
     # Canonical IDs we want to keep
-    canonical_ids: set[str] = {
-        meta["instantly_id"]
-        for meta in _CAMPAIGN_META.values()
-        if meta.get("instantly_id")
-    }
+    canonical_ids: set[str] = {r["instantly_campaign_id"] for r in routing_rows if r.get("instantly_campaign_id")}
 
     # 0. Fetch ALL campaigns (paginated) and dedup: delete copies whose ID is not canonical
     dedup_results: dict = {}
@@ -1055,29 +1045,31 @@ def setup_instantly_campaigns():
     fetched_ids: set[str] = {c["id"] for c in all_campaigns}
     all_canonical_present = bool(canonical_ids) and canonical_ids.issubset(fetched_ids)
     if all_canonical_present and not dedup_results:
-        logger.info("setup-instantly: all %d campaigns already present, skipping setup", len(_CAMPAIGN_META))
+        logger.info("setup-instantly: all %d campaigns already present, skipping setup", len(routing_rows))
         return {
             "status": "already_setup",
             "message": "All campaigns already exist in Instantly — no changes made",
-            "campaign_count": len(_CAMPAIGN_META),
+            "campaign_count": len(routing_rows),
         }
 
     # 1. Get or create the Dabbahwala tag (also deduplicates if multiple exist)
     tag_id = _get_or_create_tag_id(headers, _DABBAHWALA_TAG)
 
-    # 2. Resolve ALL campaign IDs: hardcoded if still alive → find by name → create fresh
+    # 2. Resolve ALL campaign IDs: canonical if still alive → find by name → create fresh
     existing_ids_in_instantly: set[str] = {c["id"] for c in all_campaigns}
     existing_by_name: dict[str, str] = {c["name"]: c["id"] for c in all_campaigns}
-    resolved_ids: dict[str, str] = {}   # campaign_key → id
+    resolved_ids: dict[str, str] = {}    # campaign_key → id
     created_campaigns: dict[str, str] = {}  # campaign_key → newly created id
+    db_updates: list[tuple] = []         # (new_id, lifecycle_segment, campaign_name) for DB write
 
-    for campaign_key, meta in _CAMPAIGN_META.items():
-        label = meta["label"]
-        hardcoded = meta.get("instantly_id", "").strip()
+    for row in routing_rows:
+        campaign_key = row["default_campaign"]
+        label = row.get("instantly_campaign_name") or campaign_key
+        canonical = (row.get("instantly_campaign_id") or "").strip()
 
-        if hardcoded and hardcoded in existing_ids_in_instantly:
-            resolved_ids[campaign_key] = hardcoded
-            logger.info("setup-instantly: %s using existing id=%s", campaign_key, hardcoded)
+        if canonical and canonical in existing_ids_in_instantly:
+            resolved_ids[campaign_key] = canonical
+            logger.info("setup-instantly: %s using existing id=%s", campaign_key, canonical)
         elif label in existing_by_name:
             resolved_ids[campaign_key] = existing_by_name[label]
             logger.info("setup-instantly: %s found by name, id=%s", campaign_key, existing_by_name[label])
@@ -1086,13 +1078,10 @@ def setup_instantly_campaigns():
             if new_id:
                 resolved_ids[campaign_key] = new_id
                 created_campaigns[campaign_key] = new_id
-                # Update in-memory so push_lead_to_instantly works in this process
-                _CAMPAIGN_META[campaign_key]["instantly_id"] = new_id
+                db_updates.append((new_id, campaign_key))
                 logger.info("setup-instantly: %s created fresh id=%s", campaign_key, new_id)
             else:
                 logger.error("setup-instantly: could not resolve id for %s", campaign_key)
-
-    active_customer_id = resolved_ids.get("ACTIVE_CUSTOMER", "")
 
     # 3. Fetch all sending account emails
     account_emails = _get_all_account_emails(headers)
@@ -1101,7 +1090,8 @@ def setup_instantly_campaigns():
 
     # 4. Push HTML-wrapped sequences + settings + email_accounts to EVERY campaign
     seq_results: dict = {}
-    for campaign_key in _CAMPAIGN_META:
+    for row in routing_rows:
+        campaign_key = row["default_campaign"]
         cid = resolved_ids.get(campaign_key, "")
         if not cid:
             seq_results[campaign_key] = "no_id"
@@ -1146,19 +1136,17 @@ def setup_instantly_campaigns():
     else:
         configure_results["tagged"] = False
 
-    # 6. Persist ACTIVE_CUSTOMER ID to campaign_routing
-    if active_customer_id:
+    # 6. Persist any newly created campaign IDs back to campaign_routing
+    if db_updates:
         try:
             with get_cursor(commit=True) as cur:
-                cur.execute(
-                    """UPDATE campaign_routing
-                          SET instantly_campaign_id   = %s,
-                              instantly_campaign_name = 'DW-ActiveCustomer'
-                        WHERE lifecycle_segment = 'active_customer'""",
-                    (active_customer_id,),
-                )
-            configure_results["db_saved"] = True
-            logger.info("setup-instantly: saved ACTIVE_CUSTOMER id=%s to DB", active_customer_id)
+                for new_id, campaign_key in db_updates:
+                    cur.execute(
+                        "UPDATE campaign_routing SET instantly_campaign_id = %s WHERE default_campaign = %s",
+                        (new_id, campaign_key),
+                    )
+            configure_results["db_saved"] = len(db_updates)
+            logger.info("setup-instantly: saved %d new campaign IDs to campaign_routing", len(db_updates))
         except Exception as e:
             configure_results["db_saved"] = False
             logger.error("setup-instantly: DB save failed: %s", e)
@@ -1169,6 +1157,5 @@ def setup_instantly_campaigns():
         "dabbahwala_tag_id": tag_id or "FAILED",
         "resolved_campaign_ids": resolved_ids,
         "created_campaigns": created_campaigns,
-        "active_customer_campaign_id": active_customer_id or "FAILED",
         "configure_results": configure_results,
     }

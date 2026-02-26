@@ -8,11 +8,8 @@ Configure in Instantly:
 Configure in Telnyx (Messaging → Messaging Profiles → <profile> → Webhooks):
   Inbound message webhook URL: https://dabbahwala-latest.onrender.com/api/webhooks/telnyx
 
-Campaign registry (instantly_campaigns table) is kept in sync by n8n calling:
-  POST /api/webhooks/sync-campaigns   (schedule: every 6 h or as desired in n8n)
-
-n8n fetches campaigns from Instantly directly and passes them in the request body.
-Python never calls Instantly — all external API calls go through n8n.
+Campaign filtering is done by querying campaign_routing (single source of truth).
+n8n fetches campaigns from Instantly directly — Python never calls Instantly.
 """
 import json
 import logging
@@ -23,7 +20,6 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.db import get_cursor
-from app.routers.campaigns import _CAMPAIGN_META
 from app.routers.prospects import _upsert_contact
 
 logger = logging.getLogger(__name__)
@@ -47,117 +43,18 @@ def _fire_agent_cycle(contact_id: int, trigger: str) -> None:
 
 router = APIRouter()
 
-# ── Hardcoded DabbahWala campaign IDs (always trusted) ──────────────────────
-_HARDCODED_IDS: set[str] = {meta["instantly_id"] for meta in _CAMPAIGN_META.values()}
 
-
-# ── DB helpers ───────────────────────────────────────────────────────────────
-
-def _upsert_campaign_db(campaign_id: str, name: str = "", tags: list = None,
-                        status: str = "", source: str = "tag_discovered") -> None:
-    """Persist / refresh a campaign record in instantly_campaigns."""
-    tags = tags or []
-    try:
-        with get_cursor(commit=True) as cur:
-            cur.execute(
-                """INSERT INTO instantly_campaigns
-                       (campaign_id, campaign_name, tags, status, source, first_seen_at, last_seen_at)
-                   VALUES (%s, %s, %s, %s, %s, now(), now())
-                   ON CONFLICT (campaign_id) DO UPDATE SET
-                       campaign_name = COALESCE(NULLIF(EXCLUDED.campaign_name,''), instantly_campaigns.campaign_name),
-                       tags          = CASE WHEN array_length(EXCLUDED.tags,1) > 0 THEN EXCLUDED.tags
-                                            ELSE instantly_campaigns.tags END,
-                       status        = COALESCE(NULLIF(EXCLUDED.status,''),    instantly_campaigns.status),
-                       last_seen_at  = now()""",
-                (campaign_id, name or None, tags or None, status or None, source),
-            )
-    except Exception as e:
-        logger.warning("Could not upsert campaign to DB (non-fatal): %s", e)
-
-
-def _load_db_campaign_ids() -> set[str]:
-    """Load all campaign IDs previously saved to instantly_campaigns."""
-    try:
-        with get_cursor(commit=False) as cur:
-            cur.execute("SELECT campaign_id FROM instantly_campaigns")
-            return {r["campaign_id"] for r in cur.fetchall()}
-    except Exception as e:
-        logger.warning("Could not load campaigns from DB (non-fatal): %s", e)
-        return set()
-
+# ── Campaign ID helpers (single source of truth: campaign_routing) ────────────
 
 def _dabbahwala_campaign_ids() -> set[str]:
-    """
-    Fast DB lookup — union of hardcoded IDs + whatever n8n has synced into
-    instantly_campaigns via the sync-campaigns endpoint.
-    """
-    return _HARDCODED_IDS | _load_db_campaign_ids()
-
-
-# ── n8n-callable sync endpoint ───────────────────────────────────────────────
-
-class CampaignSyncPayload(BaseModel):
-    """n8n fetches campaigns from Instantly and passes them here.
-    Python never calls Instantly directly.
-    """
-    campaigns: list[dict] = []
-
-
-@router.post("/sync-campaigns")
-def sync_campaigns(body: CampaignSyncPayload = CampaignSyncPayload()):
-    """
-    Upsert DabbahWala campaigns into instantly_campaigns.
-
-    n8n fetches the campaign list from Instantly API and passes it in the
-    request body as `campaigns`. Python writes to Postgres only — no outbound
-    HTTP to Instantly.
-
-    Call this from n8n on a schedule (e.g. every 6 hours) with the Instantly
-    campaign list as the POST body.
-    """
-
-    # 1. Always seed hardcoded campaigns
-    seeded = 0
-    for name, meta in _CAMPAIGN_META.items():
-        _upsert_campaign_db(
-            campaign_id=meta["instantly_id"],
-            name=meta["label"],
-            source="hardcoded",
-        )
-        seeded += 1
-
-    # 2. Upsert campaigns provided by n8n
-    discovered = 0
-    for c in body.campaigns:
-        raw_tags = c.get("tags") or []
-        tag_names: list[str] = []
-        for t in raw_tags:
-            if isinstance(t, str):
-                tag_names.append(t)
-            elif isinstance(t, dict):
-                tag_names.append(t.get("name") or t.get("label") or "")
-
-        if any(tag.strip().lower() == "dabbahwala" for tag in tag_names):
-            cid    = str(c.get("id") or c.get("campaign_id") or "").strip()
-            cname  = c.get("name") or c.get("campaign_name") or ""
-            status = str(c.get("status") or c.get("campaign_status") or "")
-            if cid:
-                _upsert_campaign_db(
-                    campaign_id=cid,
-                    name=cname,
-                    tags=tag_names,
-                    status=status,
-                    source="tag_discovered",
-                )
-                discovered += 1
-
-    total = len(_load_db_campaign_ids())
-    return {
-        "status": "ok",
-        "hardcoded_seeded": seeded,
-        "tag_discovered": discovered,
-        "total_in_db": total,
-    }
+    """Return all Instantly campaign IDs registered in campaign_routing."""
+    try:
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT instantly_campaign_id FROM campaign_routing WHERE instantly_campaign_id IS NOT NULL")
+            return {r["instantly_campaign_id"] for r in cur.fetchall()}
+    except Exception as e:
+        logger.warning("Could not load campaign IDs from campaign_routing (non-fatal): %s", e)
+        return set()
 
 
 # ── Campaign list endpoint (used by n8n performance tracker) ─────────────────
@@ -165,37 +62,27 @@ def sync_campaigns(body: CampaignSyncPayload = CampaignSyncPayload()):
 @router.get("/campaigns")
 def list_campaigns():
     """
-    Return all DabbahWala campaigns tracked in instantly_campaigns,
-    including latest performance stats. Used by n8n to know which
-    campaign IDs to fetch analytics for from Instantly.
+    Return all DabbahWala campaigns from campaign_routing, including latest stats.
+    Used by n8n to know which campaign IDs to fetch analytics for from Instantly.
     """
     try:
         with get_cursor(commit=False) as cur:
             cur.execute("""
-                SELECT campaign_id, campaign_name, status, source,
+                SELECT default_campaign  AS campaign_name,
+                       instantly_campaign_id   AS campaign_id,
+                       instantly_campaign_name AS label,
                        leads_count, emails_sent, unique_opens, opens,
                        replies, clicks, bounces, open_rate, reply_rate,
-                       stats_synced_at, last_seen_at
-                FROM instantly_campaigns
-                ORDER BY last_seen_at DESC
+                       stats_synced_at
+                FROM campaign_routing
+                WHERE instantly_campaign_id IS NOT NULL
+                ORDER BY lifecycle_segment
             """)
-            rows = cur.fetchall()
-            # Also include hardcoded IDs not yet in DB
-            known = {r["campaign_id"] for r in rows}
-            extra = []
-            for name, meta in _CAMPAIGN_META.items():
-                if meta["instantly_id"] not in known:
-                    extra.append({"campaign_id": meta["instantly_id"],
-                                  "campaign_name": meta["label"],
-                                  "source": "hardcoded"})
-            campaigns = [dict(r) for r in rows] + extra
-            return {"campaigns": campaigns, "total": len(campaigns)}
+            rows = [dict(r) for r in cur.fetchall()]
+        return {"campaigns": rows, "total": len(rows)}
     except Exception as e:
         logger.error("list_campaigns failed: %s", e)
-        return {"campaigns": [c for c in [
-            {"campaign_id": meta["instantly_id"], "campaign_name": meta["label"], "source": "hardcoded"}
-            for meta in _CAMPAIGN_META.values()
-        ]], "total": len(_CAMPAIGN_META), "fallback": True}
+        return {"campaigns": [], "total": 0, "error": str(e)[:200]}
 
 
 # ── Campaign stats endpoint (n8n posts Instantly analytics here) ──────────────
@@ -218,24 +105,24 @@ class CampaignStatsBody(BaseModel):
 def update_campaign_stats(body: CampaignStatsBody):
     """
     Receive campaign performance stats from n8n (sourced from Instantly analytics API)
-    and update the instantly_campaigns row. Called once per campaign per polling cycle.
+    and update the campaign_routing row. Called once per campaign per polling cycle.
     """
     try:
         with get_cursor(commit=True) as cur:
             cur.execute("""
-                UPDATE instantly_campaigns SET
-                    leads_count    = COALESCE(%s, leads_count),
-                    emails_sent    = COALESCE(%s, emails_sent),
-                    unique_opens   = COALESCE(%s, unique_opens),
-                    opens          = COALESCE(%s, opens),
-                    replies        = COALESCE(%s, replies),
-                    clicks         = COALESCE(%s, clicks),
-                    bounces        = COALESCE(%s, bounces),
-                    unsubscribes   = COALESCE(%s, unsubscribes),
-                    open_rate      = COALESCE(%s, open_rate),
-                    reply_rate     = COALESCE(%s, reply_rate),
+                UPDATE campaign_routing SET
+                    leads_count     = COALESCE(%s, leads_count),
+                    emails_sent     = COALESCE(%s, emails_sent),
+                    unique_opens    = COALESCE(%s, unique_opens),
+                    opens           = COALESCE(%s, opens),
+                    replies         = COALESCE(%s, replies),
+                    clicks          = COALESCE(%s, clicks),
+                    bounces         = COALESCE(%s, bounces),
+                    unsubscribes    = COALESCE(%s, unsubscribes),
+                    open_rate       = COALESCE(%s, open_rate),
+                    reply_rate      = COALESCE(%s, reply_rate),
                     stats_synced_at = now()
-                WHERE campaign_id = %s
+                WHERE instantly_campaign_id = %s
             """, (
                 body.leads_count, body.emails_sent, body.unique_opens,
                 body.opens, body.replies, body.clicks, body.bounces,
@@ -269,14 +156,12 @@ async def instantly_webhook(request: Request):
     """
     Receive Instantly webhook events.
 
-    Filters to DabbahWala campaigns only via fast DB lookup (hardcoded IDs +
-    anything n8n has synced via /api/webhooks/sync-campaigns).
+    Filters to DabbahWala campaigns only via campaign_routing table (single source of truth).
 
     On every meaningful engagement (open, reply, click):
       1. Upsert the lead as a contact (noop if already exists)
       2. Record the engagement event
       3. Run lifecycle so the contact gets campaign-assigned immediately
-      4. Update last_seen_at on the campaign record in DB
     """
     try:
         payload = await request.json()
@@ -307,9 +192,7 @@ async def instantly_webhook(request: Request):
             )
             return {"status": "ignored", "reason": "not a DabbahWala campaign",
                     "campaign_id": campaign_id}
-        # Touch last_seen_at and capture any name/status carried in this webhook event
-        _upsert_campaign_db(campaign_id=campaign_id, name=campaign_name,
-                            status=campaign_status, source="webhook")
+        # campaign_routing is the single source of truth — no upsert needed here
     else:
         logger.warning("Instantly webhook: no campaign_id in payload — processing anyway")
 

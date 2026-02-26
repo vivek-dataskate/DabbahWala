@@ -319,7 +319,9 @@ def _phase_decision(cur, signals: dict) -> tuple:
         # Move to APP_TO_DIRECT Instantly campaign
         cur.execute(
             "INSERT INTO campaign_queue (contact_id, from_campaign, to_campaign) "
-            "VALUES (%s, (SELECT current_campaign FROM contacts WHERE id = %s), 'APP_TO_DIRECT') "
+            "VALUES (%s, (SELECT cr.default_campaign FROM campaign_routing cr "
+            "             JOIN contacts c ON cr.lifecycle_segment = c.lifecycle_segment "
+            "             WHERE c.id = %s), 'APP_TO_DIRECT') "
             "ON CONFLICT DO NOTHING",
             (contact['id'], contact['id'])
         )
