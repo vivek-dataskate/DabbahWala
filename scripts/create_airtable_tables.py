@@ -63,6 +63,21 @@ def create_table(name, fields):
 
 TABLES = [
     {
+        "name": "Menu Catalog",
+        "fields": [
+            # Primary field — one row per menu item
+            {"name": "Item Name", "type": "singleLineText"},
+            {"name": "Category", "type": "singleLineText"},
+            {"name": "Is Veg", "type": "checkbox",
+             "options": {"icon": "check", "color": "greenBright"}},
+            {"name": "Description", "type": "multilineText"},
+            {"name": "Image URL", "type": "url"},
+            {"name": "Price", "type": "number", "options": {"precision": 2}},
+            {"name": "Added Date", "type": "date",
+             "options": {"dateFormat": {"name": "iso"}}},
+        ],
+    },
+    {
         "name": "Field Sales Tasks",
         "fields": [
             # Primary field
