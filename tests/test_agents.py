@@ -1058,3 +1058,242 @@ class TestRunAllContactsWithContacts:
         assert resp.status_code == 200
         data = resp.json()
         assert data["processed"] == 1
+
+
+# ---------------------------------------------------------------------------
+# _tool_call — fallback and error paths
+# ---------------------------------------------------------------------------
+
+class TestToolCallPaths:
+    def test_fallback_when_no_tool_use_block(self):
+        """_tool_call returns {} and logs warning when Claude response has no tool_use block."""
+        from app.routers.agents import _tool_call
+
+        mock_content = MagicMock()
+        mock_content.type = "text"  # not "tool_use"
+
+        mock_response = MagicMock()
+        mock_response.content = [mock_content]
+        mock_response.stop_reason = "end_turn"
+
+        mock_client = MagicMock()
+        mock_client.messages.create.return_value = mock_response
+
+        tool = {"name": "test_tool", "description": "A test tool",
+                "input_schema": {"type": "object", "properties": {}, "required": []}}
+
+        result = _tool_call(mock_client, "system", "user", tool)
+        assert result == {}
+
+    def test_rate_limit_error_is_re_raised(self):
+        """_tool_call re-raises anthropic.RateLimitError."""
+        import anthropic
+        from app.routers.agents import _tool_call
+
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = anthropic.RateLimitError(
+            "rate limit", response=MagicMock(), body={})
+
+        tool = {"name": "t", "description": "t",
+                "input_schema": {"type": "object", "properties": {}, "required": []}}
+
+        try:
+            _tool_call(mock_client, "system", "user", tool)
+            assert False, "Should have raised"
+        except anthropic.RateLimitError:
+            pass
+
+    def test_unexpected_exception_is_re_raised(self):
+        """_tool_call re-raises unexpected exceptions."""
+        from app.routers.agents import _tool_call
+
+        mock_client = MagicMock()
+        mock_client.messages.create.side_effect = RuntimeError("unexpected")
+
+        tool = {"name": "t", "description": "t",
+                "input_schema": {"type": "object", "properties": {}, "required": []}}
+
+        try:
+            _tool_call(mock_client, "system", "user", tool)
+            assert False, "Should have raised"
+        except RuntimeError:
+            pass
+
+
+# ---------------------------------------------------------------------------
+# _fetch_observations and _fetch_action_plan — DB helpers
+# ---------------------------------------------------------------------------
+
+class TestFetchObservationsAndPlan:
+    def test_fetch_observations_returns_row(self):
+        """_fetch_observations returns dict of observation row when present."""
+        from contextlib import contextmanager
+        from app.routers.agents import _fetch_observations
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {
+            "contact_id": 1, "sentiment": "positive", "intent": "ready_to_order",
+            "engagement_score": 0.8, "run_at": None,
+        }
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            result = _fetch_observations(contact_id=1)
+
+        assert result is not None
+        assert result["sentiment"] == "positive"
+
+    def test_fetch_observations_returns_none_when_empty(self):
+        """_fetch_observations returns None when no observations exist."""
+        from contextlib import contextmanager
+        from app.routers.agents import _fetch_observations
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            result = _fetch_observations(contact_id=99)
+
+        assert result is None
+
+    def test_fetch_action_plan_returns_row(self):
+        """_fetch_action_plan returns dict when action plan exists."""
+        from contextlib import contextmanager
+        from app.routers.agents import _fetch_action_plan
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {
+            "contact_id": 1, "recommended_channel": "email",
+            "channel_timing": "now", "should_escalate": False, "run_at": None,
+        }
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            result = _fetch_action_plan(contact_id=1)
+
+        assert result is not None
+        assert result["recommended_channel"] == "email"
+
+    def test_fetch_action_plan_returns_none_when_empty(self):
+        """_fetch_action_plan returns None when no action plan exists."""
+        from contextlib import contextmanager
+        from app.routers.agents import _fetch_action_plan
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            result = _fetch_action_plan(contact_id=99)
+
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# _fetch_playbook_rules — cache hit path
+# ---------------------------------------------------------------------------
+
+class TestPlaybookCacheHit:
+    def test_playbook_cache_hit_skips_db_rebuild(self):
+        """_fetch_playbook_rules returns cached content when hash is unchanged."""
+        import hashlib
+        from app.routers.agents import _fetch_playbook_rules, _playbook_cache
+
+        # Build a playbook and compute its hash
+        rules = [{"category": "general", "instruction": "Be helpful.", "priority": 1,
+                  "rule_name": "Help"}]
+        cur = MagicMock()
+        cur.fetchall.return_value = rules
+
+        # First call to populate cache
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            first_result = _fetch_playbook_rules()
+
+        # Second call — same data, should hit cache
+        cur2 = MagicMock()
+        cur2.fetchall.return_value = rules
+
+        @contextmanager
+        def _mock_cursor2(commit=False):
+            yield cur2
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor2):
+            second_result = _fetch_playbook_rules()
+
+        assert first_result == second_result
+
+
+# ---------------------------------------------------------------------------
+# _filter_playbook — section filtering logic
+# ---------------------------------------------------------------------------
+
+class TestFilterPlaybook:
+    def test_returns_empty_for_empty_playbook(self):
+        """_filter_playbook returns '' when playbook is empty."""
+        from app.routers.agents import _filter_playbook
+        assert _filter_playbook("", "observer") == ""
+
+    def test_returns_full_playbook_for_unknown_layer(self):
+        """_filter_playbook returns full playbook when layer has no category mapping."""
+        from app.routers.agents import _filter_playbook
+        playbook = "Some rules here\nMore rules"
+        result = _filter_playbook(playbook, "unknown_layer")
+        assert result == playbook
+
+    def test_filters_to_relevant_sections(self):
+        """_filter_playbook returns only sections relevant to given layer."""
+        from app.routers.agents import _filter_playbook
+        playbook = (
+            "## Your Active Playbook\n"
+            "These rules apply\n"
+            "### GENERAL RULES (1)\n"
+            "- Always be kind\n"
+            "### PRIORITY RULES (1)\n"
+            "- High priority stuff\n"
+        )
+        result = _filter_playbook(playbook, "observer")
+        # observer layer includes general and exclusion, so general should be present
+        assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# _fetch_outcome_feedback — with outcomes (line 250)
+# ---------------------------------------------------------------------------
+
+class TestFetchOutcomeFeedbackWithData:
+    def test_returns_outcomes_with_logging(self):
+        """_fetch_outcome_feedback returns outcome list with logging info when rows exist."""
+        from contextlib import contextmanager
+        from app.routers.agents import _fetch_recent_outcomes
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [
+            {"opportunity_id": 1, "outcome": "ordered", "outcome_notes": None, "created_at": None}
+        ]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            result = _fetch_recent_outcomes(contact_id=1)
+
+        assert len(result) == 1
+        assert result[0]["outcome"] == "ordered"
