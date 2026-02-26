@@ -3,6 +3,22 @@
   "nodes": [
     {
       "parameters": {
+        "content": "## [Growth] Competitor Research Agent\n\n**WHAT IT IS**\nWeekly Monday 6:30 AM Claude agent: scrapes CookUnity/HelloFresh/Factor/Sunbasket, parses local .eml competitor samples, generates 8 novel re-engagement hypotheses covering all 4 contact segments, and injects them into goal_experiments.\n\n**WHAT IT SOLVES**\nAutomates competitive intelligence gathering. Hypothesis generation feeds the Goal Agent pipeline with externally-sourced ideas without manual research. Runs 30 min before Goal Agent picks them up at 9 AM.\n\n**WHAT'S NEXT**\n- Add confidence scoring to hypotheses for Goal Agent prioritisation\n- Expand scrape targets (Freshly, Sunbasket)",
+        "height": 340,
+        "width": 600,
+        "color": 4
+      },
+      "id": "workflow-overview-note",
+      "name": "\ud83d\udccb Workflow Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        80,
+        -100
+      ]
+    },
+    {
+      "parameters": {
         "rule": {
           "interval": [
             {
@@ -19,7 +35,8 @@
       "position": [
         100,
         300
-      ]
+      ],
+      "notes": "Cron: runs before Goal Agent (9 AM) so fresh hypotheses are ready to be picked up."
     },
     {
       "parameters": {
@@ -36,7 +53,8 @@
       "position": [
         320,
         300
-      ]
+      ],
+      "notes": "POST /api/agents/competitor-research \u2014 scrapes live competitor sites, parses .eml samples, generates 8 hypotheses via Claude, injects into goal_experiments table."
     },
     {
       "parameters": {
@@ -49,7 +67,8 @@
       "position": [
         540,
         300
-      ]
+      ],
+      "notes": "JS: logs hypothesis count, scrape success/failure per competitor, and any injection errors."
     }
   ],
   "connections": {
@@ -77,21 +96,8 @@
     }
   },
   "settings": {
-    "executionOrder": "v1"
-  },
-  "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Claude",
-      "id": "tag-claude"
-    },
-    {
-      "name": "Inference",
-      "id": "tag-inference"
-    }
-  ],
-  "pinData": {}
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  }
 }
