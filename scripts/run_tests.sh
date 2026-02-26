@@ -128,8 +128,10 @@ ORDERED_TEST_FILES=(
     "test_query"
     "test_schedules"
 
-    # Layer 7 — Shipday sync (has its own detailed unit tests)
+    # Layer 7 — Shipday sync + Auth + Daily CSV
     "test_shipday_sync"
+    "test_auth"
+    "test_daily_orders"
 
     # Layer 8 — n8n workflow config + seam tests
     "test_n8n_workflows"
