@@ -85,11 +85,11 @@ If the env var is empty, read it from that file and use it directly in API calls
   - Airtable = active items only; deleting a row marks it discarded in Postgres (via daily sync)
   - History tracked in `menu_catalog_history` in Postgres
 - Agent Playbook table: **`Agent Playbook`** (table ID: `tbljWs6hKWbYFufnM`) — fields: Rule Name, Category, Instruction, Priority, Active, Created By
-  - Synced to Postgres `agent_playbook` table every 15 min via `[Agent Rules] Playbook Sync` (ID: `FXuYcwQeBQ72Xxyu`)
+  - Synced to Postgres `agent_playbook` table daily at 6 AM via `[Agent Rules] Playbook Sync` (ID: `FXuYcwQeBQ72Xxyu`)
   - Categories: exclusion, priority, inference, decision, messaging, general
 
 ### n8n Workflow Status (2026-02-26)
-- **31 total workflows**: 26 active-scheduled + 4 manual-only + 1 deactivated (3 deleted this session)
+- **29 total workflows**: 26 active-scheduled + 3 manual-only + 0 deactivated (5 deleted total)
 - All workflows use **centralized credentials**: single "DW Admin Secret" HTTP Header Auth → `GET /api/credentials` bootstrap
 - All workflows renamed to **12-feature taxonomy** format: `[Feature Group] Descriptive Name`
 - Full ID mapping in `n8n/config.json`
@@ -98,6 +98,8 @@ If the env var is empty, read it from that file and use it directly in API calls
 - `[System] Daily Tests` (`M7bwNMGrUMRvAHH4`) — superseded by `[System] Feature Tests`
 - `[Claude — Evidence] Weekly Menu Sync` (`sb0jHek7Q9gPeCUd`) — superseded by `[Menu] Catalog Sync`
 - `[Claude — Inference] Goal-Oriented Agent Cycle` (`NzNeVrjbIoKGge5M`) — duplicate of `[Growth] Goal Agent`
+- `[Broadcast] Broadcast Form` (`mUptDrymXZrtlrp8`) — unused manual form, nothing calls it
+- `[Chatbot] Query Form` (`gm3qFxu22akrTV3Z`) — unused manual form, nothing calls it
 
 **Key workflow IDs:**
 | Workflow | ID | Schedule |
@@ -107,7 +109,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 | [Order Intake] Daily CSV Upload | `6ZYQwdkmS5Nni05u` | Daily 1 PM EST |
 | [SMS] Inbound Collector | `xcNObK3qdU1wdf3f` | Every 30 min |
 | [SMS] Dispatch Queue | `w2bVQQ4hy33OdY1R` | Every 10 min |
-| [Broadcast] Dispatch | `oDEse7EvWHj6UVM4` | Every 5 min |
+| [Broadcast] Dispatch | `oDEse7EvWHj6UVM4` | Every 1 hour |
 | [Email Campaigns] Performance Tracker | `ctCLyHDQc1VckMqL` | Every hour |
 | [Email Campaigns] Campaign Sync | `nCcBt9USIYxlOaJT` | Every 6 hours |
 | [Email Campaigns] Campaign Setup | `NbnkM3nTFKSgtcfb` | Daily midnight |
@@ -115,10 +117,10 @@ If the env var is empty, read it from that file and use it directly in API calls
 | [Intelligence] Stage Runner | `h80nX24myWwsbxuB` | Every hour |
 | [Intelligence] Lapsed Re-engagement | `S3jSnWb3UTv9HmJL` | Daily (random offset) |
 | [Intelligence] AI Stack | `VreWonSUTk4VCXPF` | Every 3 hours |
-| [Field Agent] Outcome Sync | `chfGgYIjyTw6QP5m` | Every 15 min |
+| [Field Agent] Outcome Sync | `chfGgYIjyTw6QP5m` | Every 4 hours |
 | [Field Agent] Daily Brief | `kOI33cFH4bM8OCaf` | Daily 7:30 AM |
-| [Agent Rules] Playbook Sync | `FXuYcwQeBQ72Xxyu` | Every 15 min |
-| [Menu] Catalog Sync | `baZV5ViA5lXNCTWR` | Daily 6:30 AM |
+| [Agent Rules] Playbook Sync | `FXuYcwQeBQ72Xxyu` | Daily 6 AM |
+| [Menu] Catalog Sync | `baZV5ViA5lXNCTWR` | Weekly Mon 6:30 AM |
 | [Growth] Competitor Research | `GozoSXHiazEdhpni` | Weekly Mon 6:30 AM |
 | [Growth] Goal Agent | `w5kYj5vNsNW53W4n` | Daily 9 AM |
 | [Growth] Weekly Growth Agent | `Nbut2tjjksGvQYzH` | Weekly Mon 7:30 AM |
@@ -126,14 +128,11 @@ If the env var is empty, read it from that file and use it directly in API calls
 | [Reports] Daily Outcome Report | `fONTnqi4l9DT3aCo` | Daily 8:30 AM |
 | [Chatbot] Docs Sync | `oHtGvkCLTWYkxNZ0` | Every 30 min |
 | [Chatbot] Docs Reindex | `7mn3Ys0xMmZnZQIC` | Weekly Mon 2 AM |
-| [Chatbot] Query Form | `gm3qFxu22akrTV3Z` | On-demand |
 | [System] Action Queue | `RzR3ZNYlty7cuTDY` | Every 30 min |
 | [System] Feature Tests | `zlKQKfJ18QGIwogq` | Daily 5 AM |
 | [System] Connectivity Check | `ipSHdFUZMj2D0r0t` | Manual only |
 
-**Manual-only (inactive):** `[Order Intake] Historical Import` (`apAefjZE2Uy6F17n`), `[SMS] Historical Import` (`YANIKsHk767NDEXL`), `[Email Campaigns] Bulk Seed` (`1s7npKViuy1eyowW`), `[Broadcast] Broadcast Form` (`mUptDrymXZrtlrp8`)
-
-**Deactivated:** `[Chatbot] Query Form` (`gm3qFxu22akrTV3Z`) — on-demand only
+**Manual-only (inactive):** `[Order Intake] Historical Import` (`apAefjZE2Uy6F17n`), `[SMS] Historical Import` (`YANIKsHk767NDEXL`), `[Email Campaigns] Bulk Seed` (`1s7npKViuy1eyowW`)
 
 - Credential IDs: only `DW Admin Secret` (HTTP Header Auth) remains; all others removed from n8n
 - All other integration keys fetched at runtime via `GET /api/credentials` (requires `ADMIN_SECRET` Render env var)
