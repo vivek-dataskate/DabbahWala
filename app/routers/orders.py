@@ -554,6 +554,12 @@ def import_pipeline_status():
 
 # ─── Shipday Feedback Sync (was shipday_sync.py) ──────────────────────────────
 
+class FeedbackSyncRequest(BaseModel):
+    days_back:          int  = 7
+    run_in_background:  bool = True
+    all_historical:     bool = False
+
+
 @router.post("/sync-feedback")
 async def sync_feedback(req: FeedbackSyncRequest, background_tasks: BackgroundTasks):
     """
