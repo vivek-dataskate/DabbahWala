@@ -473,6 +473,43 @@ def _g3_contact_setup(suite: TestSuite) -> None:
         return {"lifecycle_segment": row["lifecycle_segment"], "phone": row["phone"]}
     _run(suite, "verify_test_contact", G, verify_contact)
 
+    def prospect_update_template():
+        """GET /api/prospects/update-template returns a valid CSV template."""
+        r = httpx.get(f"{LOCAL_BASE}/api/prospects/update-template", follow_redirects=True)
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}"
+        ct = r.headers.get("content-type", "")
+        assert "csv" in ct or "text" in ct, f"Unexpected content-type: {ct}"
+        lines = r.text.strip().splitlines()
+        assert len(lines) >= 2, "Template must have header + at least one sample row"
+        header_cols = [c.strip().lower() for c in lines[0].split(",")]
+        for required in ("emailid", "phone", "priorityoverride", "salesnotes"):
+            assert required in header_cols, f"Missing column '{required}' in template header"
+        return {"columns": lines[0], "sample_rows": len(lines) - 1}
+    _run(suite, "prospect_update_template_download", G, prospect_update_template)
+
+    def prospect_update_csv():
+        """POST /api/prospects/update-csv updates test contact's sales_notes via CSV."""
+        if not suite.test_contact_id:
+            raise AssertionError("No test_contact_id — skipping")
+        csv_content = (
+            "EmailId,Phone,FirstName,LastName,Address,PriorityOverride,SalesNotes\n"
+            f"{TEST_EMAIL},{TEST_PHONE[1:]},,,, ,E2E test note\n"
+        )
+        r = httpx.post(
+            f"{LOCAL_BASE}/api/prospects/update-csv",
+            files={"file": ("test_update.csv", csv_content.encode(), "text/csv")},
+        )
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        data = r.json()
+        assert data.get("updated", 0) >= 1, f"Expected >=1 updated, got: {data}"
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT sales_notes FROM contacts WHERE id = %s", (suite.test_contact_id,))
+            row = cur.fetchone()
+        assert row and row["sales_notes"] == "E2E test note", \
+            f"sales_notes not updated: {row}"
+        return {"updated": data["updated"], "skipped": data["skipped"]}
+    _run(suite, "prospect_update_csv_via_http", G, prospect_update_csv)
+
 
 # ─── GROUP 4: Event & Webhook Ingestion ──────────────────────────────────────
 
