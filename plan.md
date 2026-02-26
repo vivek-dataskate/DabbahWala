@@ -1,8 +1,8 @@
 # DabbahWala — Session Plan (2026-02-26)
 
 ## Current State
-- **825 tests passing**, 62 skipped (live API), 0 failing
-- **63% total code coverage**
+- **845 tests passing**, 62 skipped (live API), 0 failing
+- **65% total code coverage**
 - Branch: `claude/continue-logging-tests-b9aPf`
 
 ---
@@ -19,17 +19,13 @@ background tasks calling external APIs (Instantly, Shipday, Airtable) or Claude:
 | `app/routers/campaigns.py` | 47% | Instantly push sync (lines 857–1154) |
 | `app/routers/orders.py` | 43% | _run_historical_sync calls Shipday API (lines 60–149) |
 | `app/routers/chatbot.py` | 64% | _ensure_indexed, _do_index, _ensure_tables (startup) |
-| `app/routers/agents.py` | 72% | Claude AI calls (lines 1789–2441 complex paths) |
-| `app/routers/config.py` | 33% | Most endpoints missing tests |
+| `app/routers/agents.py` | 72% | Claude AI calls in observer/advisor/orchestrator |
 | `app/routers/agent.py` | 23% | Legacy agent router missing tests |
 
-### 2. Add Logging to Routers Missing It (Priority: LOW)
-- `app/routers/config.py` (missing logger.info on most endpoints)
-
-### 3. Infrastructure Done
+### 2. Infrastructure Done
 - pytest.ini — markers registered
-- scripts/run_tests.sh — ordered test runner (all 30+ files)
+- scripts/run_tests.sh — ordered test runner (31 files)
 - Dead code removed: airtable_menu.py, shipday_historical.py, telnyx.py
 
-### 4. Git Push (Next)
+### 3. Git Push (Next)
 Push all commits on `claude/continue-logging-tests-b9aPf` to remote.

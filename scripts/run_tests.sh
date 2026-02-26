@@ -127,6 +127,7 @@ ORDERED_TEST_FILES=(
     "test_playbook"
     "test_query"
     "test_schedules"
+    "test_config"
 
     # Layer 7 — Shipday sync + Auth + Daily CSV
     "test_shipday_sync"

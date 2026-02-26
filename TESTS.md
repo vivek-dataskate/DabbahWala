@@ -12,6 +12,7 @@ Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
 | `test_broadcasts.py` | `broadcasts.py` | 19 — create, delay-alert, queue, list, pending-recipients, recipients sent/failed, get job, validation |
 | `test_campaigns.py` | `campaigns.py` | 35 — pending, log-push, push-log, bulk-executed, active-contacts, stats, analytics, templates CRUD, rewrite (Claude), bulk-push, repair-push, push_lead_to_instantly, _get_routing_rows/row, analytics error handling |
 | `test_chatbot.py` | `chatbot.py` | 35 — ask, empty question, no key, history, suggest, reindex, _split_chunks, _compute_docs_hash, _last_indexed_at, _relevant_chunks, _lookup_canned, _find_cached_answer, _save_interaction, _save_canned, _clear_canned, _save_last_indexed_at, _save_docs_hash, _get_stored_docs_hash, _similar_history |
+| `test_config.py` | `config.py` | 20 — GET /api/credentials (no-secret/wrong/missing/valid), _check_admin_secret, POST send-email (no-SMTP/wrong-secret/STARTTLS/SSL/SMTP-error), POST drive/upload (wrong/success/fail), GET drive/files, GET docs/{id} |
 | `test_competitor_agent.py` | `competitor_agent.py` | 5 — run no key, run mocked, list runs, list experiments |
 | `test_contacts.py` | `contacts.py` | 4 — priority high/do_not_contact, invalid priority, update notes |
 | `test_daily_orders.py` | `daily_orders.py` | 27 — process CSV, empty CSV, new contacts, phone match, skip dups, download CSV, summary, normalize_phone/name/dish, _parse_delivery_slot |
@@ -36,7 +37,7 @@ Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
 | `test_team_content.py` | `team_content.py` | 9 — sync new/existing/empty, submit, browse, search |
 | `test_webhooks.py` | `webhooks.py` | 25 — list campaigns, campaign-stats, Instantly event/unknown, Telnyx inbound, Shipday auth/delivered/failed/ping |
 
-**Total unit tests: 825 passing, 62 skipped (live API — activate with env vars), 63% code coverage**
+**Total unit tests: 845 passing, 62 skipped (live API — activate with env vars), 65% code coverage**
 
 To run with live API tests:
 ```bash
