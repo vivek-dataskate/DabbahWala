@@ -40,7 +40,7 @@ Validates that all required tables, stored functions, and seed data are present.
 | `campaign_routing_seeded` | `campaign_routing` table has ≥5 rows |
 | `n8n_workflow_count` | n8n instance has ≥22 workflows |
 
-**Core tables checked:** `contacts`, `events`, `orders`, `order_items`, `telnyx_messages`, `telnyx_calls`, `delivery_status`, `engagement_rollups`, `menu_items`, `opportunities`
+**Core tables checked:** `contacts`, `events`, `orders`, `order_items`, `telnyx_messages`, `telnyx_calls`, `delivery_status`, `engagement_rollups`, `menu_catalog`, `menu_catalog_history`, `opportunities`
 
 **Agent tables checked:** `customer_goals`, `inference_results`, `decision_recommendations`, `orchestrator_log`, `action_queue`
 
@@ -145,12 +145,13 @@ Tests Instantly email campaign operations end-to-end.
 
 ## Group 9 — Airtable Integration (`9_airtable`)
 
-Tests Airtable menu sync, playbook sync, and field sales task creation.
+Tests Airtable menu catalog sync, playbook sync, and field sales task creation.
 
 | Test Name | What It Checks |
 |-----------|----------------|
-| `airtable_menu_fetch` | `GET /Weekly Menu?maxRecords=5` returns records |
-| `airtable_menu_sync` | `POST /api/menu/sync` syncs Airtable → DB |
+| `airtable_menu_fetch` | `GET /Menu Catalog?maxRecords=5` returns records |
+| `airtable_menu_sync` | `menu_catalog` has >0 active items in Postgres |
+| `menu_catalog_history` | `menu_catalog_history` has ≥100 'added' events |
 | `airtable_playbook_sync` | `POST /api/playbook/sync-from-airtable` succeeds |
 | `airtable_field_task_lifecycle` | Creates a field sales task in Airtable |
 | `airtable_field_task_delete` | Deletes the test task (cleanup) |
@@ -177,7 +178,7 @@ Tests CSV order ingestion and menu resolution.
 |-----------|----------------|
 | `order_csv_process` | Uploads test CSV to `POST /api/daily-orders/process` |
 | `order_csv_first_name_backfill` | Nulls test contact's first_name, uploads CSV, verifies `COALESCE` backfill sets it |
-| `menu_items_present` | `menu_items` table has >0 rows (Airtable sync worked) |
+| `menu_items_present` | `menu_catalog` has >0 active items (Airtable sync worked) |
 | `order_summary_endpoint` | `GET /api/daily-orders/summary/{today}` returns 200 or 404 |
 | `order_csv_no_premature_airtable` | CSV upload response has no `airtable_synced` field — premature Airtable outreach removed |
 | `field_agent_pending_calls_has_script` | `GET /api/field-agent/pending-calls` returns calls with `suggested_message` (brief script) |
