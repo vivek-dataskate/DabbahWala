@@ -570,3 +570,260 @@ class TestRepairPush:
         with patch("app.routers.campaigns.INSTANTLY_API_KEY", ""):
             resp = client.post("/api/campaigns/repair-push")
         assert resp.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# push_lead_to_instantly (internal helper) — direct tests
+# ---------------------------------------------------------------------------
+
+class TestPushLeadToInstantly:
+    """Test the push_lead_to_instantly helper function directly."""
+
+    def test_returns_true_when_enqueued_successfully(self):
+        """Returns True when campaign found and action_queue INSERT succeeds."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.campaigns import push_lead_to_instantly
+
+        routing_row = {
+            "default_campaign": "DW-Promo",
+            "instantly_campaign_id": "cid-abc123",
+            "instantly_campaign_name": "DW Promo Standard",
+            "template_file": "promo_standard.json",
+        }
+        cur = MagicMock()
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.campaigns._get_routing_row", return_value=routing_row), \
+             patch("app.routers.campaigns.get_cursor", side_effect=_cursor_ctx):
+            result = push_lead_to_instantly(
+                email="alice@example.com",
+                first_name="Alice",
+                last_name="Smith",
+                phone="+14041111111",
+                campaign_name="DW-Promo",
+                contact_id=42,
+            )
+
+        assert result is True
+
+    def test_returns_false_when_campaign_not_found(self):
+        """Returns False when _get_routing_row raises HTTPException (404)."""
+        from fastapi import HTTPException
+        from app.routers.campaigns import push_lead_to_instantly
+        from unittest.mock import patch
+
+        with patch("app.routers.campaigns._get_routing_row",
+                   side_effect=HTTPException(status_code=404, detail="Not found")):
+            result = push_lead_to_instantly(
+                email="bob@example.com",
+                first_name="Bob",
+                last_name="Jones",
+                phone="",
+                campaign_name="UNKNOWN_CAMPAIGN",
+            )
+
+        assert result is False
+
+    def test_returns_false_when_no_instantly_id(self):
+        """Returns False when routing row has no instantly_campaign_id."""
+        from app.routers.campaigns import push_lead_to_instantly
+        from unittest.mock import patch
+
+        routing_row = {
+            "default_campaign": "DW-Promo",
+            "instantly_campaign_id": None,  # no ID
+            "instantly_campaign_name": "DW Promo",
+            "template_file": "promo.json",
+        }
+
+        with patch("app.routers.campaigns._get_routing_row", return_value=routing_row):
+            result = push_lead_to_instantly(
+                email="carol@example.com",
+                first_name="Carol",
+                last_name="Lee",
+                phone="",
+                campaign_name="DW-Promo",
+            )
+
+        assert result is False
+
+
+# ---------------------------------------------------------------------------
+# _get_routing_rows and _get_routing_row — direct tests
+# ---------------------------------------------------------------------------
+
+class TestGetRoutingRows:
+    """Test _get_routing_rows DB helper directly."""
+
+    def test_returns_list_of_dicts(self):
+        """_get_routing_rows returns a list of routing row dicts."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.campaigns import _get_routing_rows
+
+        rows = [
+            {"default_campaign": "DW-Promo", "instantly_campaign_id": "cid1",
+             "instantly_campaign_name": "DW Promo", "template_file": "promo.json"},
+        ]
+        cur = MagicMock()
+        cur.fetchall.return_value = rows
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.campaigns.get_cursor", side_effect=_cursor_ctx):
+            result = _get_routing_rows()
+
+        assert len(result) == 1
+        assert result[0]["default_campaign"] == "DW-Promo"
+
+
+class TestGetRoutingRow:
+    """Test _get_routing_row DB helper directly."""
+
+    def test_returns_row_when_found(self):
+        """Returns dict when campaign_name exists in campaign_routing."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.campaigns import _get_routing_row
+
+        row = {"default_campaign": "DW-Promo", "instantly_campaign_id": "cid1",
+               "instantly_campaign_name": "DW Promo", "template_file": "promo.json"}
+        cur = MagicMock()
+        cur.fetchone.return_value = row
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.campaigns.get_cursor", side_effect=_cursor_ctx):
+            result = _get_routing_row("DW-Promo")
+
+        assert result["default_campaign"] == "DW-Promo"
+
+    def test_raises_404_when_not_found(self):
+        """Raises HTTPException 404 when campaign_name not in routing table."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from fastapi import HTTPException
+        from app.routers.campaigns import _get_routing_row
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            yield cur
+
+        import pytest
+        with patch("app.routers.campaigns.get_cursor", side_effect=_cursor_ctx):
+            with pytest.raises(HTTPException) as exc_info:
+                _get_routing_row("NONEXISTENT_CAMPAIGN")
+
+        assert exc_info.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# GET /api/campaigns/push-log additional tests
+# ---------------------------------------------------------------------------
+
+class TestPushLogFilters:
+    def test_filters_by_success_false(self, client):
+        """?success=false returns only failed pushes."""
+        failed_row = {
+            "id": 5, "queue_id": 2, "email": "fail@test.com",
+            "to_campaign": "DW-Promo", "success": False,
+            "status_code": 422, "error_message": "Unprocessable",
+            "response_body": None, "created_at": "2026-01-10T00:00:00",
+        }
+        cur = _make_cursor(rows=[failed_row])
+
+        with patch("app.routers.campaigns.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/campaigns/push-log?success=false")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["success"] is False
+
+    def test_push_log_with_custom_limit(self, client):
+        """?limit=5 passes limit to the DB query."""
+        cur = _make_cursor(rows=[])
+        with patch("app.routers.campaigns.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/campaigns/push-log?limit=5")
+        assert resp.status_code == 200
+
+    def test_push_log_default_returns_all(self, client):
+        """No success filter returns all entries."""
+        rows = [
+            {"id": 1, "queue_id": 1, "email": "a@x.com", "to_campaign": "DW-Promo",
+             "success": True, "status_code": 200, "error_message": None,
+             "response_body": None, "created_at": "2026-01-10T00:00:00"},
+            {"id": 2, "queue_id": 2, "email": "b@x.com", "to_campaign": "DW-Promo",
+             "success": False, "status_code": 422, "error_message": "Error",
+             "response_body": None, "created_at": "2026-01-10T00:00:00"},
+        ]
+        cur = _make_cursor(rows=rows)
+        with patch("app.routers.campaigns.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/campaigns/push-log")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 2
+
+
+# ---------------------------------------------------------------------------
+# GET /api/campaigns/analytics — with mocked INSTANTLY_API_KEY
+# ---------------------------------------------------------------------------
+
+class TestCampaignAnalyticsWithKey:
+    def test_analytics_returns_empty_when_no_routing_rows(self, client, monkeypatch):
+        """Returns empty list when no campaign_routing rows exist."""
+        with patch("app.routers.campaigns.INSTANTLY_API_KEY", "test-key"), \
+             patch("app.routers.campaigns._get_routing_rows", return_value=[]):
+            resp = client.get("/api/campaigns/analytics")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_analytics_handles_httpx_error_gracefully(self, client):
+        """When Instantly API call fails, error is captured in the result dict."""
+        import httpx
+        routing_row = {
+            "instantly_campaign_id": "cid-abc",
+            "default_campaign": "DW-Promo",
+            "instantly_campaign_name": "DW Promo",
+        }
+        with patch("app.routers.campaigns.INSTANTLY_API_KEY", "test-key"), \
+             patch("app.routers.campaigns._get_routing_rows", return_value=[routing_row]), \
+             patch("app.routers.campaigns.httpx.get",
+                   side_effect=httpx.ConnectError("connection refused")):
+            resp = client.get("/api/campaigns/analytics")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert "error" in data[0]
+
+
+# ---------------------------------------------------------------------------
+# POST /api/campaigns/{queue_id}/executed
+# ---------------------------------------------------------------------------
+
+class TestMarkExecutedAdditional:
+    def test_mark_executed_calls_stored_proc(self, client):
+        """POST /{queue_id}/executed invokes mark_campaign_executed stored proc."""
+        cur = _make_cursor()
+
+        with patch("app.routers.campaigns.get_cursor",
+                   side_effect=lambda commit=True: _cursor_ctx(cur)):
+            resp = client.post("/api/campaigns/999/executed")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"

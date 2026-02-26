@@ -165,3 +165,255 @@ class TestReindex:
         assert "status" in data
         assert "total_chunks" in data
         assert isinstance(data["files_indexed"], list)
+
+
+# ---------------------------------------------------------------------------
+# Internal utility function tests (direct, no HTTP)
+# ---------------------------------------------------------------------------
+
+class TestSplitChunks:
+    """Test _split_chunks text chunking directly."""
+
+    def test_short_text_returns_single_chunk(self):
+        """Text shorter than CHUNK_SIZE returns a single chunk."""
+        from app.routers.chatbot import _split_chunks
+        text = "Hello world"
+        chunks = _split_chunks(text)
+        assert len(chunks) == 1
+        assert chunks[0] == "Hello world"
+
+    def test_empty_string_returns_no_chunks(self):
+        """Empty string returns empty list."""
+        from app.routers.chatbot import _split_chunks
+        chunks = _split_chunks("")
+        assert chunks == []
+
+    def test_long_text_splits_into_multiple_chunks(self):
+        """Text much longer than CHUNK_SIZE produces multiple chunks."""
+        from app.routers.chatbot import _split_chunks, CHUNK_SIZE
+        long_text = "A" * (CHUNK_SIZE * 3)
+        chunks = _split_chunks(long_text)
+        assert len(chunks) >= 2
+
+    def test_chunks_with_newlines_prefer_newline_boundary(self):
+        """Chunks prefer to break at newline boundaries."""
+        from app.routers.chatbot import _split_chunks, CHUNK_SIZE
+        # Text with frequent newlines
+        text = "\n".join(["Line number " + str(i) for i in range(200)])
+        chunks = _split_chunks(text)
+        assert len(chunks) >= 2
+        # All chunks should be non-empty
+        assert all(len(c) > 0 for c in chunks)
+
+
+class TestComputeDocsHash:
+    """Test _compute_docs_hash utility."""
+
+    def test_same_docs_produce_same_hash(self):
+        """Same docs always return same hash (deterministic)."""
+        from app.routers.chatbot import _compute_docs_hash
+        docs = [{"source": "README.md", "content": "Hello world"}]
+        h1 = _compute_docs_hash(docs)
+        h2 = _compute_docs_hash(docs)
+        assert h1 == h2
+
+    def test_different_docs_produce_different_hash(self):
+        """Different content changes the hash."""
+        from app.routers.chatbot import _compute_docs_hash
+        docs1 = [{"source": "a.md", "content": "foo"}]
+        docs2 = [{"source": "a.md", "content": "bar"}]
+        assert _compute_docs_hash(docs1) != _compute_docs_hash(docs2)
+
+    def test_hash_is_64_chars(self):
+        """SHA-256 hex digest is always 64 characters."""
+        from app.routers.chatbot import _compute_docs_hash
+        docs = [{"source": "test.md", "content": "test content"}]
+        assert len(_compute_docs_hash(docs)) == 64
+
+
+class TestLastIndexedAt:
+    """Test _last_indexed_at DB helper."""
+
+    def test_returns_none_when_table_empty(self):
+        """Returns None when no record exists in chatbot_doc_meta."""
+        from app.routers.chatbot import _last_indexed_at
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _last_indexed_at()
+
+        assert result is None
+
+    def test_returns_timestamp_when_record_exists(self):
+        """Returns updated_at value when meta record exists."""
+        import datetime
+        from app.routers.chatbot import _last_indexed_at
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        ts = datetime.datetime(2026, 1, 15, tzinfo=datetime.timezone.utc)
+        cur = MagicMock()
+        cur.fetchone.return_value = {"updated_at": ts}
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _last_indexed_at()
+
+        assert result == ts
+
+    def test_returns_none_on_exception(self):
+        """Returns None if DB query raises an exception."""
+        from app.routers.chatbot import _last_indexed_at
+        from unittest.mock import patch
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=Exception("DB error")):
+            result = _last_indexed_at()
+
+        assert result is None
+
+
+class TestRelevantChunks:
+    """Test _relevant_chunks retrieval helper."""
+
+    def test_empty_question_returns_generic_chunks(self):
+        """Words-only filter with empty question returns generic chunks."""
+        from app.routers.chatbot import _relevant_chunks
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [
+            {"source_file": "README.md", "content": "DabbahWala intro"},
+        ]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _relevant_chunks("?!?")  # Only punctuation → no words
+
+        assert len(result) == 1
+        assert result[0]["source"] == "README.md"
+
+    def test_normal_question_uses_full_text_search(self):
+        """Normal question with words uses full-text ts_rank query."""
+        from app.routers.chatbot import _relevant_chunks
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [
+            {"source_file": "SYSTEM.md", "content": "Architecture overview"},
+        ]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _relevant_chunks("How does the architecture work?")
+
+        assert len(result) == 1
+        assert result[0]["source"] == "SYSTEM.md"
+
+
+class TestLookupCanned:
+    """Test _lookup_canned cache helper."""
+
+    def test_returns_none_when_not_cached(self):
+        """Returns None when no matching canned answer exists."""
+        from app.routers.chatbot import _lookup_canned
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _lookup_canned("Unknown question?")
+
+        assert result is None
+
+    def test_returns_cached_answer_when_present(self):
+        """Returns dict with answer and sources when cached."""
+        from app.routers.chatbot import _lookup_canned
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {
+            "answer": "The architecture uses a 4-layer pipeline.",
+            "sources": ["SYSTEM.md"],
+        }
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _lookup_canned("Why is a 4-layer AI pipeline better?")
+
+        assert result is not None
+        assert "pipeline" in result["answer"]
+        assert "SYSTEM.md" in result["sources"]
+
+
+class TestFindCachedAnswer:
+    """Test _find_cached_answer semantic similarity cache."""
+
+    def test_returns_none_when_no_similar_answer(self):
+        """Returns None when no similar interaction exists."""
+        from app.routers.chatbot import _find_cached_answer
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _find_cached_answer("Brand new question with no history")
+
+        assert result is None
+
+    def test_returns_cached_answer_on_hit(self):
+        """Returns answer dict when similarity threshold met."""
+        from app.routers.chatbot import _find_cached_answer
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {
+            "answer": "The system uses PostgreSQL for storage.",
+            "sources": ["SYSTEM.md"],
+            "sim": 0.85,
+        }
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _find_cached_answer("What database does the system use?")
+
+        assert result is not None
+        assert "PostgreSQL" in result["answer"]

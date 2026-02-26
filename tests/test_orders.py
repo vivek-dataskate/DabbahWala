@@ -418,3 +418,104 @@ class TestSyncFeedback:
         assert resp.status_code == 200
         data = resp.json()
         assert data["all_historical"] is True
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _sync_one_order (internal helper) — direct tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestSyncOneOrder:
+    """Test _sync_one_order internal helper directly (no HTTP)."""
+
+    def test_returns_result_dict_from_stored_proc(self):
+        """_sync_one_order calls sync_shipday_order() and returns parsed result."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.orders import _sync_one_order
+
+        result_dict = {"status": "created", "matched": True, "contact_created": False}
+        cur = MagicMock()
+        cur.fetchone.return_value = {"sync_shipday_order": result_dict}
+
+        @contextmanager
+        def _cursor_ctx(commit=True):
+            yield cur
+
+        with patch("app.routers.orders.get_cursor", side_effect=_cursor_ctx):
+            result = _sync_one_order({"orderId": "SD-001", "orderStatus": "DELIVERED"})
+
+        assert result["status"] == "created"
+        assert result["matched"] is True
+
+    def test_returns_empty_dict_when_no_row(self):
+        """_sync_one_order returns {} when stored proc returns no row."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.orders import _sync_one_order
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _cursor_ctx(commit=True):
+            yield cur
+
+        with patch("app.routers.orders.get_cursor", side_effect=_cursor_ctx):
+            result = _sync_one_order({"orderId": "SD-999"})
+
+        assert result == {}
+
+    def test_parses_json_string_result(self):
+        """_sync_one_order parses result when stored proc returns a JSON string."""
+        import json
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.orders import _sync_one_order
+
+        result_json = json.dumps({"status": "updated", "matched": True, "contact_created": False})
+        cur = MagicMock()
+        cur.fetchone.return_value = {"sync_shipday_order": result_json}
+
+        @contextmanager
+        def _cursor_ctx(commit=True):
+            yield cur
+
+        with patch("app.routers.orders.get_cursor", side_effect=_cursor_ctx):
+            result = _sync_one_order({"orderId": "SD-002"})
+
+        assert result["status"] == "updated"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/shipday/run-migration
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestRunMigration:
+    def test_run_migration_not_found_returns_404(self, client):
+        """Returns 404 when migration 034 file is not found."""
+        with patch("glob.glob", return_value=[]):
+            resp = client.post("/api/shipday/run-migration")
+        assert resp.status_code == 404
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# GET /api/shipday/import-pipeline-status
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestImportPipelineStatus:
+    def test_returns_pipeline_state(self, client):
+        """GET /import-pipeline-status returns pipeline_state dict."""
+        resp = client.get("/api/shipday/import-pipeline-status")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "pipeline_state" in data
+        assert "running" in data["pipeline_state"]
+
+    def test_pipeline_state_has_required_fields(self, client):
+        """pipeline_state includes all expected progress fields."""
+        resp = client.get("/api/shipday/import-pipeline-status")
+        state = resp.json()["pipeline_state"]
+        required = ["running", "phase", "started_at", "completed_at",
+                    "orders_synced", "agents_run"]
+        for field in required:
+            assert field in state
