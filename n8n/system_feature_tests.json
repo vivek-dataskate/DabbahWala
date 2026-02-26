@@ -1,0 +1,215 @@
+{
+  "name": "[System] Feature Tests",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "NAME: [System] Feature Tests\nPURPOSE: Runs each test group independently via GET /api/test/run/{group_id}. Each node is independently green (pass) or red (fail) — visible in n8n execution view without needing to read logs.\nTRIGGER: Daily at 5 AM or manual.\nNOTE: Groups 3-15 may create and clean up test data. Group 14 (cleanup) always runs last.",
+        "height": 160,
+        "width": 600
+      },
+      "id": "sticky-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [100, 100]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24,
+              "triggerAtHour": 5,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 5AM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [200, 480]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 620]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/1",
+        "options": {"timeout": 60000}
+      },
+      "id": "g1-connectivity",
+      "name": "G1 Connectivity",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/2",
+        "options": {"timeout": 60000}
+      },
+      "id": "g2-schema",
+      "name": "G2 Schema",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 340]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/3",
+        "options": {"timeout": 120000}
+      },
+      "id": "g3-contacts",
+      "name": "G3 Contact Setup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 480]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/5",
+        "options": {"timeout": 120000}
+      },
+      "id": "g5-sms",
+      "name": "G5 Telnyx SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 620]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/7",
+        "options": {"timeout": 120000}
+      },
+      "id": "g7-intelligence",
+      "name": "G7 Intelligence",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 760]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/8",
+        "options": {"timeout": 120000}
+      },
+      "id": "g8-instantly",
+      "name": "G8 Instantly",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 900]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/9",
+        "options": {"timeout": 60000}
+      },
+      "id": "g9-airtable",
+      "name": "G9 Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/11",
+        "options": {"timeout": 120000}
+      },
+      "id": "g11-orders",
+      "name": "G11 Orders",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 340]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/12",
+        "options": {"timeout": 300000}
+      },
+      "id": "g12-reports",
+      "name": "G12 Reports",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 480]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/13",
+        "options": {"timeout": 300000}
+      },
+      "id": "g13-chatbot",
+      "name": "G13 Chatbot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 620]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/test/run/14",
+        "options": {"timeout": 60000}
+      },
+      "id": "g14-cleanup",
+      "name": "G14 Cleanup",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [800, 760]
+    }
+  ],
+  "connections": {
+    "Daily 5AM": {
+      "main": [
+        [
+          {"node": "G1 Connectivity", "type": "main", "index": 0},
+          {"node": "G2 Schema", "type": "main", "index": 0},
+          {"node": "G3 Contact Setup", "type": "main", "index": 0},
+          {"node": "G5 Telnyx SMS", "type": "main", "index": 0},
+          {"node": "G7 Intelligence", "type": "main", "index": 0},
+          {"node": "G8 Instantly", "type": "main", "index": 0},
+          {"node": "G9 Airtable", "type": "main", "index": 0},
+          {"node": "G11 Orders", "type": "main", "index": 0},
+          {"node": "G12 Reports", "type": "main", "index": 0},
+          {"node": "G13 Chatbot", "type": "main", "index": 0},
+          {"node": "G14 Cleanup", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {"node": "G1 Connectivity", "type": "main", "index": 0},
+          {"node": "G2 Schema", "type": "main", "index": 0},
+          {"node": "G3 Contact Setup", "type": "main", "index": 0},
+          {"node": "G5 Telnyx SMS", "type": "main", "index": 0},
+          {"node": "G7 Intelligence", "type": "main", "index": 0},
+          {"node": "G8 Instantly", "type": "main", "index": 0},
+          {"node": "G9 Airtable", "type": "main", "index": 0},
+          {"node": "G11 Orders", "type": "main", "index": 0},
+          {"node": "G12 Reports", "type": "main", "index": 0},
+          {"node": "G13 Chatbot", "type": "main", "index": 0},
+          {"node": "G14 Cleanup", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

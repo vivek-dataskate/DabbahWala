@@ -1,0 +1,146 @@
+{
+  "name": "[System] Connectivity Check",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "NAME: [System] Connectivity Check\nPURPOSE: Verifies that all 6 external services are reachable. Each node is independently green/red — failures are visible at a glance in n8n execution view.\nTRIGGER: Manual or daily scheduled run.\nCREDENTIALS USED: Telnyx API Key, Airtable API Key, Instantly Bearer (fetched from /api/credentials).\nSERVICES CHECKED: FastAPI health, Telnyx API, Airtable API, Instantly API, Shipday API, Google Drive.",
+        "height": 200,
+        "width": 600
+      },
+      "id": "sticky-note",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [100, 100]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 380]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/health",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "check-fastapi",
+      "name": "FastAPI Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 200]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.telnyx.com/v2/messaging_profiles?page[size]=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "check-telnyx",
+      "name": "Telnyx API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 340],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "XnntvX8AXpdR97oQ",
+          "name": "Telnyx API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/appuy2VTIao6XVpIW/Agent%20Playbook?maxRecords=1",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "check-airtable",
+      "name": "Airtable API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 480],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "hJpO8jdlT4Rmkjtx",
+          "name": "Airtable API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.instantly.ai/api/v2/campaigns?limit=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOmVwbU1CSFRWa3ZiaQ=="
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "check-instantly",
+      "name": "Instantly API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 620]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.shipday.com/info",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Basic {{ $env?.SHIPDAY_API_KEY || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        },
+        "onError": "continueRegularOutput"
+      },
+      "id": "check-shipday",
+      "name": "Shipday API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 760]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {"node": "FastAPI Health", "type": "main", "index": 0},
+          {"node": "Telnyx API", "type": "main", "index": 0},
+          {"node": "Airtable API", "type": "main", "index": 0},
+          {"node": "Instantly API", "type": "main", "index": 0},
+          {"node": "Shipday API", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

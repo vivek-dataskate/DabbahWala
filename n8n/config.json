@@ -304,13 +304,29 @@
       "file": "action_queue_executor.json",
       "note": "Central action hub. Routes pending action_queue rows to: Airtable, Instantly, Google Drive, SMTP, Telnyx."
     },
-    "daily_test_suite": {
-      "id": "M7bwNMGrUMRvAHH4",
-      "name": "[System] Daily Tests",
+    "system_connectivity_check": {
+      "id": "ipSHdFUZMj2D0r0t",
+      "name": "[System] Connectivity Check",
+      "schedule": "Manual trigger",
+      "active": false,
+      "file": "system_connectivity_check.json",
+      "note": "6 independent nodes — one per service. Each shows green/red in n8n execution view."
+    },
+    "system_feature_tests": {
+      "id": "zlKQKfJ18QGIwogq",
+      "name": "[System] Feature Tests",
       "schedule": "Daily at 5:00 AM ET",
       "active": true,
+      "file": "system_feature_tests.json",
+      "note": "11 parallel nodes — one per test group (G1, G2, G3, G5, G7-G9, G11-G14). Each shows green/red independently."
+    },
+    "daily_test_suite_legacy": {
+      "id": "M7bwNMGrUMRvAHH4",
+      "name": "[System] Daily Tests",
+      "schedule": "Deactivated",
+      "active": false,
       "file": "system_test_suite.json",
-      "note": "Runs all E2E tests across all groups. Sends summary email on completion."
+      "note": "DEPRECATED — replaced by system_feature_tests. Black-box single-node test runner."
     },
     "_inactive": "── Inactive / Manual-only ──────────────────────────────",
     "menu_sync_weekly": {
