@@ -636,3 +636,165 @@ class TestRunCycleIntegration:
         assert data["collect"]["email_opens"] == 0
         assert data["profile"]["rollups_refreshed"] is True
         assert data["dispatch"]["stage_contacts_updated"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _phase_route — direct tests covering signal routing paths
+# ---------------------------------------------------------------------------
+
+class TestPhaseRoute:
+    """Test _phase_route directly, covering each signal route."""
+
+    def test_route_engaged_no_order(self):
+        """_phase_route creates send_email opportunity for engaged_no_order contacts."""
+        from app.routers.intelligence import _phase_route
+        cur = MagicMock()
+        signals = {
+            "engaged_no_order": [{"id": 1, "first_name": "Alice", "last_name": "Smith",
+                                   "email": "alice@example.com", "phone": "+14041111111",
+                                   "opens_7d": 3, "clicks_7d": 1}],
+            "new_customer_no_repeat": [],
+            "lapsed_reengaged": [],
+            "reorder_intent": [],
+            "app_customers_for_conversion": [],
+            "subscription_candidates": [],
+            "high_value_at_risk": [],
+        }
+        stats, actions = _phase_route(cur, signals)
+        assert stats["opportunities_created"] == 1
+        assert len(actions) == 1
+        assert actions[0]["action_type"] == "send_email"
+
+    def test_route_new_customer_no_repeat(self):
+        """_phase_route creates send_sms opportunity for new_customer_no_repeat contacts."""
+        from app.routers.intelligence import _phase_route
+        cur = MagicMock()
+        signals = {
+            "engaged_no_order": [],
+            "new_customer_no_repeat": [{"id": 2, "first_name": "Bob", "last_name": "Jones",
+                                         "email": "bob@example.com", "phone": "+14042222222"}],
+            "lapsed_reengaged": [],
+            "reorder_intent": [],
+            "app_customers_for_conversion": [],
+            "subscription_candidates": [],
+            "high_value_at_risk": [],
+        }
+        stats, actions = _phase_route(cur, signals)
+        assert stats["opportunities_created"] == 1
+        assert stats["sms_triggered"] == 1
+        assert actions[0]["action_type"] == "send_sms"
+
+    def test_route_lapsed_reengaged(self):
+        """_phase_route creates sales_call opportunity for lapsed_reengaged contacts."""
+        from app.routers.intelligence import _phase_route
+        cur = MagicMock()
+        signals = {
+            "engaged_no_order": [],
+            "new_customer_no_repeat": [],
+            "lapsed_reengaged": [{"id": 3, "first_name": "Carol", "last_name": "Davis",
+                                   "email": "carol@example.com", "phone": "+14043333333",
+                                   "lifecycle_segment": "lapsed_customer"}],
+            "reorder_intent": [],
+            "app_customers_for_conversion": [],
+            "subscription_candidates": [],
+            "high_value_at_risk": [],
+        }
+        stats, actions = _phase_route(cur, signals)
+        assert stats["opportunities_created"] == 1
+        assert actions[0]["action_type"] == "sales_call"
+
+    def test_route_reorder_intent(self):
+        """_phase_route creates send_sms for reorder_intent contacts."""
+        from app.routers.intelligence import _phase_route
+        cur = MagicMock()
+        signals = {
+            "engaged_no_order": [],
+            "new_customer_no_repeat": [],
+            "lapsed_reengaged": [],
+            "reorder_intent": [{"id": 4, "first_name": "Dave", "phone": "+14044444444",
+                                 "last_name": "", "email": ""}],
+            "app_customers_for_conversion": [],
+            "subscription_candidates": [],
+            "high_value_at_risk": [],
+        }
+        stats, actions = _phase_route(cur, signals)
+        assert stats["opportunities_created"] == 1
+        assert stats["sms_triggered"] == 1
+        assert actions[0]["action_type"] == "send_sms"
+
+    def test_route_app_customers(self):
+        """_phase_route creates campaign_move for app_customers_for_conversion."""
+        from app.routers.intelligence import _phase_route
+        cur = MagicMock()
+        signals = {
+            "engaged_no_order": [],
+            "new_customer_no_repeat": [],
+            "lapsed_reengaged": [],
+            "reorder_intent": [],
+            "app_customers_for_conversion": [{"id": 5, "first_name": "Eve",
+                                               "email": "eve@example.com", "phone": "+14045555555",
+                                               "last_name": "", "primary_source": "Food Delivery Apps"}],
+            "subscription_candidates": [],
+            "high_value_at_risk": [],
+        }
+        stats, actions = _phase_route(cur, signals)
+        assert stats["opportunities_created"] == 1
+        assert stats["campaign_moves"] == 1
+        assert actions[0]["action_type"] == "campaign_move"
+
+    def test_route_subscription_candidates(self):
+        """_phase_route creates send_sms for subscription_candidates."""
+        from app.routers.intelligence import _phase_route
+        cur = MagicMock()
+        signals = {
+            "engaged_no_order": [],
+            "new_customer_no_repeat": [],
+            "lapsed_reengaged": [],
+            "reorder_intent": [],
+            "app_customers_for_conversion": [],
+            "subscription_candidates": [{"id": 6, "first_name": "Frank",
+                                          "email": "frank@example.com", "phone": "+14046666666",
+                                          "last_name": "", "total_orders": 5}],
+            "high_value_at_risk": [],
+        }
+        stats, actions = _phase_route(cur, signals)
+        assert stats["opportunities_created"] == 1
+        assert stats["sms_triggered"] == 1
+
+    def test_route_high_value_at_risk(self):
+        """_phase_route creates sales_call for high_value_at_risk contacts."""
+        from app.routers.intelligence import _phase_route
+        cur = MagicMock()
+        signals = {
+            "engaged_no_order": [],
+            "new_customer_no_repeat": [],
+            "lapsed_reengaged": [],
+            "reorder_intent": [],
+            "app_customers_for_conversion": [],
+            "subscription_candidates": [],
+            "high_value_at_risk": [{"id": 7, "first_name": "Grace",
+                                     "email": "grace@example.com", "phone": "+14047777777",
+                                     "last_name": "", "total_orders": 15}],
+        }
+        stats, actions = _phase_route(cur, signals)
+        assert stats["opportunities_created"] == 1
+        assert actions[0]["action_type"] == "sales_call"
+
+    def test_route_empty_signals_returns_zeros(self):
+        """_phase_route with all empty signals returns 0 for all counts."""
+        from app.routers.intelligence import _phase_route
+        cur = MagicMock()
+        empty_signals = {
+            "engaged_no_order": [],
+            "new_customer_no_repeat": [],
+            "lapsed_reengaged": [],
+            "reorder_intent": [],
+            "app_customers_for_conversion": [],
+            "subscription_candidates": [],
+            "high_value_at_risk": [],
+        }
+        stats, actions = _phase_route(cur, empty_signals)
+        assert stats["opportunities_created"] == 0
+        assert actions == []
+        assert stats["campaign_moves"] == 0
+        assert stats["sms_triggered"] == 0

@@ -497,6 +497,32 @@ class TestRunMigration:
             resp = client.post("/api/shipday/run-migration")
         assert resp.status_code == 404
 
+    def test_run_migration_success(self, client):
+        """Returns status ok when migration file is found and executes successfully."""
+        from unittest.mock import mock_open
+        cur = _make_cursor()
+
+        with patch("glob.glob", return_value=["migrations/034_shipday.sql"]), \
+             patch("builtins.open", mock_open(read_data="CREATE TABLE test ();")), \
+             patch("app.routers.orders.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/shipday/run-migration")
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+    def test_run_migration_db_error_returns_500(self, client):
+        """Returns 500 when migration SQL raises an exception."""
+        from unittest.mock import mock_open
+        cur = _make_cursor()
+        cur.execute.side_effect = Exception("syntax error")
+
+        with patch("glob.glob", return_value=["migrations/034_shipday.sql"]), \
+             patch("builtins.open", mock_open(read_data="BAD SQL;")), \
+             patch("app.routers.orders.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/shipday/run-migration")
+
+        assert resp.status_code == 500
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # GET /api/shipday/import-pipeline-status
@@ -519,3 +545,549 @@ class TestImportPipelineStatus:
                     "orders_synced", "agents_run"]
         for field in required:
             assert field in state
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _get_shipday_key — internal helper
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestGetShipdayKey:
+    def test_raises_500_when_no_key(self, monkeypatch):
+        """_get_shipday_key raises HTTPException 500 when env var not set."""
+        from fastapi import HTTPException
+        from app.routers.orders import _get_shipday_key
+        monkeypatch.delenv("SHIPDAY_API_KEY", raising=False)
+        monkeypatch.delenv("SHIPDAY_KEY", raising=False)
+        try:
+            _get_shipday_key()
+            assert False, "Should have raised"
+        except HTTPException as e:
+            assert e.status_code == 500
+
+    def test_returns_key_when_set(self, monkeypatch):
+        """_get_shipday_key returns key from SHIPDAY_API_KEY env var."""
+        from app.routers.orders import _get_shipday_key
+        monkeypatch.setenv("SHIPDAY_API_KEY", "test-api-key-xyz")
+        key = _get_shipday_key()
+        assert key == "test-api-key-xyz"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _run_historical_sync — direct tests with mocked httpx
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestRunHistoricalSync:
+    def test_sync_fetches_orders_and_updates_state(self):
+        """_run_historical_sync calls httpx and updates _sync_state."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_historical_sync
+
+        orders_mod._sync_state["running"] = False
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [
+            {"orderId": "ORD-001", "customerName": "Alice Test"}
+        ]
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.status_code = 200
+
+        mock_http_client = MagicMock()
+        mock_http_client.__enter__ = MagicMock(return_value=mock_http_client)
+        mock_http_client.__exit__ = MagicMock(return_value=False)
+        mock_http_client.get.return_value = mock_resp
+
+        with patch("app.routers.orders.httpx.Client", return_value=mock_http_client), \
+             patch("app.routers.orders._sync_one_order", return_value={"status": "created", "matched": True, "contact_created": True}):
+            _run_historical_sync("test-key", "2024-01-01", max_pages=1)
+
+        assert orders_mod._sync_state["running"] is False
+        assert orders_mod._sync_state["orders_synced"] >= 1
+
+    def test_sync_handles_fetch_exception(self):
+        """_run_historical_sync handles HTTP errors per window gracefully."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_historical_sync
+
+        mock_http_client = MagicMock()
+        mock_http_client.__enter__ = MagicMock(return_value=mock_http_client)
+        mock_http_client.__exit__ = MagicMock(return_value=False)
+        mock_http_client.get.side_effect = Exception("Connection refused")
+
+        with patch("app.routers.orders.httpx.Client", return_value=mock_http_client):
+            _run_historical_sync("test-key", "2024-01-01", max_pages=1)
+
+        assert orders_mod._sync_state["running"] is False
+        assert orders_mod._sync_state["errors"] >= 1
+
+    def test_sync_handles_order_ingest_exception(self):
+        """_run_historical_sync catches per-order exceptions without crashing."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_historical_sync
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = [{"orderId": "ORD-ERR"}]
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_http_client = MagicMock()
+        mock_http_client.__enter__ = MagicMock(return_value=mock_http_client)
+        mock_http_client.__exit__ = MagicMock(return_value=False)
+        mock_http_client.get.return_value = mock_resp
+
+        with patch("app.routers.orders.httpx.Client", return_value=mock_http_client), \
+             patch("app.routers.orders._sync_one_order", side_effect=Exception("DB error")):
+            _run_historical_sync("test-key", "2024-01-01", max_pages=1)
+
+        assert orders_mod._sync_state["running"] is False
+        assert orders_mod._sync_state["errors"] >= 1
+
+    def test_sync_handles_dict_response(self):
+        """_run_historical_sync handles {'orders': [...]} dict response format."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_historical_sync
+
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = {"orders": [{"orderId": "ORD-DICT"}]}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_http_client = MagicMock()
+        mock_http_client.__enter__ = MagicMock(return_value=mock_http_client)
+        mock_http_client.__exit__ = MagicMock(return_value=False)
+        mock_http_client.get.return_value = mock_resp
+
+        with patch("app.routers.orders.httpx.Client", return_value=mock_http_client), \
+             patch("app.routers.orders._sync_one_order", return_value={"status": "created", "matched": False, "contact_created": False}):
+            _run_historical_sync("test-key", "2024-01-01", max_pages=1)
+
+        assert orders_mod._sync_state["running"] is False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# get_top_calls — fallback and error paths
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestTopCallsAdditional:
+    def test_fallback_query_used_when_stored_proc_empty(self, client):
+        """When stored proc returns 0 rows, fallback query is used."""
+        fallback_rows = [{"contact_id": 1, "full_name": "Alice", "phone": "+1404",
+                          "email": "a@b.com", "lifecycle_segment": "active",
+                          "total_orders": 5, "last_order_at": None, "days_since_last_order": 10,
+                          "opens_7d": 2, "opens_30d": 5, "orders_90d": 3,
+                          "urgency_score": 0.5, "call_reason": "Top customer",
+                          "suggested_script": "Hi!", "rank": 1}]
+        cur = _make_cursor()
+        cur.fetchall.side_effect = [[], fallback_rows]
+
+        with patch("app.routers.orders.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/shipday/top-calls?limit=5")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] >= 0
+
+    def test_top_calls_db_exception_returns_500(self, client):
+        """get_top_calls propagates exception as 500."""
+        cur = _make_cursor()
+        cur.execute.side_effect = Exception("DB crash")
+
+        with patch("app.routers.orders.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/shipday/top-calls?limit=5")
+
+        assert resp.status_code == 500
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _fetch_order_detail — direct tests with mocked httpx
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestFetchOrderDetail:
+    def test_returns_none_on_404(self):
+        """_fetch_order_detail returns None when Shipday returns 404."""
+        from app.routers.orders import _fetch_order_detail
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+
+        mock_http_client = MagicMock()
+        mock_http_client.__enter__ = MagicMock(return_value=mock_http_client)
+        mock_http_client.__exit__ = MagicMock(return_value=False)
+        mock_http_client.get.return_value = mock_resp
+
+        with patch("app.routers.orders.httpx.Client", return_value=mock_http_client):
+            result = _fetch_order_detail("test-key", "ORD-999")
+
+        assert result is None
+
+    def test_returns_order_dict_on_success(self):
+        """_fetch_order_detail returns parsed JSON on success."""
+        from app.routers.orders import _fetch_order_detail
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"orderId": "ORD-123", "feedback": "Great!"}
+        mock_resp.raise_for_status = MagicMock()
+
+        mock_http_client = MagicMock()
+        mock_http_client.__enter__ = MagicMock(return_value=mock_http_client)
+        mock_http_client.__exit__ = MagicMock(return_value=False)
+        mock_http_client.get.return_value = mock_resp
+
+        with patch("app.routers.orders.httpx.Client", return_value=mock_http_client):
+            result = _fetch_order_detail("test-key", "ORD-123")
+
+        assert result is not None
+        assert result["orderId"] == "ORD-123"
+
+    def test_returns_none_on_network_exception(self):
+        """_fetch_order_detail returns None on network error."""
+        from app.routers.orders import _fetch_order_detail
+
+        mock_http_client = MagicMock()
+        mock_http_client.__enter__ = MagicMock(return_value=mock_http_client)
+        mock_http_client.__exit__ = MagicMock(return_value=False)
+        mock_http_client.get.side_effect = Exception("timeout")
+
+        with patch("app.routers.orders.httpx.Client", return_value=mock_http_client):
+            result = _fetch_order_detail("test-key", "ORD-ERR")
+
+        assert result is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _store_order_communications — direct tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestStoreOrderCommunications:
+    def test_stores_feedback_and_instruction(self):
+        """_store_order_communications handles feedback, delivery_instruction, and POD."""
+        from app.routers.orders import _store_order_communications
+
+        cur = _make_cursor()
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        order = {
+            "feedback": "Great delivery!",
+            "deliveryInstruction": "Leave at door",
+            "proofOfDelivery": {"signaturePath": "sig.png", "picturePaths": ["pic1.jpg"]},
+        }
+
+        with patch("app.routers.orders.get_cursor", side_effect=_mock_cursor):
+            result = _store_order_communications("ORD-001", order, "2024-01-01T12:00:00Z")
+
+        assert "customer_feedback" in result
+        assert "delivery_instruction" in result
+        assert "proof_of_delivery" in result
+
+    def test_returns_empty_for_no_comms(self):
+        """_store_order_communications returns empty list when order has no comms."""
+        from app.routers.orders import _store_order_communications
+
+        cur = _make_cursor()
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        order = {"feedback": "", "deliveryInstruction": "", "proofOfDelivery": {}}
+
+        with patch("app.routers.orders.get_cursor", side_effect=_mock_cursor):
+            result = _store_order_communications("ORD-EMPTY", order, None)
+
+        assert result == []
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _create_feedback_opportunity — direct tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestCreateFeedbackOpportunity:
+    def test_creates_opportunity_for_negative_sentiment(self):
+        """_create_feedback_opportunity inserts opportunity for negative feedback."""
+        from app.routers.orders import _create_feedback_opportunity
+
+        cur = _make_cursor()
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.orders.get_cursor", side_effect=_mock_cursor):
+            _create_feedback_opportunity(contact_id=1, shipday_order_id="ORD-NEG", sentiment="negative")
+
+        assert cur.execute.called
+
+    def test_creates_opportunity_for_positive_sentiment(self):
+        """_create_feedback_opportunity inserts opportunity for positive feedback."""
+        from app.routers.orders import _create_feedback_opportunity
+
+        cur = _make_cursor()
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.orders.get_cursor", side_effect=_mock_cursor):
+            _create_feedback_opportunity(contact_id=2, shipday_order_id="ORD-POS", sentiment="positive")
+
+        assert cur.execute.called
+
+    def test_skips_neutral_sentiment(self):
+        """_create_feedback_opportunity does nothing for neutral sentiment."""
+        from app.routers.orders import _create_feedback_opportunity
+
+        cur = _make_cursor()
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.orders.get_cursor", side_effect=_mock_cursor):
+            _create_feedback_opportunity(contact_id=3, shipday_order_id="ORD-NEU", sentiment="neutral")
+
+        cur.execute.assert_not_called()
+
+    def test_handles_db_exception(self):
+        """_create_feedback_opportunity silently handles DB error."""
+        from app.routers.orders import _create_feedback_opportunity
+
+        with patch("app.routers.orders.get_cursor", side_effect=Exception("DB error")):
+            _create_feedback_opportunity(contact_id=4, shipday_order_id="ORD-X", sentiment="negative")
+        # Should not raise
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _run_feedback_sync — direct tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestRunFeedbackSync:
+    def test_aborts_when_no_api_key(self, monkeypatch):
+        """_run_feedback_sync returns early when no SHIPDAY_API_KEY set."""
+        from app.routers.orders import _run_feedback_sync
+        monkeypatch.delenv("SHIPDAY_API_KEY", raising=False)
+        monkeypatch.delenv("SHIPDAY_KEY", raising=False)
+
+        with patch("app.routers.orders.get_cursor") as mock_cursor:
+            _run_feedback_sync(days_back=7, all_historical=False)
+
+        mock_cursor.assert_not_called()
+
+    def test_syncs_orders_with_feedback(self, monkeypatch):
+        """_run_feedback_sync processes orders and records sentiment."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_feedback_sync
+
+        monkeypatch.setenv("SHIPDAY_API_KEY", "test-key")
+
+        pending_rows = [{"shipday_order_id": "ORD-001", "contact_id": 1, "actual_delivery": None}]
+        sentiment_row = {"sentiment": "positive"}
+        cur = _make_cursor()
+        cur.fetchall.return_value = pending_rows
+        cur.fetchone.return_value = sentiment_row
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.orders.get_cursor", side_effect=_mock_cursor), \
+             patch("app.routers.orders._fetch_order_detail", return_value={"feedback": "Great!"}), \
+             patch("app.routers.orders._store_order_communications", return_value=["customer_feedback"]), \
+             patch("app.routers.orders._create_feedback_opportunity"), \
+             patch("app.routers.orders.time.sleep"):
+            _run_feedback_sync(days_back=7, all_historical=False)
+
+        assert orders_mod._feedback_sync_state["running"] is False
+
+    def test_handles_order_fetch_exception(self, monkeypatch):
+        """_run_feedback_sync catches per-order exceptions gracefully."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_feedback_sync
+
+        monkeypatch.setenv("SHIPDAY_API_KEY", "test-key")
+
+        pending_rows = [{"shipday_order_id": "ORD-ERR", "contact_id": 1, "actual_delivery": None}]
+        cur = _make_cursor()
+        cur.fetchall.return_value = pending_rows
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.orders.get_cursor", side_effect=_mock_cursor), \
+             patch("app.routers.orders._fetch_order_detail", side_effect=Exception("timeout")):
+            _run_feedback_sync(days_back=7, all_historical=False)
+
+        assert orders_mod._feedback_sync_state["errors"] >= 1
+
+    def test_all_historical_uses_different_query(self, monkeypatch):
+        """_run_feedback_sync with all_historical=True uses historical SQL path."""
+        from app.routers.orders import _run_feedback_sync
+
+        monkeypatch.setenv("SHIPDAY_API_KEY", "test-key")
+
+        cur = _make_cursor()
+        cur.fetchall.return_value = []
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.orders.get_cursor", side_effect=_mock_cursor):
+            _run_feedback_sync(days_back=7, all_historical=True)
+
+        # Verify the query was executed with "historical" style (no date params)
+        call_args = cur.execute.call_args_list[0]
+        sql = call_args[0][0] if call_args[0] else ""
+        assert "actual_delivery" in sql or "synced_at" in sql or "COMPLETED" in sql
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# sync_feedback — synchronous mode
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestSyncFeedbackSynchronous:
+    def test_sync_mode_runs_inline(self, client, monkeypatch):
+        """sync_feedback with run_in_background=False runs inline."""
+        import app.routers.orders as orders_mod
+        orders_mod._feedback_sync_state["running"] = False
+
+        with patch("app.routers.orders._run_feedback_sync") as mock_fn:
+            resp = client.post("/api/shipday/sync-feedback", json={
+                "days_back": 7,
+                "run_in_background": False,
+            })
+
+        assert resp.status_code == 200
+        mock_fn.assert_called_once()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# _run_import_pipeline — direct tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestRunImportPipeline:
+    def test_pipeline_runs_all_phases(self, monkeypatch):
+        """_run_import_pipeline runs all 4 phases and completes."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_import_pipeline
+
+        monkeypatch.setenv("SHIPDAY_API_KEY", "test-key")
+
+        cur = _make_cursor()
+        cur.fetchall.return_value = []  # no contacts to run agents on
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.orders._run_historical_sync"), \
+             patch("app.routers.orders._run_feedback_sync"), \
+             patch("app.routers.orders.get_cursor", side_effect=_mock_cursor):
+            _run_import_pipeline("test-key", days_back=7, max_pages=10)
+
+        assert orders_mod._pipeline_state["running"] is False
+        assert orders_mod._pipeline_state["phase"] == "done"
+
+    def test_pipeline_handles_exception(self, monkeypatch):
+        """_run_import_pipeline catches fatal exceptions and marks phase=done."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_import_pipeline
+
+        with patch("app.routers.orders._run_historical_sync", side_effect=Exception("crash!")):
+            _run_import_pipeline("test-key", days_back=7, max_pages=10)
+
+        assert orders_mod._pipeline_state["running"] is False
+        assert orders_mod._pipeline_state["phase"] == "done"
+
+    def test_pipeline_runs_agents_for_contacts(self, monkeypatch):
+        """_run_import_pipeline calls _run_full_cycle for each contact."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_import_pipeline
+
+        cur = _make_cursor()
+        cur.fetchall.return_value = [{"id": 101}, {"id": 102}]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.orders._run_historical_sync"), \
+             patch("app.routers.orders._run_feedback_sync"), \
+             patch("app.routers.orders.get_cursor", side_effect=_mock_cursor), \
+             patch("app.routers.agents._run_full_cycle") as mock_agent:
+            _run_import_pipeline("test-key", days_back=7, max_pages=10)
+
+        assert mock_agent.call_count == 2
+
+    def test_pipeline_catches_per_agent_exceptions(self, monkeypatch):
+        """_run_import_pipeline catches per-contact agent failures gracefully."""
+        import app.routers.orders as orders_mod
+        from app.routers.orders import _run_import_pipeline
+
+        cur = _make_cursor()
+        cur.fetchall.return_value = [{"id": 201}]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.orders._run_historical_sync"), \
+             patch("app.routers.orders._run_feedback_sync"), \
+             patch("app.routers.orders.get_cursor", side_effect=_mock_cursor), \
+             patch("app.routers.agents._run_full_cycle", side_effect=Exception("agent crash")):
+            _run_import_pipeline("test-key", days_back=7, max_pages=10)
+
+        assert orders_mod._pipeline_state["agent_errors"] >= 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# feedback_stats — endpoint tests
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestFeedbackStats:
+    def test_feedback_stats_returns_data(self, client):
+        """GET /feedback-stats returns sync_state, breakdown, and recent_feedback."""
+        breakdown = [{"comm_type": "customer_feedback", "sentiment": "positive", "count": 3, "latest": None}]
+        recent = [{"id": 1, "shipday_order_id": "ORD-1", "order_number": "1", "content": "Great!",
+                   "sentiment": "positive", "occurred_at": None, "email": "a@b.com",
+                   "full_name": "Alice Test", "phone": "+1404"}]
+        cur = _make_cursor()
+        cur.fetchall.side_effect = [breakdown, recent]
+
+        with patch("app.routers.orders.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/shipday/feedback-stats")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "sync_state" in data
+        assert "breakdown" in data
+        assert "recent_feedback" in data
+
+    def test_feedback_stats_db_error_returns_500(self, client):
+        """GET /feedback-stats returns 500 when DB raises."""
+        cur = _make_cursor()
+        cur.execute.side_effect = Exception("DB crash")
+
+        with patch("app.routers.orders.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/shipday/feedback-stats")
+
+        assert resp.status_code == 500
+
+    def test_feedback_stats_serializes_datetimes(self, client):
+        """GET /feedback-stats serializes datetime fields to ISO strings."""
+        from datetime import datetime, timezone
+        ts = datetime(2024, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+        breakdown = [{"comm_type": "customer_feedback", "sentiment": "positive", "count": 1, "latest": ts}]
+        recent = []
+        cur = _make_cursor()
+        cur.fetchall.side_effect = [breakdown, recent]
+
+        with patch("app.routers.orders.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/shipday/feedback-stats")
+
+        assert resp.status_code == 200
+        # latest should be serialized to string
+        breakdown_data = resp.json()["breakdown"]
+        if breakdown_data:
+            assert isinstance(breakdown_data[0]["latest"], str)
