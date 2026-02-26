@@ -148,7 +148,7 @@
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"from\": \"+18444322224\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.sms_message }}\",\n  \"messaging_profile_id\": \"400191f9-0057-41f5-9f10-375fb3fe1a70\"\n}",
+        "jsonBody": "={\n  \"from\": \"{{ $('Get Credentials').first().json.TELNYX_FROM_NUMBER }}\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.sms_message }}\",\n  \"messaging_profile_id\": \"{{ $('Get Credentials').first().json.TELNYX_MESSAGING_PROFILE_ID }}\"\n}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [

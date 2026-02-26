@@ -213,7 +213,7 @@
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"from\": \"+18444322224\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.template_body || $json.suggested_message || 'Check out today\\'s fresh menu at dabbahwala.com!' }}\"\n}",
+        "jsonBody": "={\n  \"from\": \"{{ $('Get Credentials').first().json.TELNYX_FROM_NUMBER }}\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.template_body || $json.suggested_message || 'Check out today\\'s fresh menu at dabbahwala.com!' }}\"\n}",
         "options": {},
         "sendHeaders": true,
         "headerParameters": {
