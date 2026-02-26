@@ -1,21 +1,101 @@
 # DabbahWala — Complete Pending Work Plan
 
-## Context
+## Status (as of 2026-02-26)
 
-This plan consolidates all pending work identified across multiple sessions in context.md.
-The codebase is on branch `claude/review-context-plan-gYPY1`. The last user request was
-to restore the Airtable Agent Playbook table (accidentally deleted) with seeded rules.
-All terminology changes (Part 12) discussed in prior sessions are NOT yet applied to the
-codebase — intelligence.py still uses INTAKE/EVIDENCE/INFERENCE/DECISION/EXECUTION and
-agents.py still uses Inference/Decision (not Observer/Advisor).
+| Step | Status |
+|------|--------|
+| 0 — Restore Agent Playbook | ✅ DONE (committed) |
+| 1 — Fix n8n crashes + deploy missing workflows | ✅ DONE (committed) |
+| 2 — Terminology rename | ✅ DONE (confirmed already applied in prior session) |
+| 3 — Airtable cleanup | ✅ DONE (committed) |
+| 4 — Lapsed sweep 300→200 | ✅ DONE (committed) |
+| 5 — Centralized credential service | 🔄 IN PROGRESS (see below) |
+| 6 — Rename n8n workflows | ⏳ Pending |
+| 7 — Two visible n8n test workflows | ⏳ Pending |
+| 8 — Router reorganization | ⏳ Pending |
+| 9 — Rewrite FEATURES.md | ⏳ Pending |
+| 10 — DB cleanup + migration squash | ⏳ Pending |
+| 11 — Python structured logging | ⏳ Ongoing (applied as files touched) |
+| 12 — n8n workflow sticky notes | ⏳ Ongoing (applied as workflows touched) |
+| 13 — Dashboard enhancements | ⏳ Pending |
+| 14 — Campaign JSONs + test_data/ | ⏳ Pending |
+
+Branch: `claude/review-context-plan-gYPY1`
 
 ---
 
-## Changes In Order
+## STEP 5 (Remaining Work) — Centralized Credential Service
+
+### What's done
+- `app/routers/config.py` created (untracked — needs commit)
+- `app/main.py` updated to include config router at `/api/credentials` and `/api/internal` (unstaged — needs commit)
+
+### What remains
+
+#### A. Commit Python changes
+- `app/routers/config.py` (new) + `app/main.py` (updated imports + router includes)
+
+#### B. Prereq: user creates n8n credential
+User must create one HTTP Header Auth credential in n8n:
+- Name: `DW Admin Secret`
+- Header name: `X-Admin-Secret`
+- Header value: `<value of ADMIN_SECRET Render env var>`
+
+#### C. Update n8n workflow JSONs (17 files)
+
+All 17 workflows with `"credentials"` blocks need three changes:
+1. Add a "Get Credentials" HTTP Request node immediately after the trigger
+2. Wire the trigger → "Get Credentials" → (rest of workflow)
+3. Replace credential references:
+   - Telnyx `httpHeaderAuth` → `sendHeaders: true` with `Authorization: Bearer {{ $('Get Credentials').first().json.TELNYX_API_KEY }}`
+   - Airtable `httpHeaderAuth` → header `Authorization: Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}`
+   - Instantly `httpHeaderAuth` → header `Authorization: Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}`
+   - Shipday `httpHeaderAuth` → header `Authorization: Basic {{ $('Get Credentials').first().json.SHIPDAY_API_KEY }}`
+   - Gmail SMTP node → replace with `POST /api/internal/send-email` HTTP Request
+   - Google Drive OAuth node → replace with `POST /api/internal/drive/upload` HTTP Request
+   - Airtable native nodes → replace with HTTP Request using dynamic Airtable API key
+
+#### D. Get Credentials node template (inject into every workflow)
+```json
+{
+  "id": "get-credentials",
+  "name": "Get Credentials",
+  "type": "n8n-nodes-base.httpRequest",
+  "typeVersion": 4.2,
+  "parameters": {
+    "method": "GET",
+    "url": "=https://dabbahwala-latest.onrender.com/api/credentials",
+    "authentication": "genericCredentialType",
+    "genericAuthType": "httpHeaderAuth",
+    "options": {}
+  },
+  "credentials": {
+    "httpHeaderAuth": {
+      "id": "<DW Admin Secret n8n cred ID>",
+      "name": "DW Admin Secret"
+    }
+  }
+}
+```
+
+#### E. Push all 17 updated workflows to n8n live via PUT /api/v1/workflows/{id}
+
+#### Files to update
+`n8n/sms_dispatch.json`, `n8n/broadcast_dispatch.json`, `n8n/telnyx_inbound_collector.json`,
+`n8n/hourly_intelligence_cycle.json`, `n8n/airtable_playbook_sync.json`, `n8n/lifecycle_cycle_cron.json`,
+`n8n/instantly_campaign_sync.json`, `n8n/shipday_delivery_collector.json`,
+`n8n/telnyx_sms_historical_import.json`, `n8n/action_queue_executor.json`,
+`n8n/growth_agent_cycle.json`, `n8n/system_test_suite.json`, `n8n/google_docs_sync.json`,
+`n8n/airtable_outcome_sync.json`, `n8n/marketing_query_form.json`,
+`n8n/airtable_menu_sync.json` (if applicable), `n8n/menu_sync_weekly.json` (inactive — skip)
 
 ---
 
-### STEP 0 — Restore Agent Playbook (Immediate — Last Session Request)
+## Remaining Steps (6–14)
+
+---
+
+### STEP 0 — Restore Agent Playbook (Immediate — Last Session Request) [DONE]
 
 **Why:** User deleted the Airtable "Agent Playbook" table. The n8n playbook sync workflow
 reads from Airtable and POSTs to `/api/playbook/sync-from-airtable`. Without the Airtable

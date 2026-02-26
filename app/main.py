@@ -6,7 +6,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, airtable_menu, auth, campaigns, broadcasts, chatbot, competitor_agent, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, test_harness, webhooks
+from app.routers import agents, agent, airtable_menu, auth, campaigns, broadcasts, chatbot, competitor_agent, config, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, test_harness, webhooks
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
@@ -190,6 +190,8 @@ app.include_router(contacts.router, prefix="/api/contacts", tags=["contacts"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 app.include_router(test_harness.router, prefix="/api/test", tags=["test-harness"])
 app.include_router(airtable_menu.router, prefix="/api/menu", tags=["menu"])
+app.include_router(config.router, prefix="/api/credentials", tags=["credentials"])
+app.include_router(config.router, prefix="/api/internal", tags=["internal"])
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
