@@ -60,6 +60,95 @@ def run_test_suite(
     return suite.to_dict()
 
 
+@router.get("/run/{group_id}")
+def run_test_group(
+    group_id: int,
+):
+    """
+    Run a single test group by number (1-15) and return its results.
+    Used by [System] Feature Tests n8n workflow — each node calls one group,
+    so pass/fail is visible per group in n8n execution view.
+
+    Groups:
+      1  connectivity        7  intelligence
+      2  schema              8  instantly
+      3  contact_setup       9  airtable
+      4  events             10  action_queue
+      5  telnyx_sms         11  orders
+      6  agent_pipeline     12  reports
+                            13  query_chatbot
+                            14  cleanup
+                            15  competitor_agent
+    """
+    import uuid, time
+    from datetime import datetime, timezone
+    from app.services.test_harness_service import (
+        TestSuite,
+        _g1_connectivity, _g2_schema, _g3_contact_setup, _g4_events,
+        _g5_telnyx_sms, _g6_agent_pipeline, _g7_intelligence, _g8_instantly,
+        _g9_airtable, _g10_action_queue, _g11_orders, _g12_reports,
+        _g13_query_chatbot, _g14_cleanup, _g15_competitor_agent,
+    )
+
+    GROUP_FNS = {
+        1: _g1_connectivity,
+        2: _g2_schema,
+        3: _g3_contact_setup,
+        4: _g4_events,
+        5: _g5_telnyx_sms,
+        6: _g6_agent_pipeline,
+        7: _g7_intelligence,
+        8: _g8_instantly,
+        9: _g9_airtable,
+        10: _g10_action_queue,
+        11: _g11_orders,
+        12: _g12_reports,
+        13: _g13_query_chatbot,
+        14: _g14_cleanup,
+        15: _g15_competitor_agent,
+    }
+
+    if group_id not in GROUP_FNS:
+        raise HTTPException(status_code=404, detail=f"Test group {group_id} not found. Valid: 1-15.")
+
+    logger.info("Single test group triggered — group_id=%d", group_id)
+    run_id = str(uuid.uuid4())
+    started_at = datetime.now(timezone.utc).isoformat()
+    suite = TestSuite(run_id=run_id, started_at=started_at, triggered_by=f"n8n_group_{group_id}")
+
+    t0 = time.time()
+    try:
+        GROUP_FNS[group_id](suite)
+    except Exception as e:
+        logger.error("Group %d raised unexpected error: %s", group_id, e, exc_info=True)
+
+    suite.completed_at = datetime.now(timezone.utc).isoformat()
+    suite.duration_seconds = round(time.time() - t0, 1)
+    summary = suite.summary()
+
+    passed = summary["passed"]
+    failed = summary["failed"]
+    total = summary["total"]
+    logger.info("Group %d done: passed=%d failed=%d total=%d duration=%.1fs",
+                group_id, passed, failed, total, suite.duration_seconds)
+
+    # Return 200 with results (n8n node shows green). If any failures, return 207 so
+    # the node turns orange, making failures visible in n8n execution view.
+    suite_dict = suite.to_dict()
+    result = {
+        "group": group_id,
+        "passed": passed,
+        "failed": failed,
+        "total": total,
+        "duration_seconds": suite.duration_seconds,
+        "groups": suite_dict.get("groups", []),
+    }
+    if failed > 0:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=207, content=result)
+    return result
+
+
 @router.get("/results")
 def list_test_runs(
     secret: str = Query(default=""),

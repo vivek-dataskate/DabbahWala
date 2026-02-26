@@ -168,8 +168,8 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 | `rules` | Lifecycle rule predicates + actions (SQL-driven) |
 | `campaign_routing` | **Single source of truth** for campaigns — lifecycle segment → Instantly campaign ID/name, email template file, performance stats (leads, opens, replies, etc.); `contacts.current_campaign` is always derived from this table via `lifecycle_segment` JOIN |
 | `campaign_queue` | Pending campaign moves |
-| `campaign_push_log` | Audit log of every Instantly lead-push attempt from n8n — `queue_id`, `email`, `to_campaign`, `success`, `status_code`, `error_message`, `response_body`, `created_at` (migration 060) |
-| `agent_playbook` | User-configured rules (synced from Airtable every 15 min) |
+| ~~`campaign_push_log`~~ | Dropped in migration 065 |
+| `agent_playbook` | User-configured rules (synced from Airtable daily at 6 AM) |
 | `sms_templates` | SMS A/B testing variants |
 | `team_content` | Ground notes, ad copies, Google Docs content |
 | `opportunities` | Conversion opportunities with signal type, confidence, status |
@@ -225,29 +225,31 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 
 | Router | Prefix | Key Endpoints |
 |--------|--------|--------------|
-| `test_harness.py` | `/api/test` | `POST /run` (full E2E suite), `GET /results`, `GET /results/{run_id}` |
+| `config.py` | `/api/credentials` + `/api/internal` | `GET /` (return all API keys — requires `X-Admin-Secret`); `POST /send-email` (SMTP proxy); `POST /drive/upload`; `GET /drive/files`; `GET /docs/{doc_id}` |
+| `test_harness.py` | `/api/test` | `POST /run` (full E2E suite), `GET /results`, `GET /results/{run_id}`, `GET /run/{group_id}` (run single test group, returns per-test pass/fail) |
 | `agents.py` | `/api/agents` | `POST /cycle/run`, `/cycle/run-for-contact`, `/cycle/run-all`, `/cycle/run-daily-sweep`, `/cycle/run-all-lapsed`, `GET /action-queue/pending`, `POST /action-queue/{id}/done`, `POST /goals`, `POST /report/activity`, `POST /report/outcome` |
 | `intelligence.py` | `/api/intelligence` | `POST /run-cycle`, `GET /pending-actions`, `POST /ingest-instantly-events` |
-| `daily_orders.py` | `/api/daily-orders` | `POST /process`, `GET /summary/{date}` |
+| `orders.py` | `/api/shipday` | `POST /ingest-orders`, `GET /sync-status`, `GET /top-calls`, `POST /run-migration`, `POST /import-all-and-run-agents`, `GET /import-pipeline-status`, `POST /sync-feedback`, `GET /feedback-stats` (merged from `shipday_sync.py` + `shipday_historical.py`) |
 | `query.py` | `/api/query` | `POST /` (14 Tier-1 SQL + 1 Tier-2 Claude categories — includes `sms_performance`, `email_performance`, `activity_report`, `outcome_report` with date-range filtering), `GET /categories` |
 | `lifecycle.py` | `/api/lifecycle` | `POST /run` — SQL rule engine |
 | `prospects.py` | `/api/prospects` | `GET /template` (new-contact CSV template), `POST /upload-csv` (bulk add new contacts), `GET /update-template` (update CSV template + enqueues Drive upload), `POST /update-csv` (bulk update existing contacts — sets name, address, priority_override, sales_notes by email/phone match), `POST /add` (single manual entry) |
 | `contacts.py` | `/api/contacts` | `PATCH /{id}/priority`, `PATCH /{id}/notes` |
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |
 | `campaigns.py` | `/api/campaigns` | `GET /pending` (returns first/last name), `GET /active-contacts` (contacts with active campaign derived from lifecycle_segment via campaign_routing JOIN — for Instantly seed), `GET /active-contacts-stats` (diagnostic — filter exclusion counts + campaign distribution), `POST /log-push` (record Instantly push result), `GET /push-log` (diagnostic — filter by success, optional ?verify cross-checks against Instantly API), `POST /repair-push` (background: re-push leads that have campaign=null in Instantly), `POST /bulk-executed` (batch mark), `POST /{id}/executed`, `POST /bulk-push-to-instantly` (background: push all pending campaign_queue moves directly to Instantly, deduplicated by email), `GET /analytics`, `GET /templates`, `GET /templates/{name}`, `PUT /templates/{name}`, `POST /templates/{name}/rewrite`, `POST /setup-instantly` |
-| `telnyx.py` | `/api/telnyx` | `POST /message`, `POST /call`, `POST /field-agent-message` |
+| `sms.py` | `/api/telnyx` | `POST /message`, `POST /call`, `POST /field-agent-message` (renamed from `telnyx.py`) |
 | `webhooks.py` | `/api/webhooks` | `POST /instantly` (Instantly email events), `POST /telnyx` (Telnyx inbound SMS push webhook), `POST /shipday` / `GET /shipday` (Shipday delivery status), `POST /sync-campaigns`, `GET /campaigns`, `POST /campaign-stats` |
 | `delivery.py` | `/api/delivery` | `POST /status` |
 | `playbook.py` | `/api/playbook` | `GET /rules`, `POST /rules`, `POST /sync-from-airtable` |
 | `team_content.py` | `/api/team-content` | `POST /sync`, `POST /submit`, `GET /browse`, `POST /search` |
 | `reports.py` | `/api/reports` | `GET /daily/{date}`, `POST /daily/{date}` |
 | `events.py` | `/api/events` | `POST /ingest` |
-| `airtable_menu.py` | `/api/menu` | `GET /items`, `GET /items/inactive`, `GET /items/{id}/history`, `POST /sync` (Airtable → Postgres, two-phase: upsert + deletion detection) |
+| `menu.py` | `/api/menu` | `GET /items`, `GET /items/inactive`, `GET /items/{id}/history`, `POST /sync` (Airtable → Postgres, two-phase: upsert + deletion detection; renamed from `airtable_menu.py`) |
 | `growth_agent.py` | `/api/growth` | Growth hacker agent endpoints |
 | `goal_agent.py` | `/api/goal-agent` | `POST /run`, `/hypothesize`, `/experiment`, `/measure`, `/harvest`; `GET /experiments`, `/signals`, `/runs` |
 | `competitor_agent.py` | `/api/competitor-agent` | `POST /run` (full cycle: parse emails + scrape sites + generate + inject); `GET /runs`, `/experiments` |
 | `chatbot.py` | `/api/chatbot` | `POST /ask`, `GET /suggest`, `GET /history`, `POST /reindex` — RAG Q&A over project docs |
 | `auth.py` | _(root)_ | `GET /login`, `GET /auth/google`, `GET /auth/callback`, `GET /auth/me`, `GET /auth/logout` — Google OAuth2 for @dabbahwala.com accounts |
+| `schedules.py` | `/api/admin` | `GET /schedules` (list all n8n workflow schedules as human-readable strings, sorted by name); `POST /schedules/{workflow_id}` (update a workflow's scheduleTrigger node and push to n8n) — both require active Google OAuth session |
 
 ### Admin Endpoints
 
@@ -349,7 +351,7 @@ Stored in: `orchestrator_log`
 
 ### Playbook Injection
 
-The `agent_playbook` table (synced from Airtable every 15 min) injects user-configured rules into the system prompt of **every** Layer 1, 2, and 3 agent. Users can change AI behaviour without any code changes.
+The `agent_playbook` table (synced from Airtable daily at 6 AM) injects user-configured rules into the system prompt of **every** Layer 1, 2, and 3 agent. Users can change AI behaviour without any code changes.
 
 | Category | Example effect |
 |----------|---------------|
@@ -399,7 +401,7 @@ The Contact Sweep scans every contact in the database each hour to find behaviou
 
 ## 8. n8n Workflow Layer
 
-**30 workflows on `digitalworker.dataskate.io` — all active except `[Shipday — Evidence] Historical Import` (manual one-shot)**
+**26 workflows on `digitalworker.dataskate.io` — all active-scheduled**
 
 Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/`.
 
@@ -407,37 +409,31 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 
 | Group | Workflow | Schedule | Purpose |
 |-------|----------|----------|---------|
-| **Airtable** | Menu Catalog Sync | Daily 6:30 AM | Pull Airtable "Menu Catalog" → `POST /api/menu/sync` → upsert `menu_catalog`, detect deletions → mark discarded + record history |
-| **Airtable** | Playbook Sync | Every 15 min | Sync rules from Airtable → `agent_playbook` table |
-| **Airtable** | Outcome Sync | Every 15 min | Pull Airtable field sales outcomes → update opportunities |
-| **Airtable** | Marketing Query Form | On-demand (form submit) | n8n form → `POST /api/query` → Claude inference → logs to Airtable |
-| **Shipday** | Delivery Collector | Every 30 min | Poll Shipday → `POST /api/delivery/status` |
-| **Shipday** | Feedback Sync | Hourly | Poll delivery feedback, instructions, proof-of-delivery |
-| **Shipday** | Historical Import | Manual only | One-shot backfill of up to 1 year of order history |
-| **Telnyx** | Inbound Collector | Every 30 min | Poll Telnyx MDR (`GET /v2/reports/messaging/message_detail_records`) for inbound SMS + call recordings → `POST /api/telnyx/message` → trigger agent cycle |
-| **Telnyx** | SMS Historical Import | Manual only | One-shot backfill of inbound SMS via Telnyx MDR API (~90 days retention); analogous to Shipday historical import |
-| **Telnyx** | SMS Dispatch | Every 10 min | Poll action_queue for `send_sms` → Telnyx API → mark done |
-| **Telnyx** | Broadcast Dispatch | Every 5 min | Dispatch queued broadcasts (SMS via Telnyx, email via SMTP) |
-| **Telnyx** | Broadcast Form | On form submit | n8n form UI for delay alerts and promo broadcasts |
-| **Instantly** | Campaign Performance | Hourly | Fetch Instantly analytics per campaign → `POST /api/webhooks/campaign-stats` (updates `campaign_routing` stats columns) |
-| **Instantly** | Campaign Setup | Daily midnight | Create missing Instantly campaigns (no-op if all exist) |
-| **Instantly** | Bulk Lead Seeder | Manual only | One-shot: seed all active contacts into their Instantly campaign; skips missing `first_name`; `skip_if_in_workspace=true` (idempotent) |
-| **Google** | Docs & Drive Sync | Every 30 min | List Drive folder → read Google Docs → `POST /api/team-content/sync` |
-| **Orders** | Daily CSV Upload | Daily 1 PM EST | Upload daily CSV → `POST /api/daily-orders/process` |
-| **Reporting** | Daily Field Brief | Daily 7:30 AM | `POST /api/field-agent/daily-brief` |
-| **Reporting** | Daily Activity Report | Daily 8:00 AM | `POST /api/agents/report/activity` → Claude HTML + CSV → email |
-| **Reporting** | Daily Outcome Report | Daily 8:30 AM | `POST /api/agents/report/outcome` → Claude HTML + CSV → email |
-| **Intelligence** | AI Stack | Every 3 hours | `POST /api/agents/cycle/run-daily-sweep` — dormant contacts (cap 200, 72 h cooldown); 4-layer Claude pipeline (Observer→Advisor→Orchestrator→Reports) |
-| **Intelligence** | Contact Sweep | Hourly | `POST /api/intelligence/run-cycle` — full 5-phase sweep (COLLECT→PROFILE→SIGNAL→ROUTE→DISPATCH) |
-| **Intelligence** | Stage Runner | Hourly | `POST /api/lifecycle/run` — Stage Engine: pure SQL rules that move contacts between lifecycle stages; for each pending campaign move: removes lead from old Instantly campaign, adds to new campaign, logs attempt to `campaign_push_log` |
-| **Intelligence** | Lapsed Sweep | Daily (random offset) | Persistent re-engagement for lapsed contacts |
-| **Claude** | Menu Sync Weekly | Weekly | Menu suggestion agent cycle |
-| **Claude** | Growth Agent Cycle | Every Monday 7:30 AM | Growth hacker 4-phase experiment loop: refresh baseline → measure → design+launch → email report |
-| **Claude** | Goal-Oriented Agent Cycle | Daily 9:00 AM | `POST /api/goal-agent/run` — 4-phase proactive loop: HYPOTHESIZE → EXPERIMENT → MEASURE → HARVEST; proven experiments become `discovered_signals` |
-| **Claude** | Competitor Research Agent | Every Monday 6:30 AM | `POST /api/competitor-agent/run` — parse .eml samples + scrape 5 competitor sites + Claude generates 8 hypotheses covering all 4 retention segments → auto-inject into `goal_experiments` |
-| **System** | Action Queue Executor | Every 30 min | Route action_queue rows to Telnyx / Instantly / Airtable / Drive / SMTP |
-| **System** | Chatbot Docs Reindex | Every Monday 2 AM | Refresh chatbot document index |
-| **System** | Daily E2E Test Suite | Daily 5:00 AM ET | Run 55+ end-to-end tests across 14 groups → email results to vivek@dabbahwala.com |
+| **[Menu]** | Catalog Sync | Weekly Mon 6:30 AM | Pull Airtable "Menu Catalog" → `POST /api/menu/sync` → upsert `menu_catalog`, detect deletions → mark discarded + record history |
+| **[Agent Rules]** | Playbook Sync | Daily 6 AM | Sync rules from Airtable → `agent_playbook` table |
+| **[Field Agent]** | Outcome Sync | Every 4 hours | Pull Airtable field sales outcomes → update opportunities |
+| **[Order Intake]** | Order Collector | Every 30 min | Poll Shipday → `POST /api/shipday/ingest-orders` |
+| **[Order Intake]** | Feedback Sync | Hourly | Poll delivery feedback, instructions, proof-of-delivery |
+| **[Order Intake]** | Daily CSV Upload | Daily 1 PM EST | Upload daily CSV → `POST /api/daily-orders/process` |
+| **[SMS]** | Inbound Collector | Every 30 min | Poll Telnyx MDR for inbound SMS + call recordings → `POST /api/telnyx/message` → trigger agent cycle |
+| **[SMS]** | Dispatch Queue | Every 10 min | Poll action_queue for `send_sms` → Telnyx API → mark done |
+| **[Broadcast]** | Dispatch | Every 1 hour | Dispatch queued broadcasts (SMS via Telnyx API, email via `/api/internal/send-email`); fixed email branch + messaging_profile_id |
+| **[Email Campaigns]** | Performance Tracker | Hourly | Fetch Instantly analytics → `POST /api/webhooks/campaign-stats` |
+| **[Email Campaigns]** | Campaign Setup | Daily midnight | Create missing Instantly campaigns (no-op if all exist) |
+| **[Chatbot]** | Docs Sync | Every 30 min | List Drive folder → read Google Docs via `/api/internal/docs/{id}` → `POST /api/team-content/sync` |
+| **[Chatbot]** | Docs Reindex | Weekly Mon 2 AM | Refresh chatbot document index |
+| **[Field Agent]** | Daily Brief | Daily 7:30 AM | `POST /api/field-agent/daily-brief` → write top-10 contacts to Airtable Field Sales Tasks → email summary to core@dabbahwala.com |
+| **[Reports]** | Daily Activity Report | Daily 8:00 AM | `POST /api/agents/report/activity` → Claude HTML + CSV → email |
+| **[Reports]** | Daily Outcome Report | Daily 8:30 AM | `POST /api/agents/report/outcome` → Claude HTML + CSV → email |
+| **[Intelligence]** | AI Stack | Every 3 hours | `POST /api/agents/cycle/run-daily-sweep` — dormant contacts (cap 200, 72 h cooldown); 4-layer Claude pipeline (Observer→Advisor→Orchestrator→Reports) |
+| **[Intelligence]** | Contact Sweep | Hourly | `POST /api/intelligence/run-cycle` — full 5-phase sweep (COLLECT→PROFILE→SIGNAL→ROUTE→DISPATCH) |
+| **[Intelligence]** | Stage Runner | Hourly | `POST /api/lifecycle/run` — Stage Engine: pure SQL rules that move contacts between lifecycle stages |
+| **[Intelligence]** | Lapsed Re-engagement | Daily (random offset) | Persistent re-engagement for lapsed contacts |
+| **[Growth]** | Weekly Growth Agent | Every Mon 7:30 AM | Growth hacker 4-phase experiment loop: refresh baseline → measure → design+launch → email report |
+| **[Growth]** | Goal Agent | Daily 9:00 AM | `POST /api/goal-agent/run` — 4-phase proactive loop: HYPOTHESIZE → EXPERIMENT → MEASURE → HARVEST |
+| **[Growth]** | Competitor Research | Every Mon 6:30 AM | `POST /api/competitor-agent/run` — parse .eml + scrape competitor sites + generate hypotheses → inject into `goal_experiments` |
+| **[System]** | Action Queue | Every 30 min | Route action_queue rows to Telnyx / Instantly / Airtable / Drive / `/api/internal/send-email` |
+| **[System]** | Feature Tests | Daily 5 AM | Sequential chain G1→G14, each node green/red independently; Summarize + email report to core@dabbahwala.com |
 
 ### n8n API Notes
 
@@ -445,7 +441,8 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 - Deactivate workflow: `POST /api/v1/workflows/{id}/deactivate`
 - When pushing via API only send `{name, nodes, connections, settings}` — n8n rejects `staticData`, `pinData`, `tags`, `meta`
 - Credentials resolve by **name** on first push — exact credential name required
-- Telnyx from number hardcoded as `+18444322224` (n8n Variables not available on this instance)
+- All credentials fetched at runtime via `GET /api/credentials` (single "DW Admin Secret" bootstrap credential in n8n)
+- No hardcoded phone numbers, profile IDs, or API keys in workflow JSONs — all sourced from `/api/credentials` response
 
 ---
 
@@ -485,7 +482,7 @@ A contact's current campaign is always derived via `JOIN campaign_routing ON lif
 - **Menu Catalog** table (`tblmZBNdQvmFcvVai`): staff manage active items here → daily 6:30 AM n8n sync → `menu_catalog` (deleting a row marks it discarded in Postgres)
   - Fields: Item Name, Category, Is Veg, Description, Image URL, Price, Added Date
 - **Field Sales Tasks:** escalated opportunities appear as Airtable records; agents update outcomes
-- **Playbook Rules:** user-configurable; synced every 15 min to `agent_playbook`
+- **Playbook Rules:** user-configurable; synced daily at 6 AM to `agent_playbook`
 
 ### Shipday
 
@@ -585,7 +582,7 @@ On every merge to `main`:
 | Metric | Count |
 |--------|-------|
 | API endpoints | ~88+ |
-| Database migrations | 59 |
+| Database migrations | 65 |
 | Database tables | 22+ |
 | Stored functions | 15+ |
 | n8n workflows | 30 |

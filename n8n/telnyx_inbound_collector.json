@@ -1,5 +1,5 @@
 {
-  "name": "[Telnyx — Evidence] Inbound SMS Collector",
+  "name": "[SMS] Inbound Collector",
   "nodes": [
     {
       "parameters": {
@@ -49,8 +49,7 @@
       "parameters": {
         "method": "GET",
         "url": "https://api.telnyx.com/v2/reports/messaging/message_detail_records",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -70,6 +69,15 @@
         },
         "options": {
           "timeout": 20000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.TELNYX_API_KEY }}"
+            }
+          ]
         }
       },
       "id": "fetch-inbound-sms",
@@ -80,20 +88,13 @@
         660,
         180
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "XnntvX8AXpdR97oQ",
-          "name": "Telnyx API Key"
-        }
-      },
       "continueOnFail": true
     },
     {
       "parameters": {
         "method": "GET",
         "url": "https://api.telnyx.com/v2/recordings",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -109,6 +110,15 @@
         },
         "options": {
           "timeout": 20000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.TELNYX_API_KEY }}"
+            }
+          ]
         }
       },
       "id": "fetch-call-recordings",
@@ -119,12 +129,6 @@
         660,
         440
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "XnntvX8AXpdR97oQ",
-          "name": "Telnyx API Key"
-        }
-      },
       "continueOnFail": true
     },
     {
@@ -346,7 +350,7 @@
     {
       "parameters": {},
       "id": "skip-sms",
-      "name": "Skip — No SMS",
+      "name": "Skip \u2014 No SMS",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -357,13 +361,36 @@
     {
       "parameters": {},
       "id": "skip-call",
-      "name": "Skip — No Call",
+      "name": "Skip \u2014 No Call",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
         1340,
         600
       ]
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
@@ -371,7 +398,7 @@
       "main": [
         [
           {
-            "node": "Build Time Window",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -382,7 +409,7 @@
       "main": [
         [
           {
-            "node": "Build Time Window",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -460,7 +487,7 @@
         ],
         [
           {
-            "node": "Skip — No SMS",
+            "node": "Skip \u2014 No SMS",
             "type": "main",
             "index": 0
           }
@@ -478,7 +505,7 @@
         ],
         [
           {
-            "node": "Skip — No Call",
+            "node": "Skip \u2014 No Call",
             "type": "main",
             "index": 0
           }
@@ -523,6 +550,17 @@
         [
           {
             "node": "Evaluate Opportunity (Call)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
+      "main": [
+        [
+          {
+            "node": "Build Time Window",
             "type": "main",
             "index": 0
           }

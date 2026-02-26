@@ -1,5 +1,5 @@
 {
-  "name": "[Claude \u2014 Decision] Lifecycle Cycle Runner",
+  "name": "[Intelligence] Stage Runner",
   "nodes": [
     {
       "parameters": {
@@ -217,8 +217,7 @@
       "parameters": {
         "method": "DELETE",
         "url": "=https://api.instantly.ai/api/v2/leads",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -234,12 +233,15 @@
         },
         "options": {
           "allowUnauthorizedCerts": false
-        }
-      },
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "98RupYRuQa6m9mqh",
-          "name": "Instantly API Key"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}"
+            }
+          ]
         }
       },
       "id": "remove-from-old-campaign",
@@ -270,8 +272,7 @@
       "parameters": {
         "method": "POST",
         "url": "=https://api.instantly.ai/api/v2/leads",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -308,12 +309,15 @@
               "batchInterval": 2000
             }
           }
-        }
-      },
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "98RupYRuQa6m9mqh",
-          "name": "Instantly API Key"
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}"
+            }
+          ]
         }
       },
       "id": "add-to-new-campaign",
@@ -481,6 +485,29 @@
         "options": {}
       },
       "continueOnFail": true
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
@@ -488,7 +515,7 @@
       "main": [
         [
           {
-            "node": "Run Lifecycle Cycle",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -663,7 +690,7 @@
       "main": [
         [
           {
-            "node": "Run Lifecycle Cycle",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -713,6 +740,17 @@
     "Log Failed Push": {
       "main": [
         []
+      ]
+    },
+    "Get Credentials": {
+      "main": [
+        [
+          {
+            "node": "Run Lifecycle Cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },

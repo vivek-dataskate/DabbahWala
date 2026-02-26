@@ -1,5 +1,5 @@
 {
-  "name": "[Orders — Action] Daily CSV Upload",
+  "name": "[Order Intake] Daily CSV Upload",
   "nodes": [
     {
       "parameters": {

@@ -1,5 +1,5 @@
 {
-  "name": "[System — Action] Action Queue Executor",
+  "name": "[System] Action Queue",
   "nodes": [
     {
       "parameters": {
@@ -278,12 +278,20 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.telnyx.com/v2/messages",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"from\": \"+18444322224\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.payload.message_body || 'DabbahWala: We have something special for you today!' }}\"\n}",
-        "options": {}
+        "jsonBody": "={\n  \"from\": \"{{ $('Get Credentials').first().json.TELNYX_FROM_NUMBER }}\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.payload.message_body || 'DabbahWala: We have something special for you today!' }}\"\n}",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.TELNYX_API_KEY }}"
+            }
+          ]
+        }
       },
       "id": "execute-sms",
       "name": "Send SMS via Telnyx",
@@ -293,12 +301,6 @@
         1320,
         100
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "XnntvX8AXpdR97oQ",
-          "name": "Telnyx API Key"
-        }
-      },
       "continueOnFail": true
     },
     {
@@ -307,7 +309,7 @@
         "url": "https://dabbahwala-latest.onrender.com/api/telnyx/message",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"contact_email\": \"{{ $('Split Actions').item.json.email }}\",\n  \"direction\": \"outbound\",\n  \"from_number\": \"+18444322224\",\n  \"to_number\": \"{{ $('Split Actions').item.json.phone }}\",\n  \"body\": \"{{ $('Split Actions').item.json.payload.message_body || '' }}\",\n  \"telnyx_msg_id\": \"{{ $json.data?.id || '' }}\",\n  \"status\": \"sent\",\n  \"is_delivery_staff\": false,\n  \"metadata\": { \"source\": \"action_queue\", \"action_id\": {{ $('Split Actions').item.json.id }} }\n}",
+        "jsonBody": "={\n  \"contact_email\": \"{{ $('Split Actions').item.json.email }}\",\n  \"direction\": \"outbound\",\n  \"from_number\": \"{{ $('Get Credentials').first().json.TELNYX_FROM_NUMBER }}\",\n  \"to_number\": \"{{ $('Split Actions').item.json.phone }}\",\n  \"body\": \"{{ $('Split Actions').item.json.payload.message_body || '' }}\",\n  \"telnyx_msg_id\": \"{{ $json.data?.id || '' }}\",\n  \"status\": \"sent\",\n  \"is_delivery_staff\": false,\n  \"metadata\": { \"source\": \"action_queue\", \"action_id\": {{ $('Split Actions').item.json.id }} }\n}",
         "options": {}
       },
       "id": "store-sent-sms",
@@ -336,48 +338,36 @@
       ]
     },
     {
-      "parameters": {
-        "operation": "create",
-        "base": {
-          "__rl": true,
-          "value": "appuy2VTIao6XVpIW",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Field Sales Tasks",
-          "mode": "name"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "Customer Name": "={{ ($json.first_name || '') + ' ' + ($json.last_name || '') }}",
-            "Phone": "={{ $json.phone || '' }}",
-            "Email": "={{ $json.email || '' }}",
-            "Priority": "={{ ($json.payload.urgency || 'medium') === 'high' ? 'Hot' : 'Warm' }}",
-            "Reason": "={{ $json.payload.notes || 'Escalated by Orchestrator Agent' }}",
-            "Suggested Action": "={{ $json.payload.suggested_copy || '' }}",
-            "Status": "New",
-            "Action Type": "field_sales_call",
-            "Confidence Score": "=0.9"
-          }
-        }
-      },
       "id": "create-airtable-escalation",
       "name": "Create Airtable Escalation",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1320,
         320
       ],
-      "credentials": {
-        "airtableTokenApi": {
-          "id": "hJpO8jdlT4Rmkjtx",
-          "name": "Airtable API Key"
-        }
-      },
-      "continueOnFail": true
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Field%20Sales%20Tasks",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"records\": [{\"fields\": {\"Customer Name\": ($json.first_name || '') + ' ' + ($json.last_name || ''), \"Phone\": $json.phone || '', \"Email\": $json.email || '', \"Priority\": (($json.payload?.urgency || 'medium') === 'high') ? 'Hot' : 'Warm', \"Reason\": $json.payload?.notes || 'Escalated by Orchestrator Agent', \"Suggested Action\": $json.payload?.suggested_copy || '', \"Status\": \"New\", \"Action Type\": \"field_sales_call\", \"Confidence Score\": 0.9}}]}) }}",
+        "options": {}
+      }
     },
     {
       "parameters": {
@@ -398,8 +388,7 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.instantly.ai/api/v2/leads",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendBody": true,
         "bodyParameters": {
           "parameters": [
@@ -421,7 +410,16 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}"
+            }
+          ]
+        }
       },
       "id": "move-campaign",
       "name": "Move to Campaign (Instantly)",
@@ -431,12 +429,6 @@
         1320,
         520
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "FKw9At5AkLdEmHHi",
-          "name": "Instantly API Key"
-        }
-      },
       "continueOnFail": true
     },
     {
@@ -457,7 +449,7 @@
     {
       "parameters": {},
       "id": "no-actions",
-      "name": "No Actions — Skip",
+      "name": "No Actions \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -466,51 +458,36 @@
       ]
     },
     {
-      "parameters": {
-        "operation": "create",
-        "base": {
-          "__rl": true,
-          "value": "appuy2VTIao6XVpIW",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Field Sales Tasks",
-          "mode": "name"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "Customer Name": "={{ $json.payload.customer_name || '' }}",
-            "Phone": "={{ $json.payload.phone || '' }}",
-            "Email": "={{ $json.payload.email || '' }}",
-            "Priority": "={{ $json.payload.priority || 'Warm' }}",
-            "Reason": "={{ $json.payload.reason || '' }}",
-            "Suggested Action": "={{ $json.payload.suggested_action || '' }}",
-            "Action Type": "={{ $json.payload.action_type || '' }}",
-            "Lifecycle Stage": "={{ $json.payload.lifecycle_stage || '' }}",
-            "Total Orders": "={{ $json.payload.total_orders || 0 }}",
-            "Last Order": "={{ $json.payload.last_order || '' }}",
-            "Postgres Opportunity ID": "={{ $json.payload.postgres_opportunity_id || '' }}",
-            "Status": "New"
-          }
-        }
-      },
       "id": "create-airtable-task",
       "name": "Create Airtable Field Sales Task",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1320,
         720
       ],
-      "credentials": {
-        "airtableTokenApi": {
-          "id": "hJpO8jdlT4Rmkjtx",
-          "name": "Airtable API Key"
-        }
-      },
-      "continueOnFail": true
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Field%20Sales%20Tasks",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"records\": [{\"fields\": {\"Customer Name\": $json.payload?.customer_name || '', \"Phone\": $json.payload?.phone || '', \"Email\": $json.payload?.email || '', \"Priority\": $json.payload?.priority || 'Warm', \"Reason\": $json.payload?.reason || '', \"Suggested Action\": $json.payload?.suggested_action || '', \"Action Type\": $json.payload?.action_type || '', \"Lifecycle Stage\": $json.payload?.lifecycle_stage || '', \"Total Orders\": $json.payload?.total_orders || 0, \"Last Order\": $json.payload?.last_order || '', \"Postgres Opportunity ID\": $json.payload?.postgres_opportunity_id || '', \"Status\": \"New\"}}]}) }}",
+        "options": {}
+      }
     },
     {
       "parameters": {
@@ -531,12 +508,20 @@
       "parameters": {
         "method": "POST",
         "url": "=https://api.instantly.ai/api/v2/campaigns/{{ $json.payload.instantly_campaign_id }}/leads",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"leads\": [{\"email\": \"{{ $json.payload.email }}\", \"first_name\": \"{{ $json.payload.first_name }}\", \"last_name\": \"{{ $json.payload.last_name }}\", \"phone\": \"{{ $json.payload.phone }}\"}]}",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}"
+            }
+          ]
+        }
       },
       "id": "push-instantly-lead",
       "name": "Push Lead to Instantly Campaign",
@@ -546,12 +531,6 @@
         1320,
         920
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "FKw9At5AkLdEmHHi",
-          "name": "Instantly API Key"
-        }
-      },
       "continueOnFail": true
     },
     {
@@ -573,12 +552,20 @@
       "parameters": {
         "method": "PATCH",
         "url": "=https://api.instantly.ai/api/v2/campaigns/{{ $json.payload.instantly_campaign_id }}",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"sequences\": {{ JSON.stringify($json.payload.sequences) }}}",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}"
+            }
+          ]
+        }
       },
       "id": "push-instantly-sequences",
       "name": "Push Sequences to Instantly",
@@ -588,12 +575,6 @@
         1320,
         1120
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "FKw9At5AkLdEmHHi",
-          "name": "Instantly API Key"
-        }
-      },
       "continueOnFail": true
     },
     {
@@ -618,7 +599,7 @@
         "options": {
           "response": {
             "response": {
-              "responseFormat": "file"
+              "responseFormat": "text"
             }
           }
         }
@@ -634,36 +615,30 @@
       "continueOnFail": true
     },
     {
-      "parameters": {
-        "operation": "upload",
-        "name": "={{ $('Split Actions').item.json.payload.filename || 'shipday_orders.csv' }}",
-        "driveId": {
-          "__rl": true,
-          "mode": "list",
-          "value": "My Drive"
-        },
-        "folderId": {
-          "__rl": true,
-          "mode": "id",
-          "value": "={{ $('Split Actions').item.json.payload.folder_id }}"
-        },
-        "options": {}
-      },
       "id": "upload-to-google-drive",
       "name": "Upload to Google Drive",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1540,
         1320
       ],
-      "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "LUu1v42BgnEflv6f",
-          "name": "Google Drive OAuth2"
-        }
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/internal/drive/upload",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"filename\": $('Split Actions').item.json.payload.filename || 'report.csv', \"content\": $('Download CSV for Drive').first().json.data || '', \"mimetype\": \"text/csv\", \"folder_id\": $('Split Actions').item.json.payload.folder_id || null}) }}",
+        "options": {}
       },
-      "continueOnFail": true
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     },
     {
       "parameters": {
@@ -681,31 +656,30 @@
       ]
     },
     {
-      "parameters": {
-        "fromEmail": "reports@dabbahwala.com",
-        "toEmail": "={{ $json.payload.to }}",
-        "subject": "={{ $json.payload.subject }}",
-        "emailType": "html",
-        "message": "={{ $json.payload.html_body }}",
-        "options": {
-          "attachments": "={{ [{\"name\": $json.payload.csv_filename, \"data\": $json.payload.csv_content}] }}"
-        }
-      },
       "id": "send-email-report",
       "name": "Send Email Report",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1320,
         1520
       ],
-      "credentials": {
-        "smtp": {
-          "id": "Sk6XzPNPnJTXHEbr",
-          "name": "Gmail-SMTP"
-        }
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/internal/send-email",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"to\": $json.payload.to, \"subject\": $json.payload.subject, \"body_html\": $json.payload.html_body}) }}",
+        "options": {}
       },
-      "continueOnFail": true
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     },
     {
       "parameters": {
@@ -732,6 +706,29 @@
         460
       ],
       "parameters": {}
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
@@ -768,7 +765,7 @@
         ],
         [
           {
-            "node": "No Actions — Skip",
+            "node": "No Actions \u2014 Skip",
             "type": "main",
             "index": 0
           }
@@ -971,6 +968,28 @@
       ]
     },
     "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
       "main": [
         [
           {

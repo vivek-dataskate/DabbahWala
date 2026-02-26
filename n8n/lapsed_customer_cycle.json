@@ -1,5 +1,5 @@
 {
-  "name": "[Claude — Decision] Lapsed Customer Daily Cycle",
+  "name": "[Intelligence] Lapsed Re-engagement",
   "nodes": [
     {
       "parameters": {
@@ -180,7 +180,7 @@
       "main": [
         [
           {
-            "node": "Notify Slack",
+            "node": "Cycle Complete",
             "type": "main",
             "index": 0
           }

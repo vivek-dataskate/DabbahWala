@@ -1,13 +1,13 @@
 {
-  "name": "[Airtable — Evidence] Outcome Sync",
+  "name": "[Field Agent] Outcome Sync",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
             {
-              "field": "minutes",
-              "minutesInterval": 15
+              "field": "hours",
+              "hoursInterval": 4
             }
           ]
         }
@@ -22,35 +22,40 @@
       ]
     },
     {
-      "parameters": {
-        "operation": "list",
-        "base": {
-          "__rl": true,
-          "value": "appuy2VTIao6XVpIW",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Field Sales Tasks",
-          "mode": "name"
-        },
-        "returnAll": true,
-        "filterByFormula": "AND({Status} != 'New', {Status} != '', {Synced to Postgres} != TRUE())",
-        "options": {}
-      },
       "id": "fetch-updated-airtable",
       "name": "Fetch Updated Airtable Records",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         440,
         300
       ],
-      "credentials": {
-        "airtableTokenApi": {
-          "id": "hJpO8jdlT4Rmkjtx",
-          "name": "Airtable API Key"
-        }
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Field%20Sales%20Tasks",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
+            }
+          ]
+        },
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filterByFormula",
+              "value": "AND({Status} != 'New', {Status} != '', {Synced to Postgres} != TRUE())"
+            },
+            {
+              "name": "pageSize",
+              "value": "100"
+            }
+          ]
+        },
+        "options": {}
       }
     },
     {
@@ -58,7 +63,7 @@
         "jsCode": "// Map Airtable status to API status + outcome\nconst airtableStatus = $input.item.json.fields['Status'];\nconst opportunityId = $input.item.json.fields['Postgres Opportunity ID'];\nconst outcomeNotes = $input.item.json.fields['Outcome Notes'] || '';\nconst airtableRecordId = $input.item.json.id;\n\nlet apiStatus = 'completed';\nlet outcome = null;\n\nswitch (airtableStatus?.toLowerCase()) {\n  case 'ordered':\n  case 'converted':\n    apiStatus = 'completed';\n    outcome = 'ordered';\n    break;\n  case 'not interested':\n  case 'not_interested':\n  case 'declined':\n    apiStatus = 'completed';\n    outcome = 'not_interested';\n    break;\n  case 'no answer':\n  case 'no_answer':\n  case 'unreachable':\n    apiStatus = 'completed';\n    outcome = 'no_answer';\n    break;\n  case 'in progress':\n  case 'in_progress':\n  case 'contacted':\n    apiStatus = 'dispatched';\n    outcome = null;\n    break;\n  default:\n    apiStatus = 'completed';\n    outcome = airtableStatus?.toLowerCase() || 'no_answer';\n}\n\nreturn {\n  json: {\n    opportunity_id: opportunityId,\n    airtable_record_id: airtableRecordId,\n    api_status: apiStatus,\n    outcome: outcome,\n    outcome_notes: outcomeNotes\n  }\n};"
       },
       "id": "map-status",
-      "name": "Map Airtable Status → API Status",
+      "name": "Map Airtable Status \u2192 API Status",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -117,45 +122,41 @@
       ]
     },
     {
-      "parameters": {
-        "operation": "update",
-        "base": {
-          "__rl": true,
-          "value": "appuy2VTIao6XVpIW",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Field Sales Tasks",
-          "mode": "name"
-        },
-        "id": "={{ $('Map Airtable Status → API Status').item.json.airtable_record_id }}",
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "Synced to Postgres": true
-          }
-        }
-      },
       "id": "mark-synced",
       "name": "Mark Synced in Airtable",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1320,
         240
       ],
-      "credentials": {
-        "airtableTokenApi": {
-          "id": "hJpO8jdlT4Rmkjtx",
-          "name": "Airtable API Key"
-        }
+      "parameters": {
+        "method": "PATCH",
+        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Field%20Sales%20Tasks/{{ $json.airtable_record_id }}",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"fields\": {\"Synced to Postgres\": true}}",
+        "options": {}
       }
     },
     {
       "parameters": {},
       "id": "skip-in-progress",
-      "name": "In Progress — Skip Sync",
+      "name": "In Progress \u2014 Skip Sync",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -173,6 +174,42 @@
         460
       ],
       "parameters": {}
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
+    },
+    {
+      "id": "flatten-records",
+      "name": "Flatten Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn (data.records || []).map(r => ({\n  json: { airtable_record_id: r.id, ...r.fields }\n}));"
+      }
     }
   ],
   "connections": {
@@ -180,7 +217,7 @@
       "main": [
         [
           {
-            "node": "Fetch Updated Airtable Records",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -191,14 +228,14 @@
       "main": [
         [
           {
-            "node": "Map Airtable Status → API Status",
+            "node": "Flatten Records",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Map Airtable Status → API Status": {
+    "Map Airtable Status \u2192 API Status": {
       "main": [
         [
           {
@@ -220,7 +257,7 @@
         ],
         [
           {
-            "node": "In Progress — Skip Sync",
+            "node": "In Progress \u2014 Skip Sync",
             "type": "main",
             "index": 0
           }
@@ -242,7 +279,29 @@
       "main": [
         [
           {
+            "node": "Get Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
+      "main": [
+        [
+          {
             "node": "Fetch Updated Airtable Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Flatten Records": {
+      "main": [
+        [
+          {
+            "node": "Map Airtable Status \u2192 API Status",
             "type": "main",
             "index": 0
           }

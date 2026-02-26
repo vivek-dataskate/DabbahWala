@@ -1106,6 +1106,24 @@ def _g9_airtable(suite: TestSuite) -> None:
         return {"status": sc}
     _run(suite, "airtable_playbook_sync", G, playbook_sync)
 
+    def playbook_rules_exist():
+        # Verify Airtable Agent Playbook table is accessible and has rules
+        sc, body = _req(
+            "GET",
+            f"{AIRTABLE_BASE}/{AIRTABLE_BASE_ID}/Agent%20Playbook?maxRecords=5",
+            headers=_airtable_headers(),
+        )
+        assert sc == 200, f"Airtable Agent Playbook returned {sc}: {str(body)[:300]}"
+        records = (body or {}).get("records", [])
+        assert len(records) > 0, "Airtable Agent Playbook has no records — table may have been deleted. Run migration 063 and re-seed via Airtable API."
+        # Verify Postgres agent_playbook table also has rules
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT COUNT(*) AS cnt FROM agent_playbook WHERE is_active = TRUE")
+            cnt = cur.fetchone()["cnt"]
+        assert cnt >= 10, f"agent_playbook Postgres table has only {cnt} active rules — expected ≥ 10. Run migration 063 to re-seed."
+        return {"airtable_records": len(records), "postgres_rules": cnt}
+    _run(suite, "airtable_playbook_rules_exist", G, playbook_rules_exist)
+
     def field_task_create():
         if not suite.test_contact_id:
             raise AssertionError("No test contact — skipping airtable task enqueue test")

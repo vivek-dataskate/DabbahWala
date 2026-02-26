@@ -6,7 +6,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, airtable_menu, auth, campaigns, broadcasts, chatbot, competitor_agent, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, test_harness, webhooks
+from app.routers import agents, agent, auth, campaigns, broadcasts, chatbot, competitor_agent, config, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, menu, opportunities, playbook, prospects, query, reports, orders, schedules, sms, team_content, test_harness, webhooks
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
@@ -166,15 +166,14 @@ app.include_router(auth.router, tags=["auth"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(lifecycle.router, prefix="/api/lifecycle", tags=["lifecycle"])
 app.include_router(campaigns.router, prefix="/api/campaigns", tags=["campaigns"])
-app.include_router(telnyx.router, prefix="/api/telnyx", tags=["telnyx"])
+app.include_router(sms.router, prefix="/api/telnyx", tags=["sms"])
 app.include_router(delivery.router, prefix="/api/delivery", tags=["delivery"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(opportunities.router, prefix="/api/opportunities", tags=["opportunities"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(goal_agent.router, prefix="/api/goal-agent", tags=["goal-agent"])
 app.include_router(competitor_agent.router, prefix="/api/competitor-agent", tags=["competitor-agent"])
-app.include_router(shipday_historical.router, prefix="/api/shipday", tags=["shipday"])
-app.include_router(shipday_sync.router,       prefix="/api/shipday", tags=["shipday"])
+app.include_router(orders.router, prefix="/api/shipday", tags=["orders"])
 app.include_router(daily_orders.router, prefix="/api/daily-orders", tags=["daily-orders"])
 app.include_router(intelligence.router, prefix="/api/intelligence", tags=["intelligence"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
@@ -189,7 +188,10 @@ app.include_router(prospects.router, prefix="/api/prospects", tags=["prospects"]
 app.include_router(contacts.router, prefix="/api/contacts", tags=["contacts"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 app.include_router(test_harness.router, prefix="/api/test", tags=["test-harness"])
-app.include_router(airtable_menu.router, prefix="/api/menu", tags=["menu"])
+app.include_router(menu.router, prefix="/api/menu", tags=["menu"])
+app.include_router(config.router, prefix="/api/credentials", tags=["credentials"])
+app.include_router(config.router, prefix="/api/internal", tags=["internal"])
+app.include_router(schedules.router, prefix="/api/admin", tags=["admin"])
 
 
 @app.get("/dashboard", response_class=HTMLResponse)

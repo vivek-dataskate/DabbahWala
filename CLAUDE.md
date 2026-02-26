@@ -49,7 +49,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 ## Database Migrations
 - All migrations live in `migrations/` and are numbered sequentially
-- Next available migration number: **064**
+- Next available migration number: **066**
 - Use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for idempotency
 
 ## Credentials & Integrations
@@ -84,17 +84,64 @@ If the env var is empty, read it from that file and use it directly in API calls
 - Menu table: **`Menu Catalog`** (table ID: `tblmZBNdQvmFcvVai`) — fields: Item Name, Category, Is Veg, Description, Image URL, Price, Added Date
   - Airtable = active items only; deleting a row marks it discarded in Postgres (via daily sync)
   - History tracked in `menu_catalog_history` in Postgres
+- Agent Playbook table: **`Agent Playbook`** (table ID: `tbljWs6hKWbYFufnM`) — fields: Rule Name, Category, Instruction, Priority, Active, Created By
+  - Synced to Postgres `agent_playbook` table daily at 6 AM via `[Agent Rules] Playbook Sync` (ID: `FXuYcwQeBQ72Xxyu`)
+  - Categories: exclusion, priority, inference, decision, messaging, general
 
-### n8n Workflow Status
-- All **26 workflows** active as of 2026-02-26 (24 scheduled + 2 manual-only)
-- Renamed 2026-02-26: 4 intelligence workflows use new terminology — `[Intelligence] Contact Sweep`, `[Intelligence] Stage Runner`, `[Intelligence] Lapsed Sweep`, `[Intelligence] AI Stack`
-- `[Claude — Inference] Competitor Research Agent` (ID: TBD — activate after first push) added 2026-02-25
-- `[Airtable — Evidence] Menu Catalog Sync` (ID: `baZV5ViA5lXNCTWR`) — per-item catalog sync with deletion detection + history, daily 6:30 AM
-- `[System — Test] Daily E2E Test Suite` (ID: `M7bwNMGrUMRvAHH4`) — daily 5 AM E2E test runner, added 2026-02-25
-- `[Telnyx — Evidence] SMS Historical Import` (ID: `YANIKsHk767NDEXL`) — manual one-shot MDR backfill, added 2026-02-26
-- `[Telnyx — Evidence] Inbound SMS Collector` updated to use MDR endpoint (`/v2/reports/messaging/message_detail_records`) — fixes 404 from invalid `/v2/messages` list endpoint
-- Inactive (manual one-shot): `[Shipday — Evidence] Historical Import`, `[Telnyx — Evidence] SMS Historical Import`
-- Credential IDs for all integrations are tracked in `n8n/config.json`
+### n8n Workflow Status (2026-02-26)
+- **26 total workflows**: all active-scheduled (9 deleted total — all manual-only forms and one-shot imports removed)
+- All workflows use **centralized credentials**: single "DW Admin Secret" HTTP Header Auth → `GET /api/credentials` bootstrap
+- All workflows renamed to **12-feature taxonomy** format: `[Feature Group] Descriptive Name`
+- Full ID mapping in `n8n/config.json`
+
+**Deleted (no longer in n8n):**
+- `[System] Daily Tests` (`M7bwNMGrUMRvAHH4`) — superseded by `[System] Feature Tests`
+- `[Claude — Evidence] Weekly Menu Sync` (`sb0jHek7Q9gPeCUd`) — superseded by `[Menu] Catalog Sync`
+- `[Claude — Inference] Goal-Oriented Agent Cycle` (`NzNeVrjbIoKGge5M`) — duplicate of `[Growth] Goal Agent`
+- `[Broadcast] Broadcast Form` (`mUptDrymXZrtlrp8`) — unused manual form, nothing calls it
+- `[Chatbot] Query Form` (`gm3qFxu22akrTV3Z`) — unused manual form, nothing calls it
+
+**Key workflow IDs:**
+| Workflow | ID | Schedule |
+|---|---|---|
+| [Order Intake] Order Collector | `AePBXRdPKkUQpHIT` | Every 30 min |
+| [Order Intake] Feedback Sync | `0pQY0otcvnGj8WBH` | Every hour |
+| [Order Intake] Daily CSV Upload | `6ZYQwdkmS5Nni05u` | Daily 1 PM EST |
+| [SMS] Inbound Collector | `xcNObK3qdU1wdf3f` | Every 30 min |
+| [SMS] Dispatch Queue | `w2bVQQ4hy33OdY1R` | Every 10 min |
+| [Broadcast] Dispatch | `oDEse7EvWHj6UVM4` | Every 1 hour |
+| [Email Campaigns] Performance Tracker | `ctCLyHDQc1VckMqL` | Every hour |
+| [Email Campaigns] Campaign Sync | `nCcBt9USIYxlOaJT` | Every 6 hours |
+| [Email Campaigns] Campaign Setup | `NbnkM3nTFKSgtcfb` | Daily midnight |
+| [Intelligence] Contact Sweep | `FcbBt0AIlkYoa01X` | Every hour |
+| [Intelligence] Stage Runner | `h80nX24myWwsbxuB` | Every hour |
+| [Intelligence] Lapsed Re-engagement | `S3jSnWb3UTv9HmJL` | Daily (random offset) |
+| [Intelligence] AI Stack | `VreWonSUTk4VCXPF` | Every 3 hours |
+| [Field Agent] Outcome Sync | `chfGgYIjyTw6QP5m` | Every 4 hours |
+| [Field Agent] Daily Brief | `kOI33cFH4bM8OCaf` | Daily 7:30 AM |
+| [Agent Rules] Playbook Sync | `FXuYcwQeBQ72Xxyu` | Daily 6 AM |
+| [Menu] Catalog Sync | `baZV5ViA5lXNCTWR` | Weekly Mon 6:30 AM |
+| [Growth] Competitor Research | `GozoSXHiazEdhpni` | Weekly Mon 6:30 AM |
+| [Growth] Goal Agent | `w5kYj5vNsNW53W4n` | Daily 9 AM |
+| [Growth] Weekly Growth Agent | `Nbut2tjjksGvQYzH` | Weekly Mon 7:30 AM |
+| [Reports] Daily Activity Report | `91bMjrZxiCPTglEI` | Daily 8 AM |
+| [Reports] Daily Outcome Report | `fONTnqi4l9DT3aCo` | Daily 8:30 AM |
+| [Chatbot] Docs Sync | `oHtGvkCLTWYkxNZ0` | Every 30 min |
+| [Chatbot] Docs Reindex | `7mn3Ys0xMmZnZQIC` | Weekly Mon 2 AM |
+| [System] Action Queue | `RzR3ZNYlty7cuTDY` | Every 30 min |
+| [System] Feature Tests | `zlKQKfJ18QGIwogq` | Daily 5 AM |
+| [System] Connectivity Check | `ipSHdFUZMj2D0r0t` | Manual only |
+
+**All 26 workflows are active-scheduled. No manual-only or deactivated workflows remain.**
+
+- Credential IDs: only `DW Admin Secret` (HTTP Header Auth) remains; all others removed from n8n
+- All other integration keys fetched at runtime via `GET /api/credentials` (requires `ADMIN_SECRET` Render env var)
+
+### Python Router Reorganization (2026-02-26)
+- `app/routers/orders.py` — merged from `shipday_historical.py` + `shipday_sync.py`; prefix `/api/shipday`
+- `app/routers/sms.py` — renamed from `telnyx.py`; prefix stays `/api/telnyx`
+- `app/routers/menu.py` — renamed from `airtable_menu.py`; prefix stays `/api/menu`
+- Old files (`shipday_historical.py`, `shipday_sync.py`, `telnyx.py`, `airtable_menu.py`) superseded; do not create new files with those names
 
 ### Three-Engine Terminology (2026-02-26)
 - **Stage Engine** = pure SQL rules that move contacts between lifecycle stages (`run_lifecycle_cycle()`) — no Claude

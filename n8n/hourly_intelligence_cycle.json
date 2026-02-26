@@ -1,5 +1,5 @@
 {
-  "name": "[Claude \u2014 Inference] Hourly Intelligence Cycle",
+  "name": "[Intelligence] Contact Sweep",
   "nodes": [
     {
       "parameters": {
@@ -32,7 +32,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOmVwbU1CSFRWa3ZiaQ=="
+              "value": "=Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}"
             }
           ]
         },
@@ -47,7 +47,8 @@
         },
         "options": {
           "timeout": 60000
-        }
+        },
+        "authentication": "none"
       },
       "id": "poll-instantly",
       "name": "Poll Instantly Events",
@@ -209,12 +210,20 @@
       "parameters": {
         "method": "POST",
         "url": "=https://api.telnyx.com/v2/messages",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"from\": \"+18444322224\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.template_body || $json.suggested_message || 'Check out today\\'s fresh menu at dabbahwala.com!' }}\"\n}",
-        "options": {}
+        "jsonBody": "={\n  \"from\": \"{{ $('Get Credentials').first().json.TELNYX_FROM_NUMBER }}\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.template_body || $json.suggested_message || 'Check out today\\'s fresh menu at dabbahwala.com!' }}\"\n}",
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.TELNYX_API_KEY }}"
+            }
+          ]
+        }
       },
       "id": "send-sms",
       "name": "Send SMS via Telnyx",
@@ -223,13 +232,7 @@
       "position": [
         1860,
         100
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "XnntvX8AXpdR97oQ",
-          "name": "Telnyx API Key"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -252,13 +255,21 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.airtable.com/v0/appuy2VTIao6XVpIW/Field%20Sales%20Tasks",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Field%20Sales%20Tasks",
+        "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"fields\": {\n    \"Customer Name\": \"{{ $json.first_name || '' }} {{ $json.last_name || '' }}\",\n    \"Phone\": \"{{ $json.phone || '' }}\",\n    \"Priority\": \"{{ $json.priority || 'warm' }}\",\n    \"Reason\": \"{{ $json.reason || '' }}\",\n    \"Suggested Action\": \"{{ $json.suggested_message || '' }}\",\n    \"Status\": \"New\",\n    \"Postgres Opportunity ID\": {{ $json.id || 0 }}\n  }\n}",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
+            }
+          ]
+        }
       },
       "id": "create-airtable-task",
       "name": "Create Airtable Sales Task",
@@ -267,13 +278,7 @@
       "position": [
         1860,
         300
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "hJpO8jdlT4Rmkjtx",
-          "name": "Airtable API Key"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -325,6 +330,29 @@
         460
       ],
       "parameters": {}
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
@@ -332,7 +360,7 @@
       "main": [
         [
           {
-            "node": "Poll Instantly Events",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -460,6 +488,17 @@
       ]
     },
     "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
       "main": [
         [
           {

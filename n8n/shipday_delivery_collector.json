@@ -1,5 +1,5 @@
 {
-  "name": "[Shipday — Evidence] Delivery Collector",
+  "name": "[Order Intake] Order Collector",
   "nodes": [
     {
       "parameters": {
@@ -38,8 +38,7 @@
       "parameters": {
         "method": "GET",
         "url": "https://api.shipday.com/orders",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -55,6 +54,15 @@
         },
         "options": {
           "timeout": 20000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "={{ $('Get Credentials').first().json.SHIPDAY_API_KEY }}"
+            }
+          ]
         }
       },
       "id": "fetch-shipday-orders",
@@ -65,17 +73,11 @@
         660,
         300
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "hJjykZwBrqI2htyQ",
-          "name": "Shipday API Key"
-        }
-      },
       "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "// Normalise Shipday order response — handles both array and { orders: [...] } shapes\nconst raw = $input.item.json;\nconst orders = Array.isArray(raw) ? raw : (raw.orders || raw.data || []);\n\n// Map Shipday statuses → our delivery event types + status labels\nconst STATUS_MAP = {\n  ACCEPTED:   { event: 'order_accepted',    status: 'accepted' },\n  ASSIGNED:   { event: 'driver_assigned',   status: 'driver_assigned' },\n  PICKED_UP:  { event: 'out_for_delivery',  status: 'out_for_delivery' },\n  ARRIVED:    { event: 'delivery_arrived',  status: 'arrived' },\n  COMPLETED:  { event: 'delivered',         status: 'delivered' },\n  FAILED:     { event: 'delivery_failed',   status: 'failed' },\n  RETURNED:   { event: 'delivery_returned', status: 'returned' },\n  UNASSIGNED: { event: 'delivery_pending',  status: 'pending' },\n};\n\nreturn orders\n  .filter(o => o.customer?.email || o.customer?.phone)\n  .map(o => {\n    const shipday_status = (o.orderStatus || o.status || 'UNKNOWN').toUpperCase();\n    const mapped = STATUS_MAP[shipday_status] || { event: 'delivery_update', status: shipday_status.toLowerCase() };\n    return {\n      json: {\n        order_id:        o.orderId || o.id || '',\n        order_number:    o.orderNumber || o.referenceId || '',\n        contact_email:   o.customer?.email || '',\n        contact_phone:   o.customer?.phone || '',\n        customer_name:   o.customer?.name || '',\n        shipday_status,\n        event_type:      mapped.event,\n        delivery_status: mapped.status,\n        driver_name:     o.assignedCarrier?.name || '',\n        driver_phone:    o.assignedCarrier?.phone || '',\n        est_delivery:    o.estimatedDeliveryTime || null,\n        actual_delivery: o.actualDeliveryTime || null,\n        address:         o.customer?.address || o.deliveryAddress?.address || '',\n        metadata: {\n          shipday_order_id:  o.orderId,\n          order_number:      o.orderNumber,\n          driver:            o.assignedCarrier?.name || null,\n          estimated_delivery: o.estimatedDeliveryTime || null,\n          actual_delivery:    o.actualDeliveryTime || null\n        }\n      }\n    };\n  });"
+        "jsCode": "// Normalise Shipday order response \u2014 handles both array and { orders: [...] } shapes\nconst raw = $input.item.json;\nconst orders = Array.isArray(raw) ? raw : (raw.orders || raw.data || []);\n\n// Map Shipday statuses \u2192 our delivery event types + status labels\nconst STATUS_MAP = {\n  ACCEPTED:   { event: 'order_accepted',    status: 'accepted' },\n  ASSIGNED:   { event: 'driver_assigned',   status: 'driver_assigned' },\n  PICKED_UP:  { event: 'out_for_delivery',  status: 'out_for_delivery' },\n  ARRIVED:    { event: 'delivery_arrived',  status: 'arrived' },\n  COMPLETED:  { event: 'delivered',         status: 'delivered' },\n  FAILED:     { event: 'delivery_failed',   status: 'failed' },\n  RETURNED:   { event: 'delivery_returned', status: 'returned' },\n  UNASSIGNED: { event: 'delivery_pending',  status: 'pending' },\n};\n\nreturn orders\n  .filter(o => o.customer?.email || o.customer?.phone)\n  .map(o => {\n    const shipday_status = (o.orderStatus || o.status || 'UNKNOWN').toUpperCase();\n    const mapped = STATUS_MAP[shipday_status] || { event: 'delivery_update', status: shipday_status.toLowerCase() };\n    return {\n      json: {\n        order_id:        o.orderId || o.id || '',\n        order_number:    o.orderNumber || o.referenceId || '',\n        contact_email:   o.customer?.email || '',\n        contact_phone:   o.customer?.phone || '',\n        customer_name:   o.customer?.name || '',\n        shipday_status,\n        event_type:      mapped.event,\n        delivery_status: mapped.status,\n        driver_name:     o.assignedCarrier?.name || '',\n        driver_phone:    o.assignedCarrier?.phone || '',\n        est_delivery:    o.estimatedDeliveryTime || null,\n        actual_delivery: o.actualDeliveryTime || null,\n        address:         o.customer?.address || o.deliveryAddress?.address || '',\n        metadata: {\n          shipday_order_id:  o.orderId,\n          order_number:      o.orderNumber,\n          driver:            o.assignedCarrier?.name || null,\n          estimated_delivery: o.estimatedDeliveryTime || null,\n          actual_delivery:    o.actualDeliveryTime || null\n        }\n      }\n    };\n  });"
       },
       "id": "normalise-orders",
       "name": "Normalise Orders",
@@ -237,7 +239,7 @@
     {
       "parameters": {},
       "id": "skip-no-contact",
-      "name": "Skip — No Contact Info",
+      "name": "Skip \u2014 No Contact Info",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -266,6 +268,29 @@
         460
       ],
       "parameters": {}
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
@@ -273,7 +298,7 @@
       "main": [
         [
           {
-            "node": "Build Time Window",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -324,7 +349,7 @@
         ],
         [
           {
-            "node": "Skip — No Contact Info",
+            "node": "Skip \u2014 No Contact Info",
             "type": "main",
             "index": 0
           }
@@ -383,6 +408,17 @@
       ]
     },
     "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
       "main": [
         [
           {

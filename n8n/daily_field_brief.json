@@ -1,5 +1,5 @@
 {
-  "name": "[Reporting — Inference] Daily Field Brief",
+  "name": "[Field Agent] Daily Brief",
   "nodes": [
     {
       "parameters": {
@@ -16,10 +16,15 @@
       "name": "Daily at 7:30 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        220,
-        300
-      ]
+      "position": [220, 300]
+    },
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 460],
+      "parameters": {}
     },
     {
       "parameters": {
@@ -33,10 +38,7 @@
       "name": "Generate Daily Call List",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        440,
-        300
-      ]
+      "position": [440, 300]
     },
     {
       "parameters": {
@@ -65,121 +67,143 @@
       "name": "Any Opportunities Created?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        660,
-        300
-      ]
+      "position": [660, 300]
     },
     {
       "parameters": {
-        "jsCode": "const brief = $json.brief || [];\nconst created = $json.created || 0;\nconst lines = brief.map((c, i) => {\n  const rank = i + 1;\n  const name = `${c.first_name || ''} ${c.last_name || ''}`.trim();\n  const days = c.days_since_last_order || 0;\n  const orders = c.total_orders || 0;\n  const spend = c.lifetime_spend || 0;\n  const urgency = c.urgency_note || '';\n  return `#${rank} ${name} — ${orders} orders, $${spend} spend, ${days}d since last — ${urgency}`;\n});\n\nconst body = [\n  `DabbahWala Field Brief — ${new Date().toLocaleDateString('en-US', {weekday:'long', month:'short', day:'numeric'})}`,\n  `${created} call opportunities created today`,\n  '',\n  ...lines,\n  '',\n  'Open Airtable Field Sales Tasks to see full call scripts.',\n].join('\\n');\n\nreturn [{ json: { summary: body, created, count: brief.length } }];"
+        "jsCode": "const brief = $json.brief || [];\nconst created = $json.created || 0;\nconst lines = brief.map((c, i) => {\n  const rank = i + 1;\n  const name = `${c.first_name || ''} ${c.last_name || ''}`.trim();\n  const days = c.days_since_last_order || 0;\n  const orders = c.total_orders || 0;\n  const spend = c.lifetime_spend || 0;\n  const urgency = c.urgency_note || '';\n  return `#${rank} ${name} — ${orders} orders, $${spend} spend, ${days}d since last — ${urgency}`;\n});\n\nconst body = [\n  `DabbahWala Field Brief — ${new Date().toLocaleDateString('en-US', {weekday:'long', month:'short', day:'numeric'})}`,\n  `${created} call opportunities created today`,\n  '',\n  ...lines,\n  '',\n  'Full call scripts added to Airtable Field Sales Tasks.',\n].join('\\n');\n\nreturn [{ json: { summary: body, created, count: brief.length } }];"
       },
       "id": "format-brief",
       "name": "Format Brief Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        880,
-        220
-      ]
+      "position": [880, 220]
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1100, 220],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     },
     {
       "parameters": {
-        "jsCode": "// No eligible contacts today — log and continue\nconsole.log('Daily field brief: no eligible contacts found — all may have open opportunities already');\nreturn [{ json: { status: 'skipped', reason: 'no_eligible_contacts' } }];"
+        "jsCode": "// Build Airtable records from brief contacts (max 10 per Airtable batch)\nconst brief = $('Generate Daily Call List').first().json.brief || [];\n\nconst records = brief.slice(0, 10).map(c => ({\n  fields: {\n    'Contact Name': `${c.first_name || ''} ${c.last_name || ''}`.trim(),\n    'Phone': c.phone || '',\n    'Priority': (c.priority || 'warm').charAt(0).toUpperCase() + (c.priority || 'warm').slice(1),\n    'Status': 'New',\n    'Postgres Opportunity ID': String(c.opportunity_id || ''),\n    'Call Script': c.suggested_script || '',\n    'Days Since Last Order': c.days_since_last_order || 0,\n    'Total Orders': c.total_orders || 0,\n    'Synced to Postgres': false\n  }\n}));\n\nreturn [{ json: { records } }];"
+      },
+      "id": "prepare-airtable-records",
+      "name": "Prepare Airtable Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 220]
+    },
+    {
+      "id": "write-to-airtable",
+      "name": "Write to Airtable",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1540, 220],
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Field%20Sales%20Tasks",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ records: $json.records }) }}",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "send-email",
+      "name": "Send Brief Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1760, 220],
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/internal/send-email",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: 'core@dabbahwala.com', subject: 'DabbahWala Field Brief — ' + new Date().toLocaleDateString('en-US', {weekday:'long', month:'short', day:'numeric'}), body_html: '<pre style=\"font-family:monospace;font-size:14px;line-height:1.6\">' + $('Format Brief Summary').first().json.summary.replace(/\\n/g, '<br>') + '</pre>' }) }}",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log('Daily field brief: no eligible contacts found');\nreturn [{ json: { status: 'skipped', reason: 'no_eligible_contacts' } }];"
       },
       "id": "log-skip",
       "name": "Log No Contacts",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        880,
-        400
-      ]
-    },
-    {
-      "id": "2166f58f-f54d-409b-8677-2592ba6c5985",
-      "name": "Manual Trigger",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [
-        220,
-        460
-      ],
-      "parameters": {}
+      "position": [880, 400]
     }
   ],
   "connections": {
     "Daily at 7:30 AM": {
-      "main": [
-        [
-          {
-            "node": "Generate Daily Call List",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Generate Daily Call List", "type": "main", "index": 0}]]
+    },
+    "Manual Trigger": {
+      "main": [[{"node": "Generate Daily Call List", "type": "main", "index": 0}]]
     },
     "Generate Daily Call List": {
-      "main": [
-        [
-          {
-            "node": "Any Opportunities Created?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Any Opportunities Created?", "type": "main", "index": 0}]]
     },
     "Any Opportunities Created?": {
       "main": [
-        [
-          {
-            "node": "Format Brief Summary",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Log No Contacts",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Format Brief Summary", "type": "main", "index": 0}],
+        [{"node": "Log No Contacts", "type": "main", "index": 0}]
       ]
     },
-    "Manual Trigger": {
-      "main": [
-        [
-          {
-            "node": "Generate Daily Call List",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Format Brief Summary": {
+      "main": [[{"node": "Get Credentials", "type": "main", "index": 0}]]
+    },
+    "Get Credentials": {
+      "main": [[{"node": "Prepare Airtable Records", "type": "main", "index": 0}]]
+    },
+    "Prepare Airtable Records": {
+      "main": [[{"node": "Write to Airtable", "type": "main", "index": 0}]]
+    },
+    "Write to Airtable": {
+      "main": [[{"node": "Send Brief Email", "type": "main", "index": 0}]]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Reporting",
-      "id": "reporting"
-    },
-    {
-      "name": "Inference",
-      "id": "tag-inference"
-    }
-  ],
-  "triggerCount": 1,
-  "updatedAt": "2026-02-19T00:00:00.000Z",
-  "versionId": "1"
+  }
 }

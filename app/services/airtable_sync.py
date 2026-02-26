@@ -51,38 +51,3 @@ def create_field_sales_task(opportunity: dict) -> None:
         logger.warning("Failed to enqueue Airtable task for contact_id=%s: %s", contact_id, e)
 
 
-def log_query_to_airtable(category: str, question: str, answer: str, contact_email: str | None = None) -> None:
-    """Enqueue a query log entry to the action_queue for Airtable ingestion.
-
-    Silently no-ops on any error so it never blocks the query response.
-    """
-    payload = {
-        "category": category,
-        "question": question[:100000],
-        "answer": answer[:100000],
-    }
-    if contact_email:
-        payload["customer_email"] = contact_email
-
-    try:
-        with get_cursor() as cur:
-            # Use contact_id=0 as a sentinel for system-level actions with no contact
-            cur.execute(
-                """
-                INSERT INTO action_queue (contact_id, action_type, payload)
-                SELECT c.id, 'log_query_to_airtable', %s::jsonb
-                FROM contacts c
-                WHERE c.email = %s
-                LIMIT 1
-                """,
-                (json.dumps(payload), contact_email or ""),
-            )
-            if cur.rowcount == 0:
-                # No contact found — log to application log only
-                logger.info(
-                    "Query log (no contact match): category=%s question=%s",
-                    category,
-                    question[:120],
-                )
-    except Exception:
-        pass  # never let logging failure affect the user response

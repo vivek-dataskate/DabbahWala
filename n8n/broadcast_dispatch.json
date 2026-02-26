@@ -1,13 +1,13 @@
 {
-  "name": "[Telnyx — Action] Broadcast Dispatch",
+  "name": "[Broadcast] Dispatch",
   "nodes": [
     {
       "parameters": {
         "rule": {
           "interval": [
             {
-              "field": "minutes",
-              "minutesInterval": 5
+              "field": "hours",
+              "hoursInterval": 1
             }
           ]
         }
@@ -16,10 +16,35 @@
       "name": "Every 5 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        220,
-        300
-      ]
+      "position": [220, 300]
+    },
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [220, 460],
+      "parameters": {}
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [440, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     },
     {
       "parameters": {
@@ -31,10 +56,7 @@
       "name": "Fetch Pending Recipients",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        440,
-        300
-      ]
+      "position": [660, 300]
     },
     {
       "parameters": {
@@ -63,10 +85,7 @@
       "name": "Has Pending Recipients?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        660,
-        300
-      ]
+      "position": [880, 300]
     },
     {
       "parameters": {
@@ -76,10 +95,7 @@
       "name": "Split Recipients",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        880,
-        220
-      ]
+      "position": [1100, 220]
     },
     {
       "parameters": {
@@ -87,19 +103,12 @@
           "values": [
             {
               "conditions": {
-                "options": {
-                  "caseSensitive": false,
-                  "leftValue": "",
-                  "typeValidation": "strict"
-                },
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.channel }}",
                     "rightValue": "sms",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
+                    "operator": { "type": "string", "operation": "equals" }
                   }
                 ],
                 "combinator": "and"
@@ -109,19 +118,12 @@
             },
             {
               "conditions": {
-                "options": {
-                  "caseSensitive": false,
-                  "leftValue": "",
-                  "typeValidation": "strict"
-                },
+                "options": { "caseSensitive": false, "leftValue": "", "typeValidation": "strict" },
                 "conditions": [
                   {
                     "leftValue": "={{ $json.channel }}",
                     "rightValue": "email",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals"
-                    }
+                    "operator": { "type": "string", "operation": "equals" }
                   }
                 ],
                 "combinator": "and"
@@ -137,50 +139,43 @@
       "name": "Route by Channel",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [
-        1100,
-        220
-      ]
+      "position": [1320, 220]
     },
     {
       "parameters": {
         "method": "POST",
         "url": "https://api.telnyx.com/v2/messages",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"from\": \"+18444322224\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.sms_message }}\"\n}",
+        "jsonBody": "={\n  \"from\": \"{{ $('Get Credentials').first().json.TELNYX_FROM_NUMBER }}\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.sms_message }}\",\n  \"messaging_profile_id\": \"{{ $('Get Credentials').first().json.TELNYX_MESSAGING_PROFILE_ID }}\"\n}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.TELNYX_API_KEY }}"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "send-sms-telnyx",
       "name": "Send SMS via Telnyx",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1320,
-        100
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "XnntvX8AXpdR97oQ",
-          "name": "Telnyx API Key"
-        }
-      },
+      "position": [1540, 100],
       "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "const telnyx = $input.item.json;\nconst recipient = $('Split Recipients').item.json;\nconst success = telnyx.data && telnyx.data.id;\nreturn { json: { success, recipient_id: recipient.recipient_id, telnyx_msg_id: telnyx.data?.id || '' } };"
+        "jsCode": "const telnyx = $input.item.json;\nconst recipient = $('Split Recipients').item.json;\nconst success = !!(telnyx.data && telnyx.data.id);\nreturn { json: { success, recipient_id: recipient.recipient_id, telnyx_msg_id: telnyx.data?.id || '', error: telnyx.errors?.[0]?.detail || '' } };"
       },
       "id": "check-sms-result",
       "name": "Check SMS Result",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1540,
-        100
-      ]
+      "position": [1760, 100]
     },
     {
       "parameters": {
@@ -188,211 +183,115 @@
         "url": "=https://dabbahwala-latest.onrender.com/api/broadcasts/recipients/{{ $json.recipient_id }}/{{ $json.success ? 'sent' : 'failed' }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ $json.success ? '{}' : JSON.stringify({ error_message: 'Telnyx send failed' }) }}",
+        "jsonBody": "={{ $json.success ? '{}' : JSON.stringify({ error_message: $json.error || 'Telnyx send failed' }) }}",
         "options": {}
       },
       "id": "mark-sms-result",
       "name": "Mark SMS Sent/Failed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1760,
-        100
-      ],
+      "position": [1980, 100],
       "continueOnFail": true
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/telnyx/message",
+        "url": "https://dabbahwala-latest.onrender.com/api/internal/send-email",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"contact_email\": \"{{ $('Split Recipients').item.json.email }}\",\n  \"direction\": \"outbound\",\n  \"from_number\": \"+18444322224\",\n  \"to_number\": \"{{ $('Split Recipients').item.json.phone }}\",\n  \"body\": \"{{ $('Split Recipients').item.json.sms_message }}\",\n  \"telnyx_msg_id\": \"{{ $('Check SMS Result').item.json.telnyx_msg_id }}\",\n  \"status\": \"sent\",\n  \"is_delivery_staff\": false,\n  \"metadata\": { \"source\": \"broadcast\", \"job_id\": {{ $('Split Recipients').item.json.job_id }} }\n}",
+        "jsonBody": "={{ JSON.stringify({ to: $json.email, subject: $json.email_subject || 'Message from DabbahWala', body_html: $json.email_body || $json.sms_message || '' }) }}",
         "options": {}
       },
-      "id": "store-sms-record",
-      "name": "Store SMS in Telnyx Log",
+      "id": "send-email",
+      "name": "Send Email",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1980,
-        100
-      ],
+      "position": [1540, 360],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      },
       "continueOnFail": true
     },
     {
       "parameters": {
+        "jsCode": "const result = $input.item.json;\nconst recipient = $('Split Recipients').item.json;\nconst success = result.status === 'ok' || (result.message && !result.detail);\nreturn { json: { success, recipient_id: recipient.recipient_id, error: result.detail || result.error || '' } };"
+      },
+      "id": "check-email-result",
+      "name": "Check Email Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1760, 360]
+    },
+    {
+      "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/broadcasts/recipients/{{ $json.recipient_id }}/send-email",
+        "url": "=https://dabbahwala-latest.onrender.com/api/broadcasts/recipients/{{ $json.recipient_id }}/{{ $json.success ? 'sent' : 'failed' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.success ? '{}' : JSON.stringify({ error_message: $json.error || 'Email send failed' }) }}",
         "options": {}
       },
-      "id": "send-email-server",
-      "name": "Send Email via Server SMTP",
+      "id": "mark-email-result",
+      "name": "Mark Email Sent/Failed",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1320,
-        360
-      ],
+      "position": [1980, 360],
       "continueOnFail": true
     },
     {
       "parameters": {},
       "id": "no-pending",
-      "name": "No Pending — Skip",
+      "name": "No Pending \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [
-        880,
-        400
-      ]
-    },
-    {
-      "id": "95fcb152-5c15-4972-bd91-85d0859edcc0",
-      "name": "Manual Trigger",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [
-        220,
-        460
-      ],
-      "parameters": {}
+      "position": [1100, 400]
     }
   ],
   "connections": {
     "Every 5 Minutes": {
-      "main": [
-        [
-          {
-            "node": "Fetch Pending Recipients",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Get Credentials", "type": "main", "index": 0}]]
+    },
+    "Manual Trigger": {
+      "main": [[{"node": "Get Credentials", "type": "main", "index": 0}]]
+    },
+    "Get Credentials": {
+      "main": [[{"node": "Fetch Pending Recipients", "type": "main", "index": 0}]]
     },
     "Fetch Pending Recipients": {
-      "main": [
-        [
-          {
-            "node": "Has Pending Recipients?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Has Pending Recipients?", "type": "main", "index": 0}]]
     },
     "Has Pending Recipients?": {
       "main": [
-        [
-          {
-            "node": "Split Recipients",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "No Pending — Skip",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Split Recipients", "type": "main", "index": 0}],
+        [{"node": "No Pending \u2014 Skip", "type": "main", "index": 0}]
       ]
     },
     "Split Recipients": {
-      "main": [
-        [
-          {
-            "node": "Route by Channel",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Route by Channel", "type": "main", "index": 0}]]
     },
     "Route by Channel": {
-      "sms": [
-        [
-          {
-            "node": "Send SMS via Telnyx",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ],
-      "email": [
-        [
-          {
-            "node": "Send Email via Server SMTP",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "sms": [[{"node": "Send SMS via Telnyx", "type": "main", "index": 0}]],
+      "email": [[{"node": "Send Email", "type": "main", "index": 0}]]
     },
     "Send SMS via Telnyx": {
-      "main": [
-        [
-          {
-            "node": "Check SMS Result",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Check SMS Result", "type": "main", "index": 0}]]
     },
     "Check SMS Result": {
-      "main": [
-        [
-          {
-            "node": "Mark SMS Sent/Failed",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Mark SMS Sent/Failed", "type": "main", "index": 0}]]
     },
-    "Mark SMS Sent/Failed": {
-      "main": [
-        [
-          {
-            "node": "Store SMS in Telnyx Log",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Send Email": {
+      "main": [[{"node": "Check Email Result", "type": "main", "index": 0}]]
     },
-    "Manual Trigger": {
-      "main": [
-        [
-          {
-            "node": "Fetch Pending Recipients",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+    "Check Email Result": {
+      "main": [[{"node": "Mark Email Sent/Failed", "type": "main", "index": 0}]]
     }
   },
   "settings": {
     "executionOrder": "v1"
-  },
-  "staticData": null,
-  "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Telnyx",
-      "id": "tag-telnyx"
-    },
-    {
-      "name": "Action",
-      "id": "tag-action"
-    }
-  ],
-  "pinData": {}
+  }
 }
