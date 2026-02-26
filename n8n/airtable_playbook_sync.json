@@ -216,7 +216,7 @@
       "main": [
         [
           {
-            "node": "Notify Slack",
+            "node": "Sync Complete",
             "type": "main",
             "index": 0
           }

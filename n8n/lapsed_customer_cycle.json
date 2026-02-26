@@ -180,7 +180,7 @@
       "main": [
         [
           {
-            "node": "Notify Slack",
+            "node": "Cycle Complete",
             "type": "main",
             "index": 0
           }

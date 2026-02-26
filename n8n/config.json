@@ -330,9 +330,9 @@
         "Evidence"
       ],
       "schedule": "Every Monday at 6 AM",
-      "active": true,
+      "active": false,
       "file": "menu_sync_weekly.json",
-      "note": "Triggers Playwright scraper → dabbahwala.com/subscription-plan-build-your-own-box, receives OTP via Telnyx +18444322224, extracts menu items, POSTs to /api/menu/sync. Emails summary to REPORT_EMAIL_TO."
+      "note": "DEACTIVATED — redundant with Airtable Menu Catalog Sync which is the single source of truth. The Playwright website scraper is no longer needed."
     },
     "growth_agent_cycle": {
       "id": "Nbut2tjjksGvQYzH",
@@ -413,7 +413,7 @@
       "note": "Pulls all records from Airtable 'Menu Catalog' (tblmZBNdQvmFcvVai), upserts into menu_catalog in Postgres, detects deletions and marks them discarded, records history in menu_catalog_history."
     },
     "competitor_agent_cycle": {
-      "id": "",
+      "id": "GozoSXHiazEdhpni",
       "name": "[Claude — Inference] Competitor Research Agent",
       "tags": [
         "DabbahWala",
@@ -426,7 +426,7 @@
       "note": "Weekly: (1) parse competitor .eml samples from data/cookunitysamples/, (2) scrape CookUnity/HelloFresh/Factor/Freshly/Sunbasket live, (3) Claude generates 8 novel hypotheses covering all 4 retention segments (never_ordered, one_and_done, lapsing_regular, high_value_at_risk), (4) auto-injects into goal_experiments. Goal agent picks them up at 9 AM. Goal: 100% repeat order rate."
     },
     "goal_agent_cycle": {
-      "id": "",
+      "id": "w5kYj5vNsNW53W4n",
       "name": "[Claude \u2014 Inference] Goal-Oriented Agent Cycle",
       "tags": [
         "DabbahWala",

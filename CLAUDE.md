@@ -49,7 +49,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 ## Database Migrations
 - All migrations live in `migrations/` and are numbered sequentially
-- Next available migration number: **064**
+- Next available migration number: **065**
 - Use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for idempotency
 
 ## Credentials & Integrations
@@ -84,11 +84,15 @@ If the env var is empty, read it from that file and use it directly in API calls
 - Menu table: **`Menu Catalog`** (table ID: `tblmZBNdQvmFcvVai`) — fields: Item Name, Category, Is Veg, Description, Image URL, Price, Added Date
   - Airtable = active items only; deleting a row marks it discarded in Postgres (via daily sync)
   - History tracked in `menu_catalog_history` in Postgres
+- Agent Playbook table: **`Agent Playbook`** (table ID: `tbljWs6hKWbYFufnM`) — fields: Rule Name, Category, Instruction, Priority, Active, Created By
+  - Synced to Postgres `agent_playbook` table every 15 min via `[Airtable — Evidence] Playbook Sync` (ID: `FXuYcwQeBQ72Xxyu`)
+  - Categories: exclusion, priority, inference, decision, messaging, general
 
 ### n8n Workflow Status
-- All **26 workflows** active as of 2026-02-26 (24 scheduled + 2 manual-only)
-- Renamed 2026-02-26: 4 intelligence workflows use new terminology — `[Intelligence] Contact Sweep`, `[Intelligence] Stage Runner`, `[Intelligence] Lapsed Sweep`, `[Intelligence] AI Stack`
-- `[Claude — Inference] Competitor Research Agent` (ID: TBD — activate after first push) added 2026-02-25
+- All **28 workflows** active as of 2026-02-26 (26 scheduled + 2 manual-only)
+- `[Claude — Inference] Competitor Research Agent` (ID: `GozoSXHiazEdhpni`) — deployed and activated 2026-02-26
+- `[Claude — Inference] Goal-Oriented Agent Cycle` (ID: `w5kYj5vNsNW53W4n`) — deployed and activated 2026-02-26
+- `[Claude — Evidence] Weekly Menu Sync` (ID: `sb0jHek7Q9gPeCUd`) — DEACTIVATED, redundant with Airtable Menu Catalog Sync
 - `[Airtable — Evidence] Menu Catalog Sync` (ID: `baZV5ViA5lXNCTWR`) — per-item catalog sync with deletion detection + history, daily 6:30 AM
 - `[System — Test] Daily E2E Test Suite` (ID: `M7bwNMGrUMRvAHH4`) — daily 5 AM E2E test runner, added 2026-02-25
 - `[Telnyx — Evidence] SMS Historical Import` (ID: `YANIKsHk767NDEXL`) — manual one-shot MDR backfill, added 2026-02-26
