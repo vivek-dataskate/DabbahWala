@@ -1,4 +1,44 @@
-# DabbahWala — E2E Test Registry
+# DabbahWala — Test Registry
+
+## Unit Tests (`tests/`)
+
+Pytest-based unit tests using FastAPI `TestClient` and mocked DB cursors (no real DB or network).
+Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
+
+| File | Router Covered | Tests |
+|------|----------------|-------|
+| `test_agents.py` | `agents.py` | 11 — cycle run, report data, action queue CRUD, goals CRUD |
+| `test_broadcasts.py` | `broadcasts.py` | 9 — create, delay-alert, queue, list, recipients sent/failed, get job |
+| `test_campaigns.py` | `campaigns.py` | 11 — pending, log-push, bulk-executed, analytics, templates CRUD |
+| `test_chatbot.py` | `chatbot.py` | 8 — ask, empty question, no key, history, suggest, reindex |
+| `test_competitor_agent.py` | `competitor_agent.py` | 5 — run no key, run mocked, list runs, list experiments |
+| `test_contacts.py` | `contacts.py` | 4 — priority high/do_not_contact, invalid priority, update notes |
+| `test_delivery.py` | `delivery.py` | 4 — record by email/phone, missing order_ref, DB error |
+| `test_events.py` | `events.py` | 4 — ingest with email/phone, no contact, missing event_type |
+| `test_field_agent.py` | `field_agent.py` | 8 — analyze-call 404/success, daily-brief, reviews, scorecard, pending-calls |
+| `test_goal_agent.py` | `goal_agent.py` | 9 — run with/without key, measure, experiments, runs |
+| `test_growth_agent.py` | `growth_agent.py` | 9 — run-cycle, measure, experiments, insights, baseline update |
+| `test_intelligence.py` | `intelligence.py` | 5 — run-cycle phases, pending actions empty/with data, ingest events |
+| `test_lifecycle.py` | `lifecycle.py` | 3 — run returns counts, zero contacts, DB error |
+| `test_menu.py` | `menu.py` | 7 — active items, inactive, history, sync new/update, empty |
+| `test_n8n_workflows.py` | n8n config + seams | 26+ — config integrity (26 workflows), live API (skipped w/o key), Python seam tests |
+| `test_opportunities.py` | `opportunities.py` | 9 — detect all 4 types, create, missing contact_id, pending, dispatched, outcome |
+| `test_orders.py` | `orders.py` | 7 — ingest-orders, sync-status, top-calls, import pipeline, sync-feedback |
+| `test_playbook.py` | `playbook.py` | 12 — list rules, for-prompt, create, update, delete, airtable sync |
+| `test_prospects.py` | `prospects.py` | 5 — template, update-template, add prospect, add duplicate, missing name |
+| `test_query.py` | `query.py` | 10 — categories, pipeline_snapshot, daily_summary, customer_lookup, execute-opportunity |
+| `test_reports.py` | `reports.py` | 3 — get existing, get missing→404, generate |
+| `test_schedules.py` | `schedules.py` | 3 — list schedules (mocked n8n), update schedule |
+| `test_shipday_sync.py` | `shipday_sync.py` | 15+ — classify_sentiment, fetch/store communications, feedback sync endpoint, stats |
+| `test_sms.py` | `sms.py` | 7 — inbound/outbound message, missing fields, record call, field-agent message |
+| `test_team_content.py` | `team_content.py` | 9 — sync new/existing/empty, submit, browse, search |
+| `test_webhooks.py` | `webhooks.py` | 7 — list campaigns, campaign-stats, Instantly event, Telnyx inbound, Shipday ping/order |
+
+**Total unit tests: 190 passing**
+
+---
+
+## E2E Test Registry
 
 This file is the **canonical reference** for all end-to-end tests in the DabbahWala test harness.
 

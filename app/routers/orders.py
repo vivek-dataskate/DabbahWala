@@ -22,6 +22,7 @@ from pydantic import BaseModel
 import time
 from datetime import datetime, timezone, timedelta
 from app.db import get_cursor
+from app.routers.shipday_sync import _run_feedback_sync
 
 SHIPDAY_API_BASE = "https://api.shipday.com"
 
