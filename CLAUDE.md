@@ -33,6 +33,7 @@ Before opening any PR, review the branch diff (`git diff main...HEAD`) and updat
 | Next migration number used | `CLAUDE.md` § Database Migrations (increment the number) |
 | n8n workflow count changed | `CLAUDE.md` § n8n Workflow Status |
 | Any new/modified feature (always) | `TESTS.md` + `app/services/test_harness_service.py` |
+| New customer journey, system function, or feature how-to | `GUIDE.md` — add/update the relevant section (customer journeys §2, system functions §3, feature how-tos §4) |
 
 If nothing in those categories changed, docs are fine as-is — no update needed.
 Commit doc updates in the same branch before opening the PR.

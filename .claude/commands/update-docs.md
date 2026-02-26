@@ -1,5 +1,5 @@
 ---
-description: Review the current branch diff and update SYSTEM.md, FEATURES.md, and CLAUDE.md to reflect any changes. Run this before opening a PR. Triggered by "/update-docs".
+description: Review the current branch diff and update SYSTEM.md, FEATURES.md, GUIDE.md, and CLAUDE.md to reflect any changes. Run this before opening a PR. Triggered by "/update-docs".
 ---
 
 # Update Docs
@@ -31,6 +31,10 @@ Work through this table. For each row where the diff touched the left column, up
 | New feature with no existing section | **FEATURES.md** — add a new numbered section |
 | Migration number consumed | **CLAUDE.md** § Database Migrations — increment "Next available migration number" |
 | n8n workflow added or removed | **CLAUDE.md** § n8n Workflow Status — update workflow count and date |
+| New or changed customer journey behaviour (lifecycle rules, AI guardrails, signal types) | **GUIDE.md** § 2 — update the relevant customer journey function (§2A–2H) |
+| New or changed system-level operation (new API endpoint a human would call, new schedule, new broadcast/query feature) | **GUIDE.md** § 3 — update or add the system function how-to |
+| New or changed feature group (new n8n workflow group, new router, new integration) | **GUIDE.md** § 4 — update or add the feature how-to section |
+| Any troubleshooting scenario introduced by the change (new failure mode, new env var, new dependency) | **GUIDE.md** § 5 Troubleshooting — add a row to the table |
 
 ### 3. Apply the updates
 
@@ -39,8 +43,8 @@ Use the Edit tool to make targeted, minimal changes — update only the rows/sec
 ### 4. Stage and commit if anything changed
 
 ```bash
-git add SYSTEM.md FEATURES.md CLAUDE.md
-git -c commit.gpgsign=false commit -m "docs: update SYSTEM/FEATURES/CLAUDE to reflect branch changes"
+git add SYSTEM.md FEATURES.md GUIDE.md CLAUDE.md
+git -c commit.gpgsign=false commit -m "docs: update SYSTEM/FEATURES/GUIDE/CLAUDE to reflect branch changes"
 ```
 
 If nothing needed updating, say so — no empty commit.
