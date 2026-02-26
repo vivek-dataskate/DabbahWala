@@ -129,6 +129,30 @@ A CSV file of the day's orders is uploaded every afternoon and automatically cre
 
 ---
 
+## 4b. Prospect Management
+
+Ground team and sales ops can add or update prospects in bulk via CSV directly from the dashboard **Actions** tab, without touching the database.
+
+**Assets**
+
+| Asset | Role |
+|-------|------|
+| `routers/prospects.py` | All prospect ingestion and update endpoints |
+| `GET /api/prospects/template` | Download blank "add new prospect" CSV template |
+| `POST /api/prospects/upload-csv` | Bulk-add new contacts (upsert by email/phone → lifecycle trigger) |
+| `GET /api/prospects/update-template` | Download blank "update existing prospect" CSV template; also enqueues a copy to Google Drive |
+| `POST /api/prospects/update-csv` | Bulk-update existing contacts by email/phone match; only non-blank CSV values overwrite |
+| Dashboard → Actions → "👥 Import / Update Prospects" | Self-service UI card for upload + template download |
+
+**Update CSV columns:** `EmailId · Phone · FirstName · LastName · Address · PriorityOverride · SalesNotes`
+
+- **PriorityOverride**: `none` / `high` / `do_not_contact` — surface to agent prompts
+- **SalesNotes**: free text injected into the AI agent's reasoning context
+- Rows where no contact is found (by email then phone) are skipped with a clear error message
+- Template is automatically saved to the shared Google Drive folder via `action_queue → upload_google_drive`
+
+---
+
 ## 5. Delivery-Aware Intelligence
 
 Real-time delivery status from Shipday is ingested and used by the AI orchestrator to override standard outreach logic — e.g., thank customers immediately after delivery, escalate instantly on failure.
