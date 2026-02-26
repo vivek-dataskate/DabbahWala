@@ -1970,6 +1970,61 @@ def _lookup_contact_id(
         return row["id"] if row else None
 
 
+def _get_or_create_contact(
+    phone: Optional[str] = None,
+    email: Optional[str] = None,
+    name: Optional[str] = None,
+) -> tuple[Optional[int], bool]:
+    """
+    Look up a contact by phone/email/name. If not found and a phone is available,
+    auto-create the contact so no inbound lead is ever dropped.
+
+    Returns (contact_id, is_new). Returns (None, False) if insufficient data.
+    """
+    contact_id = _lookup_contact_id(phone=phone, email=email, name=name)
+    if contact_id:
+        return contact_id, False
+
+    # Can only auto-create if we have a phone number
+    if not phone:
+        return None, False
+
+    normalized = "".join(c for c in phone if c.isdigit() or c == "+")
+
+    # Parse name if provided, else fall back to "Unknown"
+    first_name, last_name = "Unknown", ""
+    if name and name.strip():
+        parts = name.strip().split(None, 1)
+        first_name = parts[0]
+        last_name = parts[1] if len(parts) > 1 else ""
+
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO contacts
+                       (phone, first_name, last_name, lifecycle_segment,
+                        email_nurture_enabled, primary_source)
+                   VALUES (%s, %s, %s, 'cold', true, 'Inbound')
+                   ON CONFLICT DO NOTHING
+                   RETURNING id""",
+                (normalized or phone, first_name, last_name),
+            )
+            row = cur.fetchone()
+            if row:
+                logger.info(
+                    "_get_or_create_contact — created new contact phone=%s name='%s %s' id=%s",
+                    phone, first_name, last_name, row["id"],
+                )
+                return row["id"], True
+
+        # ON CONFLICT DO NOTHING means a concurrent insert won — look it up
+        contact_id = _lookup_contact_id(phone=phone)
+        return contact_id, False
+    except Exception as e:
+        logger.error("_get_or_create_contact — failed to create contact phone=%s: %s", phone, e)
+        return None, False
+
+
 @router.post("/cycle/run")
 def run_agent_cycle(req: CycleRequest):
     """Run full observer → advisor → orchestrator cycle for a list of contacts."""
@@ -2001,15 +2056,18 @@ def run_cycle_for_contact(req: ContactEventRequest):
     so every piece of evidence is evaluated for opportunity in real time.
     """
     logger.info("POST /cycle/run-for-contact phone=%s email=%s name=%s", req.phone, req.email, req.name)
-    contact_id = _lookup_contact_id(phone=req.phone, email=req.email, name=req.name)
+    contact_id, is_new = _get_or_create_contact(phone=req.phone, email=req.email, name=req.name)
     if not contact_id:
         logger.warning(
-            "Contact not found for phone=%s email=%s name=%s — skipping cycle", req.phone, req.email, req.name
+            "Contact not found and could not be created for phone=%s email=%s name=%s — skipping cycle",
+            req.phone, req.email, req.name,
         )
-        return {"status": "skipped", "reason": "Contact not found", "phone": req.phone, "email": req.email, "name": req.name}
+        return {"status": "skipped", "reason": "Contact not found and insufficient data to create", "phone": req.phone, "email": req.email, "name": req.name}
+    if is_new:
+        logger.info("Auto-created new contact id=%s from inbound phone=%s", contact_id, req.phone)
     try:
         result = _run_full_cycle(contact_id)
-        return {"status": "ok", **result}
+        return {"status": "ok", "is_new_contact": is_new, **result}
     except Exception as e:
         logger.error("Cycle failed for contact_id=%s: %s", contact_id, e, exc_info=True)
         return {"status": "error", "contact_id": contact_id, "error": str(e)}
