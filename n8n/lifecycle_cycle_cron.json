@@ -481,6 +481,21 @@
         "options": {}
       },
       "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "path": "lifecycle-cycle-trigger-053f0175",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "9eab01fb-3200-48b3-bdad-a0fb5bd2d2fe",
+      "name": "Webhook Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        220,
+        500
+      ]
     }
   ],
   "connections": {
@@ -713,6 +728,17 @@
     "Log Failed Push": {
       "main": [
         []
+      ]
+    },
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Run Lifecycle Cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
