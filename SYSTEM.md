@@ -239,6 +239,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |
 | `campaigns.py` | `/api/campaigns` | `GET /pending` (returns first/last name), `GET /active-contacts` (all contacts with active campaign — for Instantly seed), `GET /active-contacts-stats` (diagnostic — filter exclusion counts + campaign distribution), `POST /log-push` (record Instantly push result), `GET /push-log` (diagnostic — filter by success), `POST /bulk-executed` (batch mark), `POST /{id}/executed`, `POST /bulk-push-to-instantly` (background: push all pending campaign_queue moves directly to Instantly, deduplicated by email) |
 | `telnyx.py` | `/api/telnyx` | `POST /message`, `POST /call`, `POST /field-agent-message` |
+| `webhooks.py` | `/api/webhooks` | `POST /instantly` (Instantly email events), `POST /telnyx` (Telnyx inbound SMS push webhook), `POST /shipday` / `GET /shipday` (Shipday delivery status), `POST /sync-campaigns`, `GET /campaigns`, `POST /campaign-stats` |
 | `delivery.py` | `/api/delivery` | `POST /status` |
 | `playbook.py` | `/api/playbook` | `GET /rules`, `POST /rules`, `POST /sync-from-airtable` |
 | `team_content.py` | `/api/team-content` | `POST /sync`, `POST /submit`, `GET /browse`, `POST /search` |
@@ -418,7 +419,8 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Shipday** | Delivery Collector | Every 30 min | Poll Shipday → `POST /api/delivery/status` |
 | **Shipday** | Feedback Sync | Hourly | Poll delivery feedback, instructions, proof-of-delivery |
 | **Shipday** | Historical Import | Manual only | One-shot backfill of up to 1 year of order history |
-| **Telnyx** | Inbound Collector | Every 30 min | Ingest inbound SMS/calls → `POST /api/telnyx/message` → trigger agent cycle |
+| **Telnyx** | Inbound Collector | Every 30 min | Poll Telnyx MDR (`GET /v2/reports/messaging/message_detail_records`) for inbound SMS + call recordings → `POST /api/telnyx/message` → trigger agent cycle |
+| **Telnyx** | SMS Historical Import | Manual only | One-shot backfill of inbound SMS via Telnyx MDR API (~90 days retention); analogous to Shipday historical import |
 | **Telnyx** | SMS Dispatch | Every 10 min | Poll action_queue for `send_sms` → Telnyx API → mark done |
 | **Telnyx** | Broadcast Dispatch | Every 5 min | Dispatch queued broadcasts (SMS via Telnyx, email via SMTP) |
 | **Telnyx** | Broadcast Form | On form submit | n8n form UI for delay alerts and promo broadcasts |
@@ -458,7 +460,11 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 ### Telnyx (SMS + Voice)
 
 - Outbound SMS from `+18444322224`
-- Inbound SMS polled every 30 min by Telnyx Inbound Collector
+- Inbound SMS collected via two mechanisms:
+  - **Real-time**: `POST /api/webhooks/telnyx` — configure in Telnyx → Messaging Profiles → Webhooks → Inbound URL: `https://dabbahwala-latest.onrender.com/api/webhooks/telnyx`
+  - **Polling fallback**: Telnyx Inbound Collector n8n workflow polls MDR every 30 min (`GET /v2/reports/messaging/message_detail_records`)
+- Historic SMS backfill: `[Telnyx — Evidence] SMS Historical Import` workflow (manual, one-shot; MDR retains ~90 days)
+- Call recordings polled every 30 min via `GET /v2/recordings`
 - Call transcripts stored with duration, transcript, AI summary
 - Field agent logging: `POST /api/telnyx/field-agent-message` for SMS from personal phones
 
