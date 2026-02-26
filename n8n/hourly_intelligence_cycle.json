@@ -255,7 +255,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.airtable.com/v0/appuy2VTIao6XVpIW/Field%20Sales%20Tasks",
+        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Field%20Sales%20Tasks",
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",

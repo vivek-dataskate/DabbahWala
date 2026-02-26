@@ -74,7 +74,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.airtable.com/v0/appuy2VTIao6XVpIW/Agent%20Playbook?maxRecords=1",
+        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Agent%20Playbook?maxRecords=1",
         "authentication": "none",
         "options": {
           "timeout": 15000
