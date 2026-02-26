@@ -7,34 +7,43 @@ Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
 
 | File | Router Covered | Tests |
 |------|----------------|-------|
-| `test_agents.py` | `agents.py` | 11 — cycle run, report data, action queue CRUD, goals CRUD |
-| `test_broadcasts.py` | `broadcasts.py` | 9 — create, delay-alert, queue, list, recipients sent/failed, get job |
-| `test_campaigns.py` | `campaigns.py` | 11 — pending, log-push, bulk-executed, analytics, templates CRUD |
+| `test_agents.py` | `agents.py` | 18 — cycle run, report data, action queue CRUD, goals, run-all-lapsed, run-all, activity/outcome reports, do-not-contact |
+| `test_auth.py` | `auth.py` | 26 — session create/decode/tamper/expire, login, Google OAuth redirect, callback, auth/me, logout |
+| `test_broadcasts.py` | `broadcasts.py` | 19 — create, delay-alert, queue, list, pending-recipients, recipients sent/failed, get job, validation |
+| `test_campaigns.py` | `campaigns.py` | 23 — pending, log-push, push-log, bulk-executed, active-contacts, stats, analytics, templates CRUD, rewrite (Claude), bulk-push, repair-push |
 | `test_chatbot.py` | `chatbot.py` | 8 — ask, empty question, no key, history, suggest, reindex |
 | `test_competitor_agent.py` | `competitor_agent.py` | 5 — run no key, run mocked, list runs, list experiments |
 | `test_contacts.py` | `contacts.py` | 4 — priority high/do_not_contact, invalid priority, update notes |
-| `test_delivery.py` | `delivery.py` | 4 — record by email/phone, missing order_ref, DB error |
+| `test_daily_orders.py` | `daily_orders.py` | 12 — process CSV, empty CSV, new contacts, phone match, skip dups, download CSV, summary |
+| `test_delivery.py` | `delivery.py` | 8 — record by email/phone, neither, unknown phone, stored proc args, missing status, proc 404 |
 | `test_events.py` | `events.py` | 4 — ingest with email/phone, no contact, missing event_type |
-| `test_field_agent.py` | `field_agent.py` | 8 — analyze-call 404/success, daily-brief, reviews, scorecard, pending-calls |
-| `test_goal_agent.py` | `goal_agent.py` | 9 — run with/without key, measure, experiments, runs |
-| `test_growth_agent.py` | `growth_agent.py` | 9 — run-cycle, measure, experiments, insights, baseline update |
-| `test_intelligence.py` | `intelligence.py` | 5 — run-cycle phases, pending actions empty/with data, ingest events |
+| `test_field_agent.py` | `field_agent.py` | 8 — analyze-call 404/success, daily-brief empty/success, reviews, scorecard, pending-calls |
+| `test_goal_agent.py` | `goal_agent.py` | 18 — hypothesize, experiment, measure, harvest, run (all phases), experiments, signals, runs |
+| `test_growth_agent.py` | `growth_agent.py` | 14 — run-cycle launch/skip (small cohort/empty design), measure, experiments, insights, baseline |
+| `test_intelligence.py` | `intelligence.py` | 14 — run-cycle 5 phases, pending-actions, ingest-instantly-events various scenarios |
 | `test_lifecycle.py` | `lifecycle.py` | 3 — run returns counts, zero contacts, DB error |
-| `test_menu.py` | `menu.py` | 7 — active items, inactive, history, sync new/update, empty |
-| `test_n8n_workflows.py` | n8n config + seams | 26+ — config integrity (26 workflows), live API (skipped w/o key), Python seam tests |
-| `test_opportunities.py` | `opportunities.py` | 9 — detect all 4 types, create, missing contact_id, pending, dispatched, outcome |
-| `test_orders.py` | `orders.py` | 7 — ingest-orders, sync-status, top-calls, import pipeline, sync-feedback |
-| `test_playbook.py` | `playbook.py` | 12 — list rules, for-prompt, create, update, delete, airtable sync |
+| `test_menu.py` | `menu.py` | 7 — active/inactive items, history, sync new/update/Airtable error |
+| `test_n8n_workflows.py` | n8n config + seams | 294 — config integrity (26 expected workflows), JSON structure (31 files), Python API seams, live n8n (62 skipped w/o key) |
+| `test_opportunities.py` | `opportunities.py` | 9 — detect all 4 types, create, pending, dispatched, outcome |
+| `test_orders.py` | `orders.py` | 22 — ingest-orders, sync-status, top-calls, import pipeline, sync-feedback, feedback-stats |
+| `test_playbook.py` | `playbook.py` | 11 — list rules, for-prompt, create, update, delete, airtable sync |
 | `test_prospects.py` | `prospects.py` | 5 — template, update-template, add prospect, add duplicate, missing name |
-| `test_query.py` | `query.py` | 10 — categories, pipeline_snapshot, daily_summary, customer_lookup, execute-opportunity |
-| `test_reports.py` | `reports.py` | 3 — get existing, get missing→404, generate |
-| `test_schedules.py` | `schedules.py` | 3 — list schedules (mocked n8n), update schedule |
-| `test_shipday_sync.py` | `shipday_sync.py` | 15+ — classify_sentiment, fetch/store communications, feedback sync endpoint, stats |
-| `test_sms.py` | `sms.py` | 7 — inbound/outbound message, missing fields, record call, field-agent message |
+| `test_query.py` | `query.py` | 9 — categories, pipeline_snapshot, daily_summary, customer_lookup, execute-opportunity |
+| `test_reports.py` | `reports.py` | 5 — get existing, get missing→404, generate, invalid date |
+| `test_schedules.py` | `schedules.py` | 7 — auth required, list (mocked n8n), update interval/cron/invalid |
+| `test_shipday_sync.py` | `shipday_sync.py` / `orders.py` | 29 — classify_sentiment, fetch/store communications, feedback sync endpoint/stats, run_feedback_sync |
+| `test_sms.py` | `sms.py` | 12 — inbound/outbound message, auto-create contact, delivery staff skip, call, field-agent message, pending |
 | `test_team_content.py` | `team_content.py` | 9 — sync new/existing/empty, submit, browse, search |
-| `test_webhooks.py` | `webhooks.py` | 7 — list campaigns, campaign-stats, Instantly event, Telnyx inbound, Shipday ping/order |
+| `test_webhooks.py` | `webhooks.py` | 25 — list campaigns, campaign-stats, Instantly event/unknown, Telnyx inbound, Shipday auth/delivered/failed/ping |
 
-**Total unit tests: 190 passing**
+**Total unit tests: 628 passing, 62 skipped (live API — activate with env vars), 49% code coverage**
+
+To run with live API tests:
+```bash
+N8N_API_KEY=xxx CONNECTIVITY_TESTS=1 TELNYX_API_KEY=xxx INSTANTLY_API_KEY=xxx AIRTABLE_API_KEY=xxx \
+  pytest tests/ -m "n8n_live or external_connectivity"
+LIVE_DW_API_TESTS=1 pytest tests/ -m live_dw_api
+```
 
 ---
 
