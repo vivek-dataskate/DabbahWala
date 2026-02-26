@@ -244,7 +244,7 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 | `reports.py` | `/api/reports` | `GET /daily/{date}`, `POST /daily/{date}` |
 | `events.py` | `/api/events` | `POST /ingest` |
 | `menu.py` | `/api/menu` | `GET /items`, `GET /items/inactive`, `GET /items/{id}/history`, `POST /sync` (Airtable → Postgres, two-phase: upsert + deletion detection; renamed from `airtable_menu.py`) |
-| `growth_agent.py` | `/api/growth` | Growth hacker agent endpoints |
+| `growth_agent.py` | `/api/growth` | `POST /run-cycle` (Claude designs+dispatches experiment; agent chooses `measure_days` 7–56), `POST /measure` (adaptive: fires at `measure_at` OR after 30+ conversion events), `POST /baseline/update`; `GET /experiments`, `/insights` |
 | `goal_agent.py` | `/api/goal-agent` | `POST /run`, `/hypothesize`, `/experiment`, `/measure`, `/harvest`; `GET /experiments`, `/signals`, `/runs` |
 | `competitor_agent.py` | `/api/competitor-agent` | `POST /run` (full cycle: parse emails + scrape sites + generate + inject); `GET /runs`, `/experiments` |
 | `chatbot.py` | `/api/chatbot` | `POST /ask`, `GET /suggest`, `GET /history`, `POST /reindex` — RAG Q&A over project docs |
@@ -423,13 +423,13 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **[Chatbot]** | Docs Sync | Every 30 min | List Drive folder → read Google Docs via `/api/internal/docs/{id}` → `POST /api/team-content/sync` |
 | **[Chatbot]** | Docs Reindex | Weekly Mon 2 AM | Refresh chatbot document index |
 | **[Field Agent]** | Daily Brief | Daily 7:30 AM | `POST /api/field-agent/daily-brief` → write top-10 contacts to Airtable Field Sales Tasks → email summary to core@dabbahwala.com |
-| **[Reports]** | Daily Activity Report | Daily 8:00 AM | `POST /api/agents/report/activity` → Claude HTML + CSV → email |
-| **[Reports]** | Daily Outcome Report | Daily 8:30 AM | `POST /api/agents/report/outcome` → Claude HTML + CSV → email |
+| **[Reports]** | Daily Activity Report | Daily 8:00 AM | `POST /api/agents/report/activity` → Claude HTML + CSV → enqueued to `action_queue` as `send_email_report` → SMTP |
+| **[Reports]** | Daily Outcome Report | Daily 8:30 AM | `POST /api/agents/report/outcome` → Claude HTML + CSV → enqueued to `action_queue` as `send_email_report` → SMTP |
 | **[Intelligence]** | AI Stack | Every 3 hours | `POST /api/agents/cycle/run-daily-sweep` — dormant contacts (cap 200, 72 h cooldown); 4-layer Claude pipeline (Observer→Advisor→Orchestrator→Reports) |
 | **[Intelligence]** | Contact Sweep | Hourly | `POST /api/intelligence/run-cycle` — full 5-phase sweep (COLLECT→PROFILE→SIGNAL→ROUTE→DISPATCH) |
 | **[Intelligence]** | Stage Runner | Hourly | `POST /api/lifecycle/run` — Stage Engine: pure SQL rules that move contacts between lifecycle stages |
 | **[Intelligence]** | Lapsed Re-engagement | Daily (random offset) | Persistent re-engagement for lapsed contacts |
-| **[Growth]** | Weekly Growth Agent | Every Mon 7:30 AM | Growth hacker 4-phase experiment loop: refresh baseline → measure → design+launch → email report |
+| **[Growth]** | Weekly Growth Agent | Every Mon 7:30 AM | Fetch credentials → refresh baseline → measure due experiments (adaptive early cutoff at 30 events) → Claude designs+launches new experiment (agent picks `measure_days`) → build HTML report → `POST /api/internal/send-email` |
 | **[Growth]** | Goal Agent | Daily 9:00 AM | `POST /api/goal-agent/run` — 4-phase proactive loop: HYPOTHESIZE → EXPERIMENT → MEASURE → HARVEST |
 | **[Growth]** | Competitor Research | Every Mon 6:30 AM | `POST /api/competitor-agent/run` — parse .eml + scrape competitor sites + generate hypotheses → inject into `goal_experiments` |
 | **[System]** | Action Queue | Every 30 min | Route action_queue rows to Telnyx / Instantly / Airtable / Drive / `/api/internal/send-email` |
