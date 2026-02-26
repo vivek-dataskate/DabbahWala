@@ -417,3 +417,182 @@ class TestFindCachedAnswer:
 
         assert result is not None
         assert "PostgreSQL" in result["answer"]
+
+
+class TestSaveHelpers:
+    """Test save/clear helper functions directly."""
+
+    def test_save_interaction_inserts_row(self):
+        """_save_interaction calls INSERT into chatbot_interactions."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.chatbot import _save_interaction
+
+        cur = MagicMock()
+
+        @contextmanager
+        def _mock_cursor(commit=True):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            _save_interaction("What is DabbahWala?", "A food delivery app.", ["README.md"])
+
+        cur.execute.assert_called_once()
+        call_args = cur.execute.call_args[0]
+        assert "chatbot_interactions" in call_args[0]
+
+    def test_save_canned_upserts_row(self):
+        """_save_canned calls INSERT ... ON CONFLICT into chatbot_canned_qa."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.chatbot import _save_canned
+
+        cur = MagicMock()
+
+        @contextmanager
+        def _mock_cursor(commit=True):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            _save_canned("Why 4-layer pipeline?", "Better decision quality.", ["SYSTEM.md"])
+
+        cur.execute.assert_called_once()
+
+    def test_clear_canned_deletes_all(self):
+        """_clear_canned deletes all rows from chatbot_canned_qa."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.chatbot import _clear_canned
+
+        cur = MagicMock()
+
+        @contextmanager
+        def _mock_cursor(commit=True):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            _clear_canned()
+
+        cur.execute.assert_called_once()
+        call_args = cur.execute.call_args[0][0]
+        assert "chatbot_canned_qa" in call_args
+
+    def test_clear_canned_handles_exception_gracefully(self):
+        """_clear_canned swallows exceptions without raising."""
+        from app.routers.chatbot import _clear_canned
+        from unittest.mock import patch
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=Exception("DB offline")):
+            # Should not raise
+            _clear_canned()
+
+    def test_save_last_indexed_at_calls_upsert(self):
+        """_save_last_indexed_at calls INSERT ... ON CONFLICT into chatbot_doc_meta."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.chatbot import _save_last_indexed_at
+
+        cur = MagicMock()
+
+        @contextmanager
+        def _mock_cursor(commit=True):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            _save_last_indexed_at()
+
+        cur.execute.assert_called_once()
+
+    def test_save_docs_hash_upserts(self):
+        """_save_docs_hash calls INSERT ... ON CONFLICT into chatbot_doc_meta."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.chatbot import _save_docs_hash
+
+        cur = MagicMock()
+
+        @contextmanager
+        def _mock_cursor(commit=True):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            _save_docs_hash("abc123")
+
+        cur.execute.assert_called_once()
+
+
+class TestGetStoredDocsHash:
+    def test_returns_none_when_missing(self):
+        """_get_stored_docs_hash returns None when no record exists."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.chatbot import _get_stored_docs_hash
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _get_stored_docs_hash()
+
+        assert result is None
+
+    def test_returns_hash_when_stored(self):
+        """_get_stored_docs_hash returns hash string from DB."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.chatbot import _get_stored_docs_hash
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {"value": "abc123def456"}
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _get_stored_docs_hash()
+
+        assert result == "abc123def456"
+
+    def test_returns_none_on_exception(self):
+        """_get_stored_docs_hash returns None on exception."""
+        from app.routers.chatbot import _get_stored_docs_hash
+        from unittest.mock import patch
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=Exception("timeout")):
+            result = _get_stored_docs_hash()
+
+        assert result is None
+
+
+class TestSimilarHistory:
+    def test_returns_empty_for_short_words(self):
+        """_similar_history returns [] when question has no words longer than 3 chars."""
+        from app.routers.chatbot import _similar_history
+        result = _similar_history("Hi?")
+        assert result == []
+
+    def test_returns_history_when_matching(self):
+        """_similar_history returns Q&A pairs matching question keywords."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.chatbot import _similar_history
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [
+            {"question": "What is the architecture?", "answer": "4-layer pipeline."}
+        ]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.chatbot.get_cursor", side_effect=_mock_cursor):
+            result = _similar_history("What is the system architecture?")
+
+        assert len(result) == 1
+        assert "architecture" in result[0]["question"]

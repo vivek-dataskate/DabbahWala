@@ -569,3 +569,433 @@ class TestGetRuns:
         assert data["count"] == 1
         assert data["runs"][0]["run_type"] == "full"
         assert data["runs"][0]["experiments_created"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Direct helper tests — cover uncovered branches
+# ---------------------------------------------------------------------------
+
+class TestToolCallException:
+    """Test _tool_call exception handler path."""
+
+    def test_tool_call_exception_returns_empty_dict(self):
+        """_tool_call logs error and returns {} when Claude raises."""
+        from app.routers.goal_agent import _tool_call
+
+        client = MagicMock()
+        client.messages.create.side_effect = Exception("API timeout")
+
+        tool = {
+            "name": "test_tool",
+            "description": "test",
+            "input_schema": {"type": "object", "properties": {}, "required": []},
+        }
+        result = _tool_call(client, "system prompt", "user prompt", tool)
+        assert result == {}
+
+
+class TestExecuteCohortSql:
+    """Test _execute_cohort_sql branches."""
+
+    def test_unsafe_sql_blocked_returns_empty(self):
+        """_execute_cohort_sql returns [] when SQL contains INSERT."""
+        from app.routers.goal_agent import _execute_cohort_sql
+        result = _execute_cohort_sql("INSERT INTO contacts (first_name) VALUES ('x')")
+        assert result == []
+
+    def test_unsafe_delete_sql_blocked(self):
+        """_execute_cohort_sql returns [] when SQL contains DELETE."""
+        from app.routers.goal_agent import _execute_cohort_sql
+        result = _execute_cohort_sql("DELETE FROM contacts WHERE id = 1")
+        assert result == []
+
+    def test_cursor_exception_returns_empty(self):
+        """_execute_cohort_sql returns [] when cursor raises exception."""
+        from app.routers.goal_agent import _execute_cohort_sql
+
+        with patch("app.routers.goal_agent.get_cursor", side_effect=Exception("DB error")):
+            result = _execute_cohort_sql("SELECT id FROM contacts")
+        assert result == []
+
+    def test_valid_sql_returns_rows(self):
+        """_execute_cohort_sql returns rows from cursor for valid SQL."""
+        from contextlib import contextmanager
+        from app.routers.goal_agent import _execute_cohort_sql
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [
+            {"contact_id": 1, "first_name": "Alice", "phone": "+14041111111"},
+        ]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.goal_agent.get_cursor", side_effect=_mock_cursor):
+            result = _execute_cohort_sql("SELECT id AS contact_id FROM contacts LIMIT 10")
+
+        assert len(result) == 1
+        assert result[0]["contact_id"] == 1
+
+
+class TestEnqueueExperimentActions:
+    """Test _enqueue_experiment_actions branches."""
+
+    def test_skips_contact_with_no_phone(self):
+        """Contact without phone is skipped — no cursor calls made."""
+        from app.routers.goal_agent import _enqueue_experiment_actions
+        from contextlib import contextmanager
+
+        cur = MagicMock()
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        contacts = [{"contact_id": 1, "first_name": "Alice", "phone": ""}]
+        with patch("app.routers.goal_agent.get_cursor", side_effect=_mock_cursor):
+            count = _enqueue_experiment_actions(99, contacts, "Hi {first_name}!")
+
+        assert count == 0
+
+    def test_enqueue_exception_skips_contact(self):
+        """Exception during enqueue is swallowed; enrolled stays 0."""
+        from app.routers.goal_agent import _enqueue_experiment_actions
+
+        with patch("app.routers.goal_agent.get_cursor", side_effect=Exception("DB error")):
+            contacts = [{"contact_id": 2, "first_name": "Bob", "phone": "+14042222222"}]
+            count = _enqueue_experiment_actions(99, contacts, "Hi {first_name}!")
+
+        assert count == 0
+
+
+class TestCountExperimentConversions:
+    """Test _count_experiment_conversions helper."""
+
+    def test_returns_conversion_stats(self):
+        """_count_experiment_conversions returns dict with total_enrolled, converted, etc."""
+        from contextlib import contextmanager
+        from app.routers.goal_agent import _count_experiment_conversions
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {
+            "total_enrolled": 20,
+            "converted": 5,
+            "not_yet_checked": 15,
+        }
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.goal_agent.get_cursor", side_effect=_mock_cursor):
+            result = _count_experiment_conversions(42)
+
+        assert result["total_enrolled"] == 20
+        assert result["converted"] == 5
+
+
+class TestCheckAndMarkConversions:
+    """Test _check_and_mark_conversions helper."""
+
+    def test_no_unchecked_contacts_returns_zero(self):
+        """With no unchecked contacts, _check_and_mark_conversions returns 0."""
+        from contextlib import contextmanager
+        from app.routers.goal_agent import _check_and_mark_conversions
+
+        cur = MagicMock()
+        cur.fetchall.return_value = []  # no unchecked contacts
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.goal_agent.get_cursor", side_effect=_mock_cursor):
+            result = _check_and_mark_conversions(99)
+
+        assert result == 0
+
+    def test_converts_contacts_who_ordered(self):
+        """Contact who ordered after enrollment is marked converted."""
+        from contextlib import contextmanager
+        from app.routers.goal_agent import _check_and_mark_conversions
+        from datetime import date
+
+        cur = MagicMock()
+        # fetchall: unchecked contacts
+        cur.fetchall.return_value = [
+            {"id": 101, "contact_id": 5, "enrolled_at": date(2026, 1, 1)}
+        ]
+        # fetchone call sequence: 1st for SELECT FROM orders (found), 2nd for UPDATE (no result)
+        cur.fetchone.side_effect = [{"id": 999}, None]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.goal_agent.get_cursor", side_effect=_mock_cursor):
+            result = _check_and_mark_conversions(99)
+
+        assert result == 1
+
+
+class TestSaveDiscoveredSignal:
+    """Test _save_discovered_signal helper."""
+
+    def test_unsafe_signal_sql_blocked(self):
+        """Signal with INSERT in detection_sql returns None."""
+        from app.routers.goal_agent import _save_discovered_signal
+
+        signal = {
+            "signal_name": "bad_signal",
+            "signal_description": "bad",
+            "detection_sql": "INSERT INTO contacts VALUES (1)",
+        }
+        result = _save_discovered_signal(1, signal, 0.5)
+        assert result is None
+
+    def test_exception_returns_none(self):
+        """Exception during INSERT returns None."""
+        from app.routers.goal_agent import _save_discovered_signal
+
+        signal = {
+            "signal_name": "good_signal",
+            "signal_description": "good signal",
+            "detection_sql": "SELECT id FROM contacts",
+        }
+        with patch("app.routers.goal_agent.get_cursor", side_effect=Exception("DB error")):
+            result = _save_discovered_signal(1, signal, 0.8)
+
+        assert result is None
+
+    def test_saves_signal_successfully(self):
+        """Valid signal returns the new signal_id."""
+        from contextlib import contextmanager
+        from app.routers.goal_agent import _save_discovered_signal
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {"id": 77}
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        signal = {
+            "signal_name": "lapsed_2x_signal",
+            "signal_description": "2+ orders, 21d lapsed",
+            "detection_sql": "SELECT id FROM contacts WHERE total_orders >= 2",
+        }
+        with patch("app.routers.goal_agent.get_cursor", side_effect=_mock_cursor):
+            result = _save_discovered_signal(5, signal, 0.75)
+
+        assert result == 77
+
+
+class TestPhaseExperimentNoCohortSql:
+    """Test _phase_experiment branch when cohort SQL is missing."""
+
+    def test_experiment_skips_when_no_cohort_sql(self, client, monkeypatch):
+        """When Claude returns no cohort_sql, experiment is skipped."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        pending_exp = {
+            "id": 7,
+            "hypothesis": "test",
+            "experiment_type": "cohort_message",
+            "cohort_description": "test group",
+            "cohort_filter": {},
+            "message_template": "",
+            "success_threshold": 0.1,
+        }
+
+        # Claude returns no cohort_sql
+        cohort_build_input = {"cohort_sql": "", "message_template": ""}
+        claude_mock = _make_claude_mock(cohort_build_input)
+
+        cur = MagicMock()
+        cur.fetchall.side_effect = [
+            [],              # recently contacted
+            [],              # active experiment contacts
+            [pending_exp],   # pending experiments
+        ]
+        cur.fetchone.return_value = None
+
+        with patch("app.routers.goal_agent.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)), \
+             patch("anthropic.Anthropic", return_value=claude_mock):
+            resp = client.post("/api/goal-agent/experiment")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["experiments_started"] == 0
+        assert data["contacts_enrolled"] == 0
+
+
+class TestSaveExperimentsDuplicatePath:
+    """Test _save_experiments when INSERT returns None (duplicate)."""
+
+    def test_duplicate_hypothesis_is_skipped(self):
+        """When INSERT returns no row (duplicate hash), hypothesis is not added to ids."""
+        from contextlib import contextmanager
+        from app.routers.goal_agent import _save_experiments
+
+        cur = MagicMock()
+        # First call: INSERT returns None (duplicate)
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        hypotheses = [
+            {
+                "hypothesis": "Test hypothesis",
+                "experiment_type": "cohort_message",
+                "cohort_description": "test group",
+                "cohort_filter": {},
+                "message_template": "Hi {first_name}!",
+                "success_threshold": 0.1,
+                "rationale": "test",
+            }
+        ]
+
+        with patch("app.routers.goal_agent.get_cursor", side_effect=_mock_cursor):
+            ids = _save_experiments(hypotheses)
+
+        assert ids == []
+
+
+class TestRunConclusionAgent:
+    """Test _run_conclusion_agent direct call."""
+
+    def test_run_conclusion_agent_returns_conclusion(self):
+        """_run_conclusion_agent calls _tool_call and returns conclusion dict."""
+        from app.routers.goal_agent import _run_conclusion_agent
+
+        client = MagicMock()
+        block = MagicMock()
+        block.type = "tool_use"
+        block.input = {"conclusion": "proven", "conclusion_notes": "Conversion exceeded threshold."}
+        response = MagicMock()
+        response.content = [block]
+        client.messages.create.return_value = response
+
+        experiment = {
+            "hypothesis": "SMS reactivates lapsed users",
+            "experiment_type": "cohort_message",
+            "success_threshold": 0.10,
+        }
+        stats = {"total_enrolled": 20, "converted": 5, "not_yet_checked": 0}
+
+        result = _run_conclusion_agent(client, experiment, stats, baseline_rate=0.05)
+        assert result["conclusion"] == "proven"
+        assert "threshold" in result["conclusion_notes"].lower()
+
+
+class TestConcludeExperiment:
+    """Test _conclude_experiment direct call."""
+
+    def test_conclude_experiment_updates_db(self):
+        """_conclude_experiment executes UPDATE on goal_experiments."""
+        from contextlib import contextmanager
+        from app.routers.goal_agent import _conclude_experiment
+
+        cur = MagicMock()
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.goal_agent.get_cursor", side_effect=_mock_cursor):
+            _conclude_experiment(
+                experiment_id=10,
+                conclusion="proven",
+                notes="Exceeded threshold.",
+                conversions=3,
+                sample=20,
+            )
+
+        cur.execute.assert_called_once()
+        call_sql = cur.execute.call_args[0][0]
+        assert "goal_experiments" in call_sql
+
+
+class TestPhaseMeasureWithExperiment:
+    """Test _phase_measure endpoint when there are ready experiments."""
+
+    def test_measure_with_real_experiment_flow(self, client, monkeypatch):
+        """POST /measure concludes an experiment when measure data is present."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        ready_exp = {
+            "id": 11,
+            "hypothesis": "Nostalgia SMS works",
+            "experiment_type": "cohort_message",
+            "success_threshold": 0.10,
+            "enrolled_count": 20,
+        }
+
+        # snapshot fetchall x5, fetchone x4, then _check_and_mark_conversions (fetchall=unchecked,fetchone=has_order,fetchone=None-for-update)
+        # then _count_experiment_conversions (fetchone), then _conclude_experiment (no return)
+        cur = MagicMock()
+        cur.fetchall.side_effect = [
+            [ready_exp],                    # _get_experiments_ready_to_measure
+            [],                             # _check_and_mark_conversions: unchecked contacts
+            # _get_system_snapshot:
+            [{"lifecycle_segment": "active", "cnt": 50}],  # segments
+            [],  # recent_experiments
+            [],  # active_signals
+            [],  # top_items
+            [],  # orders_by_dow
+        ]
+        cur.fetchone.side_effect = [
+            # _get_system_snapshot fetchone calls:
+            {"orders_30d": 10, "ordering_customers_30d": 8,
+             "avg_order_value": 30.0, "total_contacts": 200},  # order_stats
+            {"ordered_7d": 5},
+            {"lapsed_count": 30},
+            {"never_ordered": 60},
+            # _count_experiment_conversions:
+            {"total_enrolled": 20, "converted": 3, "not_yet_checked": 0},
+            # _conclude_experiment (no fetchone needed)
+            None,  # _log_run
+        ]
+
+        claude_mock = _make_claude_mock({"conclusion": "inconclusive", "conclusion_notes": "Sample too small."})
+
+        with patch("app.routers.goal_agent.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)), \
+             patch("anthropic.Anthropic", return_value=claude_mock):
+            resp = client.post("/api/goal-agent/measure")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["experiments_concluded"] == 1
+
+
+class TestPhaseRunException:
+    """Test /run endpoint exception handling in phase loop."""
+
+    def test_run_phase_exception_captured_in_details(self, client, monkeypatch):
+        """POST /run captures phase exceptions in details without raising."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        log_cur = _make_cursor()
+
+        with patch("app.routers.goal_agent._phase_hypothesize",
+                   side_effect=Exception("Hypothesize boom")), \
+             patch("app.routers.goal_agent._phase_experiment",
+                   return_value={"experiments_started": 0, "contacts_enrolled": 0}), \
+             patch("app.routers.goal_agent._phase_measure",
+                   return_value={"experiments_concluded": 0, "orders_attributed": 0}), \
+             patch("app.routers.goal_agent._phase_harvest",
+                   return_value={"signals_discovered": 0}), \
+             patch("app.routers.goal_agent.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(log_cur)), \
+             patch("anthropic.Anthropic"):
+            resp = client.post("/api/goal-agent/run")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "error" in data["details"]["hypothesize"]
+        assert data["phase"] == "full"

@@ -647,3 +647,414 @@ class TestActionQueueAdditional:
         data = resp.json()
         assert isinstance(data, list)
         assert len(data) == 0
+
+
+# ---------------------------------------------------------------------------
+# _lookup_contact_id — direct helper tests
+# ---------------------------------------------------------------------------
+
+class TestLookupContactId:
+    """Test _lookup_contact_id branches."""
+
+    def test_lookup_by_phone(self):
+        """_lookup_contact_id returns contact id when found by phone."""
+        from contextlib import contextmanager
+        from app.routers.agents import _lookup_contact_id
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {"id": 42}
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            result = _lookup_contact_id(phone="+14041234567")
+        assert result == 42
+
+    def test_lookup_by_email(self):
+        """_lookup_contact_id returns contact id when found by email."""
+        from contextlib import contextmanager
+        from app.routers.agents import _lookup_contact_id
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {"id": 99}
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            result = _lookup_contact_id(email="test@example.com")
+        assert result == 99
+
+    def test_lookup_by_name(self):
+        """_lookup_contact_id returns contact id when found by name."""
+        from contextlib import contextmanager
+        from app.routers.agents import _lookup_contact_id
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {"id": 77}
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            result = _lookup_contact_id(name="John Doe")
+        assert result == 77
+
+    def test_lookup_no_params_returns_none(self):
+        """_lookup_contact_id returns None when called with no args."""
+        from app.routers.agents import _lookup_contact_id
+        result = _lookup_contact_id()
+        assert result is None
+
+    def test_lookup_not_found_returns_none(self):
+        """_lookup_contact_id returns None when cursor returns no row."""
+        from contextlib import contextmanager
+        from app.routers.agents import _lookup_contact_id
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            result = _lookup_contact_id(phone="+19999999999")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Cycle endpoints — no-contact paths
+# ---------------------------------------------------------------------------
+
+class TestCycleEndpointsNoContacts:
+    """Test run-all, run-all-lapsed, run-daily-sweep with empty contact lists."""
+
+    def test_run_all_no_eligible_contacts(self, client):
+        """POST /cycle/run-all with empty contacts returns processed:0."""
+        cur = _make_cursor(rows=[])
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/cycle/run-all")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 0
+        assert data["errors"] == []
+
+    def test_run_all_lapsed_no_contacts(self, client):
+        """POST /cycle/run-all-lapsed with empty contacts returns processed:0."""
+        cur = _make_cursor(rows=[])
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/cycle/run-all-lapsed")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 0
+
+    def test_run_daily_sweep_no_contacts(self, client):
+        """POST /cycle/run-daily-sweep with empty contacts returns processed:0."""
+        cur = _make_cursor(rows=[])
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/cycle/run-daily-sweep")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 0
+
+    def test_run_all_contacts_no_contacts(self, client):
+        """POST /cycle/run-all-contacts with empty contacts returns processed:0."""
+        cur = _make_cursor(rows=[])
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/cycle/run-all-contacts")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 0
+        assert data["campaigns_pushed"] == 0
+        assert data["airtable_pushed"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _fetch_outcome_data — direct function test
+# ---------------------------------------------------------------------------
+
+class TestFetchOutcomeData:
+    """Test _fetch_outcome_data helper."""
+
+    def test_fetch_outcome_data_returns_summary_and_rows(self):
+        """_fetch_outcome_data returns (summary_dict, order_customers list)."""
+        from contextlib import contextmanager
+        from app.routers.agents import _fetch_outcome_data
+
+        cur = MagicMock()
+        # Sequence of fetchone calls: orders, email_opens, email_clicks, sms_replies,
+        # goals_achieved, order_day_patterns, top_menu_items, customer_segments,
+        # field_agent_scorecard, field_agent_reviews
+        cur.fetchone.side_effect = [
+            {"c": 5},      # orders
+            {"c": 12},     # email_opens
+            {"c": 3},      # email_clicks
+            {"c": 2},      # sms_replies
+            {"c": 1},      # goals_achieved
+            {"get_order_day_patterns": "[]"},      # order_day_patterns
+            {"get_top_menu_items": "[]"},          # top_menu_items
+            {"get_customer_frequency_segments": "[]"},  # customer_segments
+            {"get_field_agent_scorecard": "[]"},   # field_agent_scorecard
+            {"get_recent_field_agent_reviews": "[]"},  # field_agent_reviews
+        ]
+        cur.fetchall.return_value = []  # order_customers
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            summary, rows = _fetch_outcome_data("2026-01-01")
+
+        assert summary["orders_detected"] == 5
+        assert summary["email_opens"] == 12
+        assert summary["email_clicks"] == 3
+        assert summary["inbound_sms_replies"] == 2
+        assert rows == []
+
+
+# ---------------------------------------------------------------------------
+# GET /report/activity-data and /report/outcome-data
+# ---------------------------------------------------------------------------
+
+class TestReportDataEndpoints:
+    """Test report data GET endpoints."""
+
+    def test_get_activity_data_endpoint(self, client):
+        """GET /report/activity-data returns report_date, summary, detail_rows."""
+        with patch("app.routers.agents._fetch_activity_data",
+                   return_value=({"orders_placed": 3}, [])):
+            resp = client.get("/api/agents/report/activity-data?report_date=2026-01-01")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["report_date"] == "2026-01-01"
+        assert "summary" in data
+        assert "detail_rows" in data
+
+    def test_get_outcome_data_endpoint(self, client):
+        """GET /report/outcome-data returns report_date, summary, detail_rows."""
+        with patch("app.routers.agents._fetch_outcome_data",
+                   return_value=({"orders_detected": 7}, [])):
+            resp = client.get("/api/agents/report/outcome-data?report_date=2026-01-01")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["report_date"] == "2026-01-01"
+        assert data["summary"]["orders_detected"] == 7
+
+
+# ---------------------------------------------------------------------------
+# _rows_to_csv helper
+# ---------------------------------------------------------------------------
+
+class TestRowsToCsv:
+    """Test _rows_to_csv helper."""
+
+    def test_empty_rows_returns_no_data(self):
+        """_rows_to_csv returns 'no_data\\n' for empty list."""
+        from app.routers.agents import _rows_to_csv
+        result = _rows_to_csv([])
+        assert result == "no_data\n"
+
+    def test_rows_returns_csv_string(self):
+        """_rows_to_csv returns CSV string with header and rows."""
+        from app.routers.agents import _rows_to_csv
+        rows = [{"name": "Alice", "orders": 3}, {"name": "Bob", "orders": 1}]
+        result = _rows_to_csv(rows)
+        assert "name" in result
+        assert "Alice" in result
+        assert "Bob" in result
+
+
+# ---------------------------------------------------------------------------
+# cycle/run endpoint error handling
+# ---------------------------------------------------------------------------
+
+class TestCycleRunErrors:
+    """Test /cycle/run error handling."""
+
+    def test_run_cycle_handles_exception(self, client):
+        """POST /cycle/run logs error and adds to errors list when cycle fails."""
+        with patch("app.routers.agents._run_full_cycle",
+                   side_effect=Exception("Claude API timeout")):
+            resp = client.post(
+                "/api/agents/cycle/run",
+                json={"contact_ids": [999]},
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 0
+        assert len(data["errors"]) == 1
+        assert data["errors"][0]["contact_id"] == 999
+
+
+# ---------------------------------------------------------------------------
+# _get_or_create_contact — branches
+# ---------------------------------------------------------------------------
+
+class TestGetOrCreateContact:
+    """Test _get_or_create_contact branches."""
+
+    def test_returns_existing_contact(self):
+        """Returns (contact_id, False) when contact already exists."""
+        from contextlib import contextmanager
+        from app.routers.agents import _get_or_create_contact
+
+        cur = MagicMock()
+        cur.fetchone.return_value = {"id": 55}
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            contact_id, is_new = _get_or_create_contact(phone="+14041111111")
+        assert contact_id == 55
+        assert is_new is False
+
+    def test_returns_none_when_no_phone(self):
+        """Returns (None, False) when contact not found and no phone provided."""
+        from contextlib import contextmanager
+        from app.routers.agents import _get_or_create_contact
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None  # not found
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            contact_id, is_new = _get_or_create_contact(email="new@example.com")
+        assert contact_id is None
+        assert is_new is False
+
+    def test_creates_new_contact_with_phone(self):
+        """Creates new contact when not found but phone is available."""
+        from contextlib import contextmanager
+        from app.routers.agents import _get_or_create_contact
+
+        cur = MagicMock()
+        # First fetchone: lookup returns None (not found)
+        # Second fetchone: INSERT RETURNING id
+        cur.fetchone.side_effect = [None, {"id": 123}]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            contact_id, is_new = _get_or_create_contact(phone="+14041234567", name="Jane Doe")
+        assert contact_id == 123
+        assert is_new is True
+
+    def test_auto_create_exception_returns_none(self):
+        """Returns (None, False) when INSERT raises exception."""
+        from contextlib import contextmanager
+        from app.routers.agents import _get_or_create_contact
+
+        # First call: lookup (returns None), second call: INSERT raises
+        call_count = [0]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                cur = MagicMock()
+                cur.fetchone.return_value = None  # not found
+                yield cur
+            else:
+                raise Exception("DB write error")
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor):
+            contact_id, is_new = _get_or_create_contact(phone="+14041234567")
+        assert contact_id is None
+        assert is_new is False
+
+
+# ---------------------------------------------------------------------------
+# run-all-contacts with contacts and actions
+# ---------------------------------------------------------------------------
+
+class TestRunAllContactsWithContacts:
+    """Test /cycle/run-all-contacts when contacts are found."""
+
+    def test_run_all_contacts_with_move_campaign(self, client):
+        """run-all-contacts with contacts where action is move_campaign increments campaigns_pushed."""
+        from contextlib import contextmanager
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [{"id": 10}]  # one contact
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        cycle_result = {
+            "chosen_action": "move_campaign",
+            "action_payload": {"to_campaign": "ReEngage", "email": "user@example.com"},
+            "contact": {"first_name": "Bob", "last_name": "Smith", "email": "user@example.com",
+                        "phone": "", "lifecycle_segment": "lapsed", "total_orders": 2,
+                        "last_order_at": None},
+            "reasoning_snippet": "Lapsed customer",
+        }
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor), \
+             patch("app.routers.agents._run_full_cycle", return_value=cycle_result), \
+             patch("app.routers.agents.push_lead_to_instantly", return_value=True):
+            resp = client.post("/api/agents/cycle/run-all-contacts")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 1
+        assert data["campaigns_pushed"] == 1
+
+    def test_run_all_lapsed_with_contacts(self, client):
+        """run-all-lapsed with contacts runs cycle for each."""
+        from contextlib import contextmanager
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [{"id": 20}]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        cycle_result = {"chosen_action": "none", "contact": {}}
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor), \
+             patch("app.routers.agents._run_full_cycle", return_value=cycle_result):
+            resp = client.post("/api/agents/cycle/run-all-lapsed")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 1
+
+    def test_run_daily_sweep_with_contacts(self, client):
+        """run-daily-sweep with contacts runs cycle for each."""
+        from contextlib import contextmanager
+
+        cur = MagicMock()
+        cur.fetchall.return_value = [{"id": 30}]
+
+        @contextmanager
+        def _mock_cursor(commit=False):
+            yield cur
+
+        cycle_result = {"chosen_action": "none", "contact": {}}
+
+        with patch("app.routers.agents.get_cursor", side_effect=_mock_cursor), \
+             patch("app.routers.agents._run_full_cycle", return_value=cycle_result):
+            resp = client.post("/api/agents/cycle/run-daily-sweep")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 1
