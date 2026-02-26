@@ -177,13 +177,21 @@ Design ONE experiment that:
 2. Has a clear, falsifiable hypothesis (IF we do X, THEN Y will happen BECAUSE Z)
 3. Specifies the exact message/offer/sequence the cohort will receive
 4. Specifies who to target (which lifecycle_segment, order history characteristics, etc.)
-5. Explains what a "win" looks like (order within 7 days)
+5. Explains what a "win" looks like (an order placed within the measurement window)
 
 Experiment types to rotate through:
 - timing: unusual send time (Sunday morning, Friday 4pm, lunch hour burst)
 - offer: tangible incentive (free dessert, free roti add-on, $5 credit)
 - message_angle: psychological hook (scarcity, social proof, nostalgia, identity)
 - channel_sequence: multi-step (SMS → email 48h later, call → SMS follow-up)
+You may also invent new experiment types if they don't fit the above.
+
+Measurement window guidance — set measure_days based on the experiment:
+- offer / pricing experiments: 28 days (customers need multiple ordering cycles to respond)
+- channel_sequence: 21 days (multi-step sequences play out over weeks)
+- timing / message_angle: 14 days minimum
+- If your experiment targets deeply lapsed contacts (last order > 60 days ago): add at least 7 extra days
+- If you have strong reasons to deviate from these defaults, choose a different value and explain in rationale
 
 Avoid repeating experiments that already ran (check past_experiments).
 Be creative — think like a growth hacker, not a marketer."""
@@ -195,7 +203,10 @@ DESIGN_TOOL = {
         "type": "object",
         "properties": {
             "name": {"type": "string", "description": "Short experiment name (e.g., 'Sunday Morning Nostalgia SMS')"},
-            "experiment_type": {"type": "string", "enum": ["timing", "offer", "message_angle", "channel_sequence"]},
+            "experiment_type": {
+                "type": "string",
+                "description": "Type of experiment. Use one of: timing, offer, message_angle, channel_sequence — or invent a new type if needed."
+            },
             "hypothesis": {"type": "string", "description": "Full IF-THEN-BECAUSE hypothesis"},
             "target_segment": {
                 "type": "string",
@@ -213,16 +224,20 @@ DESIGN_TOOL = {
             },
             "win_condition": {
                 "type": "string",
-                "description": "What counts as a win (e.g., 'places any order within 7 days')"
+                "description": "What counts as a win (e.g., 'places any order within the measurement window')"
+            },
+            "measure_days": {
+                "type": "integer",
+                "description": "How many days to wait before measuring results (14–28). Refer to the measurement window guidance in the system prompt."
             },
             "rationale": {
                 "type": "string",
-                "description": "Why this hasn't been tried or why it's worth testing now given the current menu/season"
+                "description": "Why this hasn't been tried or why it's worth testing now. Include reasoning for the chosen measure_days if non-standard."
             },
         },
         "required": [
             "name", "experiment_type", "hypothesis", "target_segment",
-            "cohort_size", "channel", "message_template", "win_condition", "rationale"
+            "cohort_size", "channel", "message_template", "win_condition", "measure_days", "rationale"
         ],
     },
 }
@@ -423,9 +438,14 @@ def run_growth_cycle():
                 "design": design,
             }
 
-        # Persist experiment — measurement window depends on experiment type
+        # Measurement window: use Claude's chosen measure_days if provided and sane,
+        # otherwise fall back to the per-type defaults in MEASURE_DAYS.
         exp_type = design.get("experiment_type", "timing")
-        days = MEASURE_DAYS.get(exp_type, 14)
+        agent_days = design.get("measure_days")
+        if isinstance(agent_days, int) and 7 <= agent_days <= 56:
+            days = agent_days
+        else:
+            days = MEASURE_DAYS.get(exp_type, 14)
         measure_at = datetime.now(tz=timezone.utc) + timedelta(days=days)
         cur.execute(
             """INSERT INTO experiments
@@ -472,6 +492,7 @@ def run_growth_cycle():
         "channel": design.get("channel"),
         "cohort_size": dispatched,
         "measure_at": measure_at.isoformat(),
+        "measure_days": days,
         "hypothesis": design.get("hypothesis"),
     }
 
