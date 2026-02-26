@@ -6,10 +6,8 @@
         "rule": {
           "interval": [
             {
-              "field": "days",
-              "daysInterval": 1,
-              "triggerAtHour": 6,
-              "triggerAtMinute": 0
+              "field": "minutes",
+              "minutesInterval": 15
             }
           ]
         }
@@ -256,7 +254,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Restore our payload after Remove from Old Campaign replaced $json with the Instantly response.\n// $('Prepare Instantly Payload').item.json always has the current item's data.\nconst orig = $('Prepare Instantly Payload').item.json;\nreturn { json: orig };",
+        "jsCode": "// Restore original payload after Remove from Old Campaign replaced $json.\n// For NO branch (direct from Has Old Campaign?): $input.item.json has queue_id.\n// For YES branch (via Remove HTTP): try paired item, fall back gracefully.\nconst item = $input.item.json;\nif (item.queue_id !== undefined && item.queue_id !== null) {\n  // NO branch \u2014 item already has original payload data\n  return { json: item };\n}\n// YES branch \u2014 Instantly DELETE response; try to recover via pairedItem\ntry {\n  return { json: $('Prepare Instantly Payload').item.json };\n} catch(e) {\n  // Pairing unavailable; pass through what we have (will be logged as error)\n  return { json: { queue_id: null, email: item.email || null, _restore_failed: true } };\n}",
         "mode": "runOnceForEachItem"
       },
       "id": "restore-payload",
@@ -330,7 +328,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Avoid pairedItem error caused by the Has Old Campaign? IF branch breaking the chain.\n// $input.item.json is the Instantly API response which contains 'email'.\n// Match back to the original Restore Payload item by email to recover queue_id.\nconst email = ($input.item.json.email || '').toLowerCase();\nconst allRestored = $('Restore Payload').all();\nconst match = allRestored.find(r => (r.json.email || '').toLowerCase() === email);\nconst queueId = match ? match.json.queue_id : null;\nreturn { json: { queue_id: queueId } };",
+        "jsCode": "// Use $('Check Push Result').item.json.queue_id - direct upstream, no branch merging.\n// This avoids the pairedItem error from the Has Old Campaign? IF branch.\ntry {\n  return { json: { queue_id: $('Check Push Result').item.json.queue_id } };\n} catch(e) {\n  // Fallback: match via email from Restore Payload .all()\n  const email = ($input.item.json.email || '').toLowerCase();\n  const allRestored = $('Restore Payload').all();\n  const match = allRestored.find(r => (r.json.email || '').toLowerCase() === email);\n  return { json: { queue_id: match ? match.json.queue_id : null } };\n}",
         "mode": "runOnceForEachItem"
       },
       "id": "extract-executed-queue-id",
@@ -412,7 +410,7 @@
       ],
       "parameters": {
         "mode": "runOnceForEachItem",
-        "jsCode": "const item = $input.item.json;\nconst prepared = $('Prepare Instantly Payload').item.json;\n\n// n8n puts the HTTP error message in item.error.message when onError=continueRegularOutput\nconst hasError = !!(item.error || (item.statusCode && item.statusCode >= 400));\nconst statusCode = item.statusCode || (hasError ? null : 200);\nconst errorMessage = hasError\n  ? (item.error?.message || item.message || JSON.stringify(item))\n  : null;\n\nreturn {\n  json: {\n    queue_id:      prepared.queue_id,\n    email:         prepared.email,\n    to_campaign:   prepared.to_campaign,\n    success:       !hasError,\n    status_code:   statusCode,\n    error_message: errorMessage,\n    response_body: JSON.stringify(item).slice(0, 2000)\n  }\n};"
+        "jsCode": "const item = $input.item.json;\nlet queue_id, email, to_campaign;\ntry {\n  const prepared = $('Prepare Instantly Payload').item.json;\n  queue_id = prepared.queue_id;\n  email = prepared.email;\n  to_campaign = prepared.to_campaign;\n} catch(e) {\n  // Pairing failed (YES branch via Remove from Old Campaign)\n  // queue_id/email may be in the Instantly response if echoed, else null\n  queue_id = item.queue_id || null;\n  email = item.email || null;\n  to_campaign = null;\n}\nconst hasError = !!(item.error || (item.statusCode && item.statusCode >= 400));\nconst statusCode = item.statusCode || (hasError ? null : 200);\nconst errorMessage = hasError\n  ? (item.error?.message || item.message || JSON.stringify(item))\n  : null;\nreturn {\n  json: {\n    queue_id,\n    email,\n    to_campaign,\n    success: !hasError,\n    status_code: statusCode,\n    error_message: errorMessage,\n    response_body: JSON.stringify(item).slice(0, 2000)\n  }\n};"
       }
     },
     {
