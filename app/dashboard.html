@@ -320,6 +320,42 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
       </div>
     </div>
 
+    <!-- Import Prospects (Update CSV) -->
+    <div class="action-card">
+      <div class="action-card-header" onclick="toggleCard('prospect-update')">
+        <div>
+          <div class="action-card-title">👥 Import / Update Prospects</div>
+          <div class="action-card-desc">Bulk-update existing prospect data or add notes &amp; priority flags from CSV</div>
+        </div>
+        <span class="action-card-chevron" id="chevron-prospect-update">▼</span>
+      </div>
+      <div class="action-card-body" id="body-prospect-update">
+        <div class="form-group">
+          <label>CSV columns <span class="hint">(at least EmailId or Phone required per row)</span></label>
+          <div style="background:#f4f4f7;border:1.5px solid #e0e0ea;border-radius:7px;padding:12px;font-family:monospace;font-size:0.82rem;color:#555;line-height:1.8">
+            EmailId · Phone · FirstName · LastName · Address · PriorityOverride · SalesNotes
+          </div>
+        </div>
+        <div class="info-banner info" style="font-size:0.83rem;line-height:1.5">
+          <strong>PriorityOverride</strong> values: <code>none</code> · <code>high</code> · <code>do_not_contact</code><br>
+          Only non-blank columns overwrite existing data. Rows with unknown contacts are skipped.
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+          <a href="/api/prospects/update-template" download="prospect_update_template.csv"
+             style="font-size:0.84rem;font-weight:600;color:#4f46e5;text-decoration:none;border:1.5px solid #4f46e5;padding:7px 16px;border-radius:7px;background:white">
+            ⬇ Download Template CSV
+          </a>
+          <span style="font-size:0.78rem;color:#888">Template also saved to Google Drive automatically</span>
+        </div>
+        <div class="form-group">
+          <label>Upload filled CSV</label>
+          <input type="file" id="pu-file" accept=".csv" style="padding:8px;background:#fafafe">
+        </div>
+        <button class="btn" id="pu-btn" onclick="uploadProspectUpdateCSV()">Upload &amp; Update Prospects</button>
+        <div id="pu-result" style="margin-top:14px"></div>
+      </div>
+    </div>
+
     <!-- Delay Alert -->
     <div class="action-card">
       <div class="action-card-header" onclick="toggleCard('delay')">
@@ -612,6 +648,36 @@ async function executeOpportunity(oppId) {
 }
 
 // ─── Upload daily orders ──────────────────────────────────────────────────────
+async function uploadProspectUpdateCSV() {
+  const fi = document.getElementById('pu-file');
+  if (!fi.files.length) { setError('pu-result', 'Please select a CSV file.'); return; }
+  setLoading('pu-result', 'Uploading and updating prospects…');
+  setBtn('pu-btn', true, 'Processing…');
+  const fd = new FormData(); fd.append('file', fi.files[0]);
+  try {
+    const res = await fetch('/api/prospects/update-csv', { method: 'POST', body: fd });
+    const data = await res.json();
+    setBtn('pu-btn', false, 'Upload & Update Prospects');
+    if (!res.ok) { setError('pu-result', data.detail || JSON.stringify(data)); return; }
+    let html = `<div class="upload-summary">
+      <div class="stat-box"><div class="s-label">Rows processed</div><div class="s-val blue">${data.rows_processed}</div></div>
+      <div class="stat-box"><div class="s-label">Updated</div><div class="s-val green">${data.updated}</div></div>
+      <div class="stat-box"><div class="s-label">Skipped</div><div class="s-val red">${data.skipped}</div></div>
+    </div>`;
+    if (data.errors && data.errors.length) {
+      html += `<div style="margin-top:12px;background:#fff5f5;border:1.5px solid #f5c2c7;border-radius:8px;padding:14px">
+        <div style="font-size:0.78rem;font-weight:700;text-transform:uppercase;color:#842029;margin-bottom:8px">Row errors (first 20)</div>
+        <ul style="margin:0;padding-left:18px;font-size:0.82rem;color:#842029;line-height:1.7">
+          ${data.errors.map(e => `<li>${esc(e)}</li>`).join('')}
+        </ul></div>`;
+    }
+    document.getElementById('pu-result').innerHTML = `<div class="result-box">${html}</div>`;
+  } catch (e) {
+    setBtn('pu-btn', false, 'Upload & Update Prospects');
+    setError('pu-result', e.message);
+  }
+}
+
 async function uploadCSV() {
   const fi=document.getElementById('u-file');
   if(!fi.files.length){setError('u-result','Please select a CSV file.');return;}

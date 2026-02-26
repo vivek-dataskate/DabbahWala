@@ -57,6 +57,8 @@ Creates an isolated test contact used throughout all subsequent groups.
 | `cleanup_stale_contact` | Removes leftover test contacts from prior failed runs |
 | `create_test_contact` | Inserts contact with `source='test_harness'`, phone `+18444322224` |
 | `verify_test_contact` | Confirms contact is in DB with correct phone and source |
+| `prospect_update_template_download` | `GET /api/prospects/update-template` returns a CSV with all required header columns |
+| `prospect_update_csv_via_http` | `POST /api/prospects/update-csv` updates test contact's `sales_notes` via CSV upload |
 
 ---
 
