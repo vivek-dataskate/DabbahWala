@@ -287,6 +287,7 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
   <div class="tab active" onclick="switchTab('search')">🔍 Search</div>
   <div class="tab" onclick="switchTab('actions')">⚡ Actions</div>
   <div class="tab" onclick="switchTab('chat')">💬 Chat</div>
+  <div class="tab" onclick="switchTab('admin')">⚙️ Admin</div>
 </div>
 
 <!-- ══════════════════════════════════════════════ SEARCH ════════════════ -->
@@ -699,12 +700,87 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
   </div><!-- /chat-layout -->
 </div>
 
+<!-- ══════════════════════════════════════════════ ADMIN ═════════════════ -->
+<div id="panel-admin" class="panel">
+
+  <div style="max-width:900px;margin:0 auto;padding:24px 16px">
+    <h2 style="font-family:monospace;color:#1a1a2e;margin:0 0 8px">⚙️ n8n Workflow Schedules</h2>
+    <p style="color:#666;margin:0 0 20px;font-size:14px">Live schedules from n8n. Click <strong>Edit</strong> to update a workflow's trigger without touching JSON files.</p>
+
+    <div id="sched-status" style="margin-bottom:12px"></div>
+
+    <table id="sched-table" style="width:100%;border-collapse:collapse;font-family:monospace;font-size:13px;display:none">
+      <thead>
+        <tr style="background:#f0f0f0;text-align:left">
+          <th style="padding:10px 12px;border:1px solid #ddd">Workflow</th>
+          <th style="padding:10px 12px;border:1px solid #ddd">Status</th>
+          <th style="padding:10px 12px;border:1px solid #ddd">Schedule</th>
+          <th style="padding:10px 12px;border:1px solid #ddd;width:80px">Action</th>
+        </tr>
+      </thead>
+      <tbody id="sched-tbody"></tbody>
+    </table>
+
+    <!-- Edit form (shown inline below the row) -->
+    <div id="sched-edit-panel" style="display:none;border:1px solid #ccc;border-radius:6px;padding:20px;margin-top:16px;background:#fafafa">
+      <h3 id="sched-edit-title" style="margin:0 0 16px;font-family:monospace;font-size:14px;color:#1a1a2e"></h3>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#555">Field</label>
+          <select id="sched-field" onchange="schedFieldChanged()" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:4px;font-family:monospace;font-size:13px">
+            <option value="minutes">minutes</option>
+            <option value="hours">hours</option>
+            <option value="days">days</option>
+            <option value="weeks">weeks</option>
+          </select>
+        </div>
+        <div id="sched-interval-wrap">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#555">Every N</label>
+          <input id="sched-interval" type="number" min="1" value="1" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:4px;font-family:monospace;font-size:13px">
+        </div>
+        <div id="sched-hour-wrap">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#555">At hour (0–23)</label>
+          <input id="sched-hour" type="number" min="0" max="23" value="0" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:4px;font-family:monospace;font-size:13px">
+        </div>
+        <div id="sched-minute-wrap">
+          <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#555">At minute (0–59)</label>
+          <input id="sched-minute" type="number" min="0" max="59" value="0" style="width:100%;padding:7px;border:1px solid #ccc;border-radius:4px;font-family:monospace;font-size:13px">
+        </div>
+      </div>
+
+      <div id="sched-days-wrap" style="display:none;margin-bottom:16px">
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px;color:#555">Days of week</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <label style="font-size:13px"><input type="checkbox" name="sched-day" value="0"> Sun</label>
+          <label style="font-size:13px"><input type="checkbox" name="sched-day" value="1" checked> Mon</label>
+          <label style="font-size:13px"><input type="checkbox" name="sched-day" value="2"> Tue</label>
+          <label style="font-size:13px"><input type="checkbox" name="sched-day" value="3"> Wed</label>
+          <label style="font-size:13px"><input type="checkbox" name="sched-day" value="4"> Thu</label>
+          <label style="font-size:13px"><input type="checkbox" name="sched-day" value="5"> Fri</label>
+          <label style="font-size:13px"><input type="checkbox" name="sched-day" value="6"> Sat</label>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center">
+        <button id="sched-save-btn" onclick="schedSave()" style="padding:8px 20px;background:#1a1a2e;color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:monospace;font-size:13px">Save</button>
+        <button onclick="schedCancel()" style="padding:8px 16px;background:#eee;color:#333;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-family:monospace;font-size:13px">Cancel</button>
+        <span id="sched-save-status" style="font-size:13px;color:#28a745"></span>
+      </div>
+    </div>
+
+    <button onclick="loadSchedules()" style="margin-top:16px;padding:8px 18px;background:#eee;border:1px solid #ccc;border-radius:4px;cursor:pointer;font-family:monospace;font-size:13px">↻ Refresh</button>
+  </div>
+
+</div>
+
 <script>
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
-const TAB_NAMES = ['search','actions','chat'];
+const TAB_NAMES = ['search','actions','chat','admin'];
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', TAB_NAMES[i]===name));
   document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id==='panel-'+name));
+  if (name === 'admin' && !_schedLoaded) loadSchedules();
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -1045,6 +1121,109 @@ async function sendChat(){
     if(!res.ok){document.getElementById('cb-error').innerHTML=`<div class="result-box error"><pre>${esc(data.detail||JSON.stringify(data))}</pre></div>`;return;}
     _appendBubble('assistant',data.answer,data.sources);
   } catch(e){ container.removeChild(ph); setBtn('cb-btn',false,'Ask'); document.getElementById('cb-error').innerHTML=`<div class="result-box error"><pre>${esc('Network error: '+e.message)}</pre></div>`; }
+}
+
+// ─── Admin / Schedules tab ────────────────────────────────────────────────────
+let _schedLoaded = false;
+let _schedEditId = null;
+
+async function loadSchedules() {
+  _schedLoaded = true;
+  const status = document.getElementById('sched-status');
+  const table  = document.getElementById('sched-table');
+  status.innerHTML = '<div class="loading-msg"><span class="spinner"></span> Loading schedules from n8n…</div>';
+  table.style.display = 'none';
+  try {
+    const res  = await fetch('/api/admin/schedules');
+    const data = await res.json();
+    if (!res.ok) { status.innerHTML = `<div class="result-box error"><pre>${esc(data.detail||JSON.stringify(data))}</pre></div>`; return; }
+    status.innerHTML = '';
+    const tbody = document.getElementById('sched-tbody');
+    tbody.innerHTML = '';
+    data.forEach(wf => {
+      const tr = document.createElement('tr');
+      tr.id = 'sched-row-' + wf.id;
+      tr.innerHTML = `
+        <td style="padding:9px 12px;border:1px solid #ddd">${esc(wf.name)}</td>
+        <td style="padding:9px 12px;border:1px solid #ddd;text-align:center">${wf.active ? '<span style="color:#28a745">●</span> Active' : '<span style="color:#aaa">●</span> Inactive'}</td>
+        <td style="padding:9px 12px;border:1px solid #ddd" id="sched-label-${esc(wf.id)}">${esc(wf.schedule)}</td>
+        <td style="padding:9px 12px;border:1px solid #ddd;text-align:center"><button onclick="schedEdit('${esc(wf.id)}','${esc(wf.name)}')" style="padding:4px 10px;background:#1a1a2e;color:#fff;border:none;border-radius:3px;cursor:pointer;font-size:12px">Edit</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+    table.style.display = '';
+  } catch (e) {
+    status.innerHTML = `<div class="result-box error"><pre>${esc('Network error: ' + e.message)}</pre></div>`;
+  }
+}
+
+function schedEdit(id, name) {
+  _schedEditId = id;
+  document.getElementById('sched-edit-title').textContent = '✏️ Edit: ' + name;
+  document.getElementById('sched-save-status').textContent = '';
+  document.getElementById('sched-field').value = 'hours';
+  document.getElementById('sched-interval').value = '1';
+  document.getElementById('sched-hour').value = '0';
+  document.getElementById('sched-minute').value = '0';
+  document.querySelectorAll('input[name="sched-day"]').forEach(cb => { cb.checked = cb.value === '1'; });
+  schedFieldChanged();
+  document.getElementById('sched-edit-panel').style.display = '';
+  document.getElementById('sched-edit-panel').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+
+function schedCancel() {
+  _schedEditId = null;
+  document.getElementById('sched-edit-panel').style.display = 'none';
+  document.getElementById('sched-save-status').textContent = '';
+}
+
+function schedFieldChanged() {
+  const f = document.getElementById('sched-field').value;
+  document.getElementById('sched-hour-wrap').style.display   = (f==='minutes') ? 'none' : '';
+  document.getElementById('sched-minute-wrap').style.display = (f==='minutes') ? 'none' : '';
+  document.getElementById('sched-days-wrap').style.display   = (f==='weeks')   ? ''     : 'none';
+  document.getElementById('sched-interval-wrap').style.display = (f==='days' && document.getElementById('sched-interval').value==1) ? 'none' : '';
+  if (f === 'days') document.getElementById('sched-interval-wrap').style.display = '';
+}
+
+async function schedSave() {
+  if (!_schedEditId) return;
+  const btn    = document.getElementById('sched-save-btn');
+  const status = document.getElementById('sched-save-status');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  status.textContent = '';
+
+  const field    = document.getElementById('sched-field').value;
+  const interval = parseInt(document.getElementById('sched-interval').value) || 1;
+  const hour     = parseInt(document.getElementById('sched-hour').value) || 0;
+  const minute   = parseInt(document.getElementById('sched-minute').value) || 0;
+  const days     = Array.from(document.querySelectorAll('input[name="sched-day"]:checked')).map(cb => parseInt(cb.value));
+
+  const payload = { field, interval, trigger_at_hour: hour, trigger_at_minute: minute };
+  if (field === 'weeks') payload.trigger_at_day = days.length ? days : [1];
+
+  try {
+    const res  = await fetch(`/api/admin/schedules/${_schedEditId}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      status.style.color = '#dc3545';
+      status.textContent = '✗ ' + (data.detail || JSON.stringify(data));
+    } else {
+      status.style.color = '#28a745';
+      status.textContent = '✓ Updated: ' + data.schedule;
+      const label = document.getElementById('sched-label-' + _schedEditId);
+      if (label) label.textContent = data.schedule;
+      setTimeout(schedCancel, 1500);
+    }
+  } catch (e) {
+    status.style.color = '#dc3545';
+    status.textContent = '✗ Network error: ' + e.message;
+  }
+  btn.disabled = false; btn.textContent = 'Save';
 }
 
 // ─── SMS char counters ────────────────────────────────────────────────────────
