@@ -1,0 +1,239 @@
+{
+  "name": "[Telnyx — Evidence] SMS Historical Import",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Configure the date range for the backfill.\n// Edit START_DATE and END_DATE before running.\n// Telnyx MDR retains records for ~90 days.\nconst START_DATE = '2025-11-01T00:00:00.000Z';  // earliest date to backfill\nconst END_DATE   = new Date().toISOString();      // up to now\n\nreturn [{ json: {\n  start_date: START_DATE,\n  end_date: END_DATE,\n  page: 1,\n  total_imported: 0\n}}];"
+      },
+      "id": "config",
+      "name": "Set Date Range",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.telnyx.com/v2/reports/messaging/message_detail_records",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "filter[direction]",
+              "value": "INBOUND"
+            },
+            {
+              "name": "filter[created_at][gte]",
+              "value": "={{ $json.start_date }}"
+            },
+            {
+              "name": "filter[created_at][lte]",
+              "value": "={{ $json.end_date }}"
+            },
+            {
+              "name": "page[number]",
+              "value": "={{ $json.page }}"
+            },
+            {
+              "name": "page[size]",
+              "value": "250"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "fetch-mdr-page",
+      "name": "Fetch MDR Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        660,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "XnntvX8AXpdR97oQ",
+          "name": "Telnyx API Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Split MDR records into individual items\nconst records = $input.item.json.data || [];\nconst meta    = $input.item.json.meta  || {};\n\nif (records.length === 0) {\n  return [{ json: { _no_more_records: true, meta } }];\n}\n\nreturn records.map(msg => ({\n  json: {\n    telnyx_msg_id: msg.id,\n    from_number: msg.from_number || (msg.from?.phone_number) || '',\n    to_number:   msg.to_number   || (msg.to?.[0]?.phone_number) || '',\n    body:        msg.message_body || msg.text || '',\n    direction:   'inbound',\n    status:      msg.status || 'received',\n    metadata: {\n      source: 'telnyx_historical_import',\n      sent_at: msg.sent_at || msg.created_at,\n      total_pages: meta.total_pages,\n      total_results: meta.total_results\n    }\n  }\n})).filter(m => m.json.from_number);"
+      },
+      "id": "split-records",
+      "name": "Split MDR Records",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "no-more",
+              "leftValue": "={{ $json._no_more_records }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "check-done",
+      "name": "No More Records?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/telnyx/message",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"contact_phone\": \"{{ $json.from_number }}\",\n  \"direction\": \"inbound\",\n  \"from_number\": \"{{ $json.from_number }}\",\n  \"to_number\": \"{{ $json.to_number }}\",\n  \"body\": \"{{ $json.body.replace(/\"/g, '\\\\\"') }}\",\n  \"telnyx_msg_id\": \"{{ $json.telnyx_msg_id }}\",\n  \"status\": \"{{ $json.status }}\",\n  \"is_delivery_staff\": false,\n  \"metadata\": {{ JSON.stringify($json.metadata) }}\n}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "store-message",
+      "name": "Store Message",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1320,
+        180
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {},
+      "id": "done",
+      "name": "Import Complete",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1320,
+        420
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Date Range",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Date Range": {
+      "main": [
+        [
+          {
+            "node": "Fetch MDR Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch MDR Page": {
+      "main": [
+        [
+          {
+            "node": "Split MDR Records",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split MDR Records": {
+      "main": [
+        [
+          {
+            "node": "No More Records?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No More Records?": {
+      "main": [
+        [
+          {
+            "node": "Import Complete",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Store Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "Telnyx",
+      "id": "tag-telnyx"
+    },
+    {
+      "name": "Evidence",
+      "id": "tag-evidence"
+    }
+  ],
+  "pinData": {}
+}

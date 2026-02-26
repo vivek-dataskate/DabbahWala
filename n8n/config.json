@@ -117,7 +117,21 @@
         "Evidence"
       ],
       "schedule": "Every 30 minutes",
-      "file": "telnyx_inbound_collector.json"
+      "file": "telnyx_inbound_collector.json",
+      "note": "Polls Telnyx MDR endpoint (GET /v2/reports/messaging/message_detail_records) for inbound SMS and call recordings every 30 min. Also receive real-time inbound SMS via POST /api/webhooks/telnyx (configure in Telnyx messaging profile). MDR retains ~90 days of records."
+    },
+    "telnyx_sms_historical_import": {
+      "id": "YANIKsHk767NDEXL",
+      "name": "[Telnyx — Evidence] SMS Historical Import",
+      "tags": [
+        "DabbahWala",
+        "Telnyx",
+        "Evidence"
+      ],
+      "schedule": "Manual trigger only",
+      "active": false,
+      "file": "telnyx_sms_historical_import.json",
+      "note": "One-shot backfill of inbound SMS from Telnyx MDR API. Edit START_DATE in 'Set Date Range' node before running. Telnyx MDR retains ~90 days of records."
     },
     "sms_dispatch": {
       "id": "w2bVQQ4hy33OdY1R",

@@ -1,9 +1,12 @@
 """
-Inbound webhooks — currently handles Instantly email events.
+Inbound webhooks — handles Instantly email events, Telnyx inbound SMS, and Shipday delivery events.
 
 Configure in Instantly:
   Settings → Integrations → Webhooks → Add webhook URL:
   https://<your-domain>/api/webhooks/instantly
+
+Configure in Telnyx (Messaging → Messaging Profiles → <profile> → Webhooks):
+  Inbound message webhook URL: https://dabbahwala-latest.onrender.com/api/webhooks/telnyx
 
 Campaign registry (instantly_campaigns table) is kept in sync by n8n calling:
   POST /api/webhooks/sync-campaigns   (schedule: every 6 h or as desired in n8n)
@@ -358,6 +361,97 @@ async def instantly_webhook(request: Request):
         "contact_id": contact_id,
         "is_new": is_new,
     }
+
+
+# ── Telnyx inbound SMS webhook ───────────────────────────────────────────────
+
+@router.post("/telnyx")
+async def telnyx_webhook(request: Request):
+    """
+    Receive Telnyx inbound SMS webhooks (event_type: message.received).
+
+    Configure in Telnyx:
+      Messaging → Messaging Profiles → <profile> → Webhooks
+      Inbound message webhook URL: https://dabbahwala-latest.onrender.com/api/webhooks/telnyx
+
+    Telnyx sends a POST for every inbound SMS. We store it as a telnyx_message
+    and fire the agent cycle for the contact so the AI can reason immediately.
+    """
+    import json as _json
+    try:
+        payload = await request.json()
+    except Exception:
+        logger.warning("Telnyx webhook: non-JSON body")
+        return {"status": "ignored", "reason": "non-JSON body"}
+
+    data = payload.get("data") or {}
+    event_type = data.get("event_type") or ""
+
+    if event_type != "message.received":
+        logger.debug("Telnyx webhook: ignoring event_type=%s", event_type)
+        return {"status": "ignored", "event_type": event_type}
+
+    msg = data.get("payload") or {}
+    from_number = (msg.get("from") or {}).get("phone_number") or ""
+    to_list     = msg.get("to") or []
+    to_number   = to_list[0].get("phone_number") if to_list else ""
+    body        = msg.get("text") or ""
+    telnyx_id   = msg.get("id") or ""
+    status      = (to_list[0].get("status") if to_list else None) or "received"
+
+    if not from_number:
+        logger.warning("Telnyx webhook: no from_number in payload")
+        return {"status": "ignored", "reason": "no from_number"}
+
+    logger.info("Telnyx inbound SMS: from=%s to=%s id=%s", from_number, to_number, telnyx_id)
+
+    # Resolve contact by phone — skip gracefully if unknown number
+    normalized = "".join(c for c in from_number if c.isdigit() or c == "+")
+    with get_cursor(commit=False) as cur:
+        cur.execute(
+            "SELECT id, email FROM contacts WHERE phone = %s OR phone = %s LIMIT 1",
+            (from_number, normalized),
+        )
+        row = cur.fetchone()
+
+    if not row:
+        logger.info("Telnyx webhook: no contact for phone=%s — message stored as-is", from_number)
+        # Still store the message; store_telnyx_message will raise if contact missing
+        return {"status": "ignored", "reason": "contact_not_found", "from": from_number}
+
+    contact_id    = row["id"]
+    contact_email = row["email"]
+
+    try:
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "SELECT store_telnyx_message(%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb)",
+                (
+                    contact_email,
+                    "inbound",
+                    from_number,
+                    to_number,
+                    body,
+                    telnyx_id,
+                    status,
+                    False,
+                    _json.dumps({"source": "telnyx_webhook", "event_id": data.get("id")}),
+                ),
+            )
+            msg_row = cur.fetchone()
+            msg_id  = msg_row["store_telnyx_message"]
+    except Exception as e:
+        logger.error("Telnyx webhook: store_telnyx_message failed: %s", e, exc_info=True)
+        return {"status": "error", "detail": str(e)[:300]}
+
+    # Fire agent cycle immediately — customer just replied, context is live
+    threading.Thread(
+        target=_fire_agent_cycle,
+        args=(contact_id, "sms_inbound_webhook"),
+        daemon=True,
+    ).start()
+
+    return {"status": "ok", "msg_id": msg_id, "contact_id": contact_id}
 
 
 # ── Shipday webhook ───────────────────────────────────────────────────────────
