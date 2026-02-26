@@ -301,11 +301,16 @@ Daily 9 AM:
 | `[System] Feature Tests` | Daily 5 AM | 11 parallel nodes — one per test group (G1–G14). Each shows green/red in n8n. |
 | `[System] Connectivity Check` | Manual | 6 parallel nodes — one per service (FastAPI, Telnyx, Airtable, Instantly, Shipday, Google). |
 
-**Python:** `app/routers/test_harness.py`, `app/services/test_harness_service.py`
+**Python:** `app/routers/test_harness.py`, `app/services/test_harness_service.py`, `app/routers/schedules.py`
 
 **DB:** `action_queue`, `test_runs`, `test_results`
 
 **Tests:** Groups 1 (Connectivity), 2 (Schema), 10 (Action Queue)
+
+**Admin Schedule Management** (`/api/admin/schedules`):
+- `GET /api/admin/schedules` — fetches all n8n workflows, parses each `scheduleTrigger` node into a human-readable string (e.g. "Daily at 05:00", "Every 30 min"), returns `[{id, name, active, schedule}]` sorted by name
+- `POST /api/admin/schedules/{workflow_id}` — accepts `ScheduleUpdate` payload (field, interval, trigger_at_hour, trigger_at_minute, trigger_at_day), rebuilds the n8n interval spec, PUTs updated workflow back to n8n
+- Dashboard: ⚙️ Admin tab in `dashboard.html` — live schedule table with Edit inline form; Save auto-closes after 1.5 s
 
 **Action Types in Queue:**
 | Action | Target |

@@ -168,7 +168,7 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 | `rules` | Lifecycle rule predicates + actions (SQL-driven) |
 | `campaign_routing` | **Single source of truth** for campaigns — lifecycle segment → Instantly campaign ID/name, email template file, performance stats (leads, opens, replies, etc.); `contacts.current_campaign` is always derived from this table via `lifecycle_segment` JOIN |
 | `campaign_queue` | Pending campaign moves |
-| `campaign_push_log` | Audit log of every Instantly lead-push attempt from n8n — `queue_id`, `email`, `to_campaign`, `success`, `status_code`, `error_message`, `response_body`, `created_at` (migration 060) |
+| ~~`campaign_push_log`~~ | Dropped in migration 065 |
 | `agent_playbook` | User-configured rules (synced from Airtable daily at 6 AM) |
 | `sms_templates` | SMS A/B testing variants |
 | `team_content` | Ground notes, ad copies, Google Docs content |
@@ -249,6 +249,7 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 | `competitor_agent.py` | `/api/competitor-agent` | `POST /run` (full cycle: parse emails + scrape sites + generate + inject); `GET /runs`, `/experiments` |
 | `chatbot.py` | `/api/chatbot` | `POST /ask`, `GET /suggest`, `GET /history`, `POST /reindex` — RAG Q&A over project docs |
 | `auth.py` | _(root)_ | `GET /login`, `GET /auth/google`, `GET /auth/callback`, `GET /auth/me`, `GET /auth/logout` — Google OAuth2 for @dabbahwala.com accounts |
+| `schedules.py` | `/api/admin` | `GET /schedules` (list all n8n workflow schedules as human-readable strings, sorted by name); `POST /schedules/{workflow_id}` (update a workflow's scheduleTrigger node and push to n8n) — both require active Google OAuth session |
 
 ### Admin Endpoints
 
@@ -581,7 +582,7 @@ On every merge to `main`:
 | Metric | Count |
 |--------|-------|
 | API endpoints | ~88+ |
-| Database migrations | 59 |
+| Database migrations | 65 |
 | Database tables | 22+ |
 | Stored functions | 15+ |
 | n8n workflows | 30 |
