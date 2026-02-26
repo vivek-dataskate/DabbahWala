@@ -6,7 +6,7 @@
     "feature_groups": {
       "Order Intake": "Shipday delivery data, order CSV upload, feedback sync",
       "SMS": "Telnyx inbound collection, outbound dispatch queue",
-      "Broadcast": "Mass SMS + email broadcast dispatch and form intake",
+      "Broadcast": "Mass SMS + email broadcast dispatch",
       "Email Campaigns": "Instantly campaign management, performance tracking, lead seeding",
       "Intelligence": "Contact Sweep (hourly rule-based loop), AI Stack (Claude observer\u2192advisor\u2192orchestrator), Stage Runner, Lapsed Re-engagement",
       "Field Agent": "Field sales outcome sync from Airtable, daily brief",
@@ -14,7 +14,7 @@
       "Menu": "Airtable Menu Catalog \u2192 Postgres sync",
       "Growth": "Competitor research, goal agent experiments, weekly growth agent",
       "Reports": "Daily activity and outcome email reports",
-      "Chatbot": "Google Docs sync, chatbot reindex, query form",
+      "Chatbot": "Google Docs sync, chatbot reindex",
       "System": "Action queue executor, daily tests"
     }
   },
@@ -82,14 +82,6 @@
       "file": "shipday_feedback_sync.json",
       "note": "Polls Shipday API for customer feedback, delivery instructions, proof-of-delivery."
     },
-    "shipday_historical_import": {
-      "id": "apAefjZE2Uy6F17n",
-      "name": "[Order Intake] Historical Import",
-      "schedule": "Manual trigger only",
-      "active": false,
-      "file": "shipday_historical_import.json",
-      "note": "One-shot backfill: imports up to 1 year of Shipday order history. Run once to seed DB."
-    },
     "daily_order_upload": {
       "id": "6ZYQwdkmS5Nni05u",
       "name": "[Order Intake] Daily CSV Upload",
@@ -111,14 +103,6 @@
       "schedule": "Every 10 minutes",
       "file": "sms_dispatch.json",
       "note": "Polls action_queue for send_sms actions and dispatches via Telnyx API."
-    },
-    "telnyx_sms_historical_import": {
-      "id": "YANIKsHk767NDEXL",
-      "name": "[SMS] Historical Import",
-      "schedule": "Manual trigger only",
-      "active": false,
-      "file": "telnyx_sms_historical_import.json",
-      "note": "One-shot backfill of inbound SMS from Telnyx MDR API."
     },
     "_group_broadcast": "\u2500\u2500 [Broadcast] \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
     "broadcast_dispatch": {
@@ -144,14 +128,6 @@
       "active": true,
       "file": "instantly_campaign_sync.json",
       "note": "Fetches Instantly campaigns tagged 'dabbahwala' and POSTs to POST /api/webhooks/sync-campaigns."
-    },
-    "instantly_bulk_seed": {
-      "id": "1s7npKViuy1eyowW",
-      "name": "[Email Campaigns] Bulk Seed",
-      "schedule": "Manual trigger only",
-      "active": false,
-      "file": "instantly_bulk_seed.json",
-      "note": "One-shot manual workflow: seeds ALL active contacts into their Instantly campaigns."
     },
     "instantly_setup": {
       "id": "NbnkM3nTFKSgtcfb",
@@ -289,23 +265,14 @@
       "file": "action_queue_executor.json",
       "note": "Central action hub. Routes pending action_queue rows to: Airtable, Instantly, Google Drive, SMTP, Telnyx."
     },
-    "system_connectivity_check": {
-      "id": "ipSHdFUZMj2D0r0t",
-      "name": "[System] Connectivity Check",
-      "schedule": "Manual trigger",
-      "active": false,
-      "file": "system_connectivity_check.json",
-      "note": "6 independent nodes \u2014 one per service. Each shows green/red in n8n execution view."
-    },
     "system_feature_tests": {
       "id": "zlKQKfJ18QGIwogq",
       "name": "[System] Feature Tests",
       "schedule": "Daily at 5:00 AM ET",
       "active": true,
       "file": "system_feature_tests.json",
-      "note": "11 parallel nodes \u2014 one per test group (G1, G2, G3, G5, G7-G9, G11-G14). Each shows green/red independently."
-    },
-    "_inactive": "\u2500\u2500 Inactive / Manual-only \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+      "note": "Sequential chain: G1\u2192G2\u2192G3\u2192G5\u2192G7\u2192G8\u2192G9\u2192G11\u2192G12\u2192G13\u2192G14 (all continueOnFail). After G14, Summarize + email to core@dabbahwala.com."
+    }
   },
   "google_docs": {
     "note": "Set up Google Drive + Google Docs OAuth2 credentials in n8n. Folder ID is hardcoded in workflow.",
@@ -315,5 +282,5 @@
       "ground_note": "Title contains: field note, ground, delivery note, driver (or default)"
     }
   },
-  "_workflow_count": "27 total: 25 active-scheduled + 2 manual/admin-only (Historical Imports) + 0 form-based"
+  "_workflow_count": "26 total: all active-scheduled, no manual-only"
 }

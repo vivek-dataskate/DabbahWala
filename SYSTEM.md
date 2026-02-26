@@ -400,7 +400,7 @@ The Contact Sweep scans every contact in the database each hour to find behaviou
 
 ## 8. n8n Workflow Layer
 
-**29 workflows on `digitalworker.dataskate.io` — all active except 3 manual-only imports**
+**26 workflows on `digitalworker.dataskate.io` — all active-scheduled**
 
 Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/`.
 
@@ -413,15 +413,12 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **[Field Agent]** | Outcome Sync | Every 4 hours | Pull Airtable field sales outcomes → update opportunities |
 | **[Order Intake]** | Order Collector | Every 30 min | Poll Shipday → `POST /api/shipday/ingest-orders` |
 | **[Order Intake]** | Feedback Sync | Hourly | Poll delivery feedback, instructions, proof-of-delivery |
-| **[Order Intake]** | Historical Import | Manual only | One-shot backfill of up to 1 year of order history |
 | **[Order Intake]** | Daily CSV Upload | Daily 1 PM EST | Upload daily CSV → `POST /api/daily-orders/process` |
 | **[SMS]** | Inbound Collector | Every 30 min | Poll Telnyx MDR for inbound SMS + call recordings → `POST /api/telnyx/message` → trigger agent cycle |
 | **[SMS]** | Dispatch Queue | Every 10 min | Poll action_queue for `send_sms` → Telnyx API → mark done |
-| **[SMS]** | Historical Import | Manual only | One-shot backfill of inbound SMS via Telnyx MDR API |
 | **[Broadcast]** | Dispatch | Every 1 hour | Dispatch queued broadcasts (SMS via Telnyx API, email via `/api/internal/send-email`); fixed email branch + messaging_profile_id |
 | **[Email Campaigns]** | Performance Tracker | Hourly | Fetch Instantly analytics → `POST /api/webhooks/campaign-stats` |
 | **[Email Campaigns]** | Campaign Setup | Daily midnight | Create missing Instantly campaigns (no-op if all exist) |
-| **[Email Campaigns]** | Bulk Seed | Manual only | One-shot: seed all active contacts into their Instantly campaign |
 | **[Chatbot]** | Docs Sync | Every 30 min | List Drive folder → read Google Docs via `/api/internal/docs/{id}` → `POST /api/team-content/sync` |
 | **[Chatbot]** | Docs Reindex | Weekly Mon 2 AM | Refresh chatbot document index |
 | **[Field Agent]** | Daily Brief | Daily 7:30 AM | `POST /api/field-agent/daily-brief` → write top-10 contacts to Airtable Field Sales Tasks → email summary to core@dabbahwala.com |
@@ -435,8 +432,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **[Growth]** | Goal Agent | Daily 9:00 AM | `POST /api/goal-agent/run` — 4-phase proactive loop: HYPOTHESIZE → EXPERIMENT → MEASURE → HARVEST |
 | **[Growth]** | Competitor Research | Every Mon 6:30 AM | `POST /api/competitor-agent/run` — parse .eml + scrape competitor sites + generate hypotheses → inject into `goal_experiments` |
 | **[System]** | Action Queue | Every 30 min | Route action_queue rows to Telnyx / Instantly / Airtable / Drive / `/api/internal/send-email` |
-| **[System]** | Feature Tests | Daily 5 AM | Run per-group E2E tests via `GET /api/test/run/{group_id}` — each node independently green/red |
-| **[System]** | Connectivity Check | Manual only | Verify all 6 external services reachable; each node independently pass/fail |
+| **[System]** | Feature Tests | Daily 5 AM | Sequential chain G1→G14, each node green/red independently; Summarize + email report to core@dabbahwala.com |
 
 ### n8n API Notes
 

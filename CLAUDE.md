@@ -89,7 +89,7 @@ If the env var is empty, read it from that file and use it directly in API calls
   - Categories: exclusion, priority, inference, decision, messaging, general
 
 ### n8n Workflow Status (2026-02-26)
-- **29 total workflows**: 26 active-scheduled + 3 manual-only + 0 deactivated (5 deleted total)
+- **26 total workflows**: all active-scheduled (9 deleted total — all manual-only forms and one-shot imports removed)
 - All workflows use **centralized credentials**: single "DW Admin Secret" HTTP Header Auth → `GET /api/credentials` bootstrap
 - All workflows renamed to **12-feature taxonomy** format: `[Feature Group] Descriptive Name`
 - Full ID mapping in `n8n/config.json`
@@ -132,7 +132,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 | [System] Feature Tests | `zlKQKfJ18QGIwogq` | Daily 5 AM |
 | [System] Connectivity Check | `ipSHdFUZMj2D0r0t` | Manual only |
 
-**Manual-only (inactive):** `[Order Intake] Historical Import` (`apAefjZE2Uy6F17n`), `[SMS] Historical Import` (`YANIKsHk767NDEXL`), `[Email Campaigns] Bulk Seed` (`1s7npKViuy1eyowW`)
+**All 26 workflows are active-scheduled. No manual-only or deactivated workflows remain.**
 
 - Credential IDs: only `DW Admin Secret` (HTTP Header Auth) remains; all others removed from n8n
 - All other integration keys fetched at runtime via `GET /api/credentials` (requires `ADMIN_SECRET` Render env var)
