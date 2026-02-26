@@ -560,6 +560,26 @@ def _g4_events(suite: TestSuite) -> None:
         return {"delivery_status_rows": cnt}
     _run(suite, "delivery_events_in_db", G, delivery_events_in_db)
 
+    def shipday_import_pipeline_status():
+        """Verify GET /api/shipday/import-pipeline-status returns 200 with pipeline_state."""
+        sc, body = _local("GET", "/api/shipday/import-pipeline-status")
+        assert sc == 200, f"/api/shipday/import-pipeline-status returned {sc}: {body}"
+        assert "pipeline_state" in (body or {}), f"Missing pipeline_state in response: {body}"
+        return {"pipeline_state": body.get("pipeline_state", {})}
+    _run(suite, "shipday_import_pipeline_status", G, shipday_import_pipeline_status)
+
+    def shipday_import_all_no_name_error():
+        """POST /api/shipday/import-all-and-run-agents must not raise NameError (_sync_state)."""
+        sc, body = _local("POST", "/api/shipday/import-all-and-run-agents",
+                          json_body={"days_back": 1, "max_pages": 1})
+        # Accept started (200), already_running (200), or blocked (200).
+        # A 500 with NameError is the bug we fixed — that must not happen.
+        assert sc == 200, f"/api/shipday/import-all-and-run-agents returned {sc}: {body}"
+        assert (body or {}).get("status") in ("started", "already_running", "blocked"), \
+            f"Unexpected status in response: {body}"
+        return {"status": body.get("status")}
+    _run(suite, "shipday_import_all_no_name_error", G, shipday_import_all_no_name_error)
+
 
 # ─── GROUP 5: Telnyx / SMS (Real Outbound) ───────────────────────────────────
 

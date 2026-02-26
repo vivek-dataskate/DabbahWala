@@ -72,6 +72,8 @@ Tests all inbound event and webhook ingestion endpoints.
 | `shipday_webhook_delivered` | `POST /api/delivery/status` with `delivered` status |
 | `shipday_webhook_failed` | `POST /api/delivery/status` with `delivery_failed` status |
 | `delivery_events_in_db` | Confirms ≥2 `delivery_status` rows for test contact |
+| `shipday_import_pipeline_status` | `GET /api/shipday/import-pipeline-status` returns 200 with `pipeline_state` |
+| `shipday_import_all_no_name_error` | `POST /api/shipday/import-all-and-run-agents` returns 200 without NameError |
 
 ---
 
