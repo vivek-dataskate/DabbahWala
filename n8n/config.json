@@ -123,7 +123,7 @@
     "_group_broadcast": "\u2500\u2500 [Broadcast] \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
     "broadcast_dispatch": {
       "name": "[Broadcast] Dispatch",
-      "schedule": "Every 5 minutes",
+      "schedule": "Every hour",
       "file": "broadcast_dispatch.json",
       "note": "Polls broadcast_recipients table and dispatches SMS (Telnyx) + email (SMTP).",
       "id": "oDEse7EvWHj6UVM4"
