@@ -344,3 +344,148 @@ class TestGetBroadcast:
         assert data["id"] == 101
         assert data["title"] == "Eid Special"
         assert "progress" in data
+
+    def test_get_job_not_found(self, client):
+        """GET /{job_id} returns 404 when job does not exist."""
+        cur = MagicMock()
+        cur.fetchone.return_value = None
+
+        with patch(
+            "app.routers.broadcasts.get_cursor",
+            side_effect=lambda commit=False: _cursor_ctx(cur),
+        ):
+            resp = client.get("/api/broadcasts/9999")
+
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# TestCreateBroadcastValidation
+# ---------------------------------------------------------------------------
+
+class TestCreateBroadcastValidation:
+    """Additional validation tests for POST /."""
+
+    def test_invalid_broadcast_type_returns_400(self, client):
+        """Unknown broadcast_type should return 400."""
+        resp = client.post("/api/broadcasts/", json={
+            "title": "Bad Blast",
+            "broadcast_type": "fax_blast",
+            "channels": ["sms"],
+            "target_type": "all_customers",
+        })
+        assert resp.status_code == 400
+
+    def test_invalid_target_type_returns_400(self, client):
+        """Unknown target_type should return 400."""
+        resp = client.post("/api/broadcasts/", json={
+            "title": "Bad Target",
+            "broadcast_type": "promotional",
+            "channels": ["sms"],
+            "target_type": "unknown_target",
+        })
+        assert resp.status_code == 400
+
+    def test_invalid_channel_returns_400(self, client):
+        """Unknown channel name should return 400."""
+        resp = client.post("/api/broadcasts/", json={
+            "title": "Bad Channel",
+            "broadcast_type": "promotional",
+            "channels": ["fax"],
+            "target_type": "all_customers",
+        })
+        assert resp.status_code == 400
+
+    def test_delay_alert_with_all_customers_target_returns_400(self, client):
+        """delay_alert broadcast_type must use target_type='active_orders'."""
+        resp = client.post("/api/broadcasts/", json={
+            "title": "Storm",
+            "broadcast_type": "delay_alert",
+            "channels": ["sms"],
+            "target_type": "all_customers",
+            "target_date": "2026-02-26",
+        })
+        assert resp.status_code == 400
+
+    def test_active_orders_without_target_date_returns_400(self, client):
+        """active_orders target_type requires target_date."""
+        resp = client.post("/api/broadcasts/", json={
+            "title": "No Date",
+            "broadcast_type": "delay_alert",
+            "channels": ["sms"],
+            "target_type": "active_orders",
+        })
+        assert resp.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# TestPendingRecipients
+# ---------------------------------------------------------------------------
+
+class TestPendingRecipients:
+    """Tests for GET /pending-recipients."""
+
+    def test_returns_empty_list_when_no_pending(self, client):
+        """Should return [] when no pending recipients exist."""
+        cur = MagicMock()
+        cur.fetchall.return_value = []
+
+        with patch(
+            "app.routers.broadcasts.get_cursor",
+            side_effect=lambda commit=True: _cursor_ctx(cur),
+        ):
+            resp = client.get("/api/broadcasts/pending-recipients")
+
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_returns_recipients_batch(self, client):
+        """Should claim and return recipients with full contact context."""
+        claimed_rows = [
+            {"recipient_id": 1, "job_id": 5, "contact_id": 100, "channel": "sms"},
+        ]
+        detail_rows = [
+            {
+                "recipient_id": 1, "job_id": 5, "channel": "sms",
+                "contact_id": 100, "first_name": "Alice", "email": "a@b.com",
+                "phone": "+12345678901", "sms_message": "Hi there!",
+                "email_subject": None, "email_body": None,
+                "broadcast_type": "promotional", "job_title": "Promo Q1",
+            }
+        ]
+        cur = MagicMock()
+        cur.fetchall.side_effect = [claimed_rows, detail_rows]
+
+        with patch(
+            "app.routers.broadcasts.get_cursor",
+            side_effect=lambda commit=True: _cursor_ctx(cur),
+        ):
+            resp = client.get("/api/broadcasts/pending-recipients")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) == 1
+        assert data[0]["channel"] == "sms"
+
+
+# ---------------------------------------------------------------------------
+# TestQueueBroadcastAlreadyQueued
+# ---------------------------------------------------------------------------
+
+class TestQueueBroadcastAlreadyQueued:
+    """POST /{job_id}/queue when job is already queued should return 400."""
+
+    def test_queue_already_queued_job_returns_400(self, client):
+        """Re-queuing a job that is not in draft status should return 400."""
+        job_row = {
+            "id": 200, "status": "queued", "target_type": "all_customers",
+            "channels": ["sms"], "target_date": None,
+        }
+        cur = _make_cursor(fetchone_val=job_row)
+        with patch(
+            "app.routers.broadcasts.get_cursor",
+            side_effect=lambda commit=True: _cursor_ctx(cur),
+        ):
+            resp = client.post("/api/broadcasts/200/queue")
+        assert resp.status_code == 400

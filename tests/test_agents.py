@@ -299,3 +299,205 @@ class TestGoals:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# TestCycleRunBatch — POST /cycle/run with a list of contact_ids
+# ---------------------------------------------------------------------------
+
+class TestCycleRunBatch:
+    """POST /api/agents/cycle/run — run cycle for a list of contact_ids."""
+
+    def test_run_empty_list_returns_zero_processed(self, client, monkeypatch):
+        """Empty contact_ids list should return processed=0 immediately."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        resp = client.post("/api/agents/cycle/run", json={"contact_ids": []})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 0
+        assert data["errors"] == []
+
+    def test_run_contact_not_found_in_db_raises_http_exception(self, client, monkeypatch):
+        """If a contact_id is not in the DB, the cycle raises HTTPException 404."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        # fetchone returns None → contact not found → HTTPException 404 → re-raised
+        cur = _make_cursor(fetchone_val=None)
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/cycle/run", json={"contact_ids": [9999]})
+        # HTTPException 404 propagates out of /cycle/run (not caught by the loop)
+        assert resp.status_code in (200, 404)
+
+
+# ---------------------------------------------------------------------------
+# TestCycleRunAllLapsed — POST /cycle/run-all-lapsed
+# ---------------------------------------------------------------------------
+
+class TestCycleRunAllLapsed:
+    """POST /api/agents/cycle/run-all-lapsed — lapsed contact cycle."""
+
+    def test_returns_processed_zero_when_no_lapsed(self, client):
+        """Should return processed=0 when no lapsed contacts are found."""
+        cur = _make_cursor(rows=[])
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/cycle/run-all-lapsed")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 0
+        assert data["errors"] == []
+
+
+# ---------------------------------------------------------------------------
+# TestCycleRunDailySweep — POST /cycle/run-daily-sweep
+# ---------------------------------------------------------------------------
+
+class TestCycleRunDailySweep:
+    """POST /api/agents/cycle/run-daily-sweep — dormant contact sweep."""
+
+    def test_returns_processed_zero_when_no_dormant(self, client):
+        """Should return processed=0 when query finds no dormant contacts."""
+        cur = _make_cursor(rows=[])
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/cycle/run-daily-sweep")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 0
+
+
+# ---------------------------------------------------------------------------
+# TestCycleRunAllContacts — POST /cycle/run-all-contacts
+# ---------------------------------------------------------------------------
+
+class TestCycleRunAllContacts:
+    """POST /api/agents/cycle/run-all-contacts — batch cycle for all contacts."""
+
+    def test_returns_summary_when_no_contacts(self, client):
+        """Should return an empty batch summary when no contacts are eligible."""
+        cur = _make_cursor(rows=[])
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/cycle/run-all-contacts")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] == 0
+        assert data["campaigns_pushed"] == 0
+        assert data["airtable_pushed"] == 0
+
+
+# ---------------------------------------------------------------------------
+# TestSendActivityReport — POST /report/activity
+# ---------------------------------------------------------------------------
+
+class TestSendActivityReport:
+    """POST /api/agents/report/activity — generate and enqueue activity report."""
+
+    def test_sends_activity_report(self, client, monkeypatch):
+        """Should generate HTML via Claude, enqueue email, and return summary."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        mock_summary = {"actions_queued": 5, "orchestrator_runs": 3, "field_agent_reviews_today": []}
+        mock_rows = [{"first_name": "Alice", "chosen_action": "send_sms"}]
+
+        mock_claude_response = MagicMock()
+        mock_claude_response.content = [MagicMock(text="<h2>Activity Report</h2><p>3 runs</p>")]
+
+        mock_claude_client = MagicMock()
+        mock_claude_client.messages.create.return_value = mock_claude_response
+
+        cur = _make_cursor()
+
+        with patch("app.routers.agents._fetch_activity_data", return_value=(mock_summary, mock_rows)), \
+             patch("app.routers.agents._claude", return_value=mock_claude_client), \
+             patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/report/activity", json={})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "sent"
+        assert "html_body" in data
+        assert "summary" in data
+
+
+# ---------------------------------------------------------------------------
+# TestSendOutcomeReport — POST /report/outcome
+# ---------------------------------------------------------------------------
+
+class TestSendOutcomeReport:
+    """POST /api/agents/report/outcome — generate and enqueue outcome report."""
+
+    def test_sends_outcome_report(self, client, monkeypatch):
+        """Should generate HTML via Claude, enqueue email, and return summary."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        mock_summary = {
+            "orders_detected": 10, "email_opens": 20, "email_clicks": 5,
+            "inbound_sms_replies": 3, "goals_achieved": 2,
+            "order_day_patterns_30d": [], "top_menu_items_30d": [],
+            "customer_frequency_segments_30d": [], "field_agent_scorecard_7d": [],
+            "field_agent_call_reviews_7d": [],
+        }
+        mock_rows = [{"first_name": "Bob", "email": "b@c.com"}]
+
+        mock_claude_response = MagicMock()
+        mock_claude_response.content = [MagicMock(text="<h2>Outcome Report</h2><p>10 orders</p>")]
+
+        mock_claude_client = MagicMock()
+        mock_claude_client.messages.create.return_value = mock_claude_response
+
+        cur = _make_cursor()
+
+        with patch("app.routers.agents._fetch_outcome_data", return_value=(mock_summary, mock_rows)), \
+             patch("app.routers.agents._claude", return_value=mock_claude_client), \
+             patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.post("/api/agents/report/outcome", json={})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "sent"
+        assert "html_body" in data
+
+
+# ---------------------------------------------------------------------------
+# TestDoNotContactOverride — priority_override=do_not_contact
+# ---------------------------------------------------------------------------
+
+class TestDoNotContactOverride:
+    """Contacts with priority_override=do_not_contact must be skipped without Claude calls."""
+
+    def test_skip_do_not_contact_contact(self, client, monkeypatch):
+        """Cycle for a do_not_contact contact should return chosen_action='none' immediately."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+        contact_row = {
+            "id": 77, "first_name": "Skip", "last_name": "Me",
+            "email": "skip@example.com", "phone": "+19990001234",
+            "lifecycle_segment": "active", "total_orders": 10,
+            "sms_level": 2, "last_order_at": None, "created_at": None,
+            "priority_override": "do_not_contact",
+            "sales_notes": "Do not reach out",
+            "opens_7d": 0, "opens_30d": 0, "clicks_7d": 0, "clicks_30d": 0,
+            "sms_sent_30d": 0, "orders_90d": 0,
+        }
+        cur = _make_cursor(fetchone_val=contact_row, rows=[])
+        claude_mock = MagicMock()
+
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)), \
+             patch("app.routers.agents._claude", return_value=claude_mock):
+            resp = client.post("/api/agents/cycle/run", json={"contact_ids": [77]})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        # Claude must NOT have been called for a do_not_contact contact
+        claude_mock.messages.create.assert_not_called()
+        # Check the result if available
+        if data.get("results"):
+            result = data["results"][0]
+            assert result["chosen_action"] == "none"

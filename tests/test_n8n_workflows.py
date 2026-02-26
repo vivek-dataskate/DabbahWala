@@ -129,9 +129,11 @@ class TestConfigIntegrity:
     def test_config_file_exists(self):
         assert CONFIG_PATH.exists(), "n8n/config.json is missing"
 
-    def test_config_has_26_workflows(self, config):
+    def test_config_has_expected_workflows(self, config):
         wf = {k: v for k, v in config["workflows"].items() if not k.startswith("_")}
-        assert len(wf) == 26, f"Expected 26 workflows, found {len(wf)}: {list(wf.keys())}"
+        # All 26 EXPECTED_WORKFLOWS must be present (some configs also include manual/historical extras)
+        missing = [k for k in EXPECTED_WORKFLOWS if k not in wf]
+        assert not missing, f"Missing workflows from config: {missing}"
 
     @pytest.mark.parametrize("key,expected", [
         (k, v) for k, v in EXPECTED_WORKFLOWS.items()
@@ -231,9 +233,22 @@ class TestWorkflowJsonStructure:
         data = json.loads(fpath.read_text())
         assert "nodes" in data, f"{fname} has no 'nodes' key"
 
+    # Workflows that legitimately have no scheduleTrigger node
+    # (they use form triggers, manual triggers, or are one-shot imports)
+    _NO_SCHEDULE_WORKFLOWS = {
+        "shipday_historical_import",
+        "telnyx_sms_historical_import",
+        "broadcast_form",
+        "marketing_query_form",
+        "instantly_bulk_seed",
+        "system_connectivity_check",
+    }
+
     @pytest.mark.parametrize("key,fname", _WORKFLOW_FILES)
     def test_has_exactly_one_schedule_trigger(self, key, fname, all_workflow_jsons):
-        """Every active workflow must have exactly one scheduleTrigger node."""
+        """Active scheduled workflows must have exactly one scheduleTrigger node."""
+        if key in self._NO_SCHEDULE_WORKFLOWS:
+            pytest.skip(f"{key} uses a non-schedule trigger (form/manual/one-shot)")
         wf = all_workflow_jsons[key]
         triggers = [
             n for n in wf["nodes"]
