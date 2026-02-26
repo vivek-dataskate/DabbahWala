@@ -111,6 +111,7 @@ ORDERED_TEST_FILES=(
     "test_intelligence"
 
     # Layer 4 — Agent pipeline
+    "test_agent"
     "test_agents"
     "test_goal_agent"
     "test_growth_agent"

@@ -7,6 +7,7 @@ Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
 
 | File | Router Covered | Tests |
 |------|----------------|-------|
+| `test_agent.py` | `agent.py` | 12 — build_contact_profile (not-found/full), get_full_system_prompt (no-rules/with-rules), call_claude no-key, analyze-contacts (exception-handled/empty/with-candidate/empty-profile), analyze-single (404/success/invalid-json) |
 | `test_agents.py` | `agents.py` | 48 — cycle run, report data, action queue CRUD, goals, run-all-lapsed, run-all, activity/outcome reports, do-not-contact, _fetch_playbook_rules, _filter_playbook, _fetch_contact 404, _lookup_contact_id (phone/email/name), _get_or_create_contact (existing/no-phone/creates-new/exception), run-all/lapsed/daily-sweep/all-contacts no-contacts + with-contacts, _fetch_outcome_data, _rows_to_csv, cycle/run error handling |
 | `test_auth.py` | `auth.py` | 26 — session create/decode/tamper/expire, login, Google OAuth redirect, callback, auth/me, logout |
 | `test_broadcasts.py` | `broadcasts.py` | 19 — create, delay-alert, queue, list, pending-recipients, recipients sent/failed, get job, validation |
@@ -37,7 +38,7 @@ Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
 | `test_team_content.py` | `team_content.py` | 9 — sync new/existing/empty, submit, browse, search |
 | `test_webhooks.py` | `webhooks.py` | 25 — list campaigns, campaign-stats, Instantly event/unknown, Telnyx inbound, Shipday auth/delivered/failed/ping |
 
-**Total unit tests: 845 passing, 62 skipped (live API — activate with env vars), 65% code coverage**
+**Total unit tests: 857 passing, 62 skipped (live API — activate with env vars), 67% code coverage**
 
 To run with live API tests:
 ```bash
