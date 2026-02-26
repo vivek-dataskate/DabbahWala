@@ -218,3 +218,189 @@ class TestMenuSync:
         data = resp.json()
         assert data["upserted"] == 0
         assert data["total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Internal helper tests (direct)
+# ---------------------------------------------------------------------------
+
+class TestAirtableHelpers:
+    """Test _to_airtable_fields and _from_airtable_record helpers."""
+
+    def test_to_airtable_fields_minimal(self):
+        """_to_airtable_fields with only item_name returns just Item Name."""
+        from app.routers.menu import _to_airtable_fields
+        item = {"item_name": "Dal Makhani"}
+        fields = _to_airtable_fields(item)
+        assert fields["Item Name"] == "Dal Makhani"
+        assert len(fields) == 1
+
+    def test_to_airtable_fields_full(self):
+        """_to_airtable_fields with all fields maps everything correctly."""
+        from app.routers.menu import _to_airtable_fields
+        item = {
+            "item_name": "Butter Chicken",
+            "category": "Mains",
+            "is_veg": False,
+            "description": "Creamy tomato sauce",
+            "image_url": "https://img.example.com/butter.jpg",
+            "price": 12.99,
+            "added_date": "2026-01-15",
+        }
+        fields = _to_airtable_fields(item)
+        assert fields["Item Name"] == "Butter Chicken"
+        assert fields["Category"] == "Mains"
+        assert fields["Is Veg"] is False
+        assert fields["Price"] == 12.99
+
+    def test_from_airtable_record_full(self):
+        """_from_airtable_record correctly maps all Airtable fields."""
+        from app.routers.menu import _from_airtable_record
+        record = {
+            "id": "rec_abc123",
+            "fields": {
+                "Item Name": "Biryani",
+                "Category": "Rice",
+                "Is Veg": False,
+                "Description": "Fragrant basmati rice",
+                "Image URL": "https://img.example.com/biryani.jpg",
+                "Price": 15.99,
+                "Added Date": "2026-01-10",
+            }
+        }
+        item = _from_airtable_record(record)
+        assert item["airtable_record_id"] == "rec_abc123"
+        assert item["item_name"] == "Biryani"
+        assert item["category"] == "Rice"
+        assert item["price"] == 15.99
+
+    def test_from_airtable_record_missing_fields(self):
+        """_from_airtable_record handles missing optional fields gracefully."""
+        from app.routers.menu import _from_airtable_record
+        record = {"id": "rec_xyz", "fields": {"Item Name": "Naan"}}
+        item = _from_airtable_record(record)
+        assert item["item_name"] == "Naan"
+        assert item["category"] is None
+        assert item["price"] is None
+
+
+class TestMenuSyncWithExistingItems:
+    """Test POST /api/menu/sync with existing items (update path)."""
+
+    def test_sync_updates_existing_item(self, client):
+        """When item already exists, it's updated (not duplicated)."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        at_record = {
+            "id": "rec_001",
+            "fields": {
+                "Item Name": "Dal Makhani",
+                "Category": "Lentils",
+                "Price": 10.99,
+            }
+        }
+        existing_row = {
+            "id": 5, "item_name": "Dal Makhani", "price": 9.99,
+            "category": "Lentils", "is_veg": True,
+            "description": None, "image_url": None,
+        }
+
+        call_count = [0]
+
+        @contextmanager
+        def _cursor_ctx(commit=True):
+            call_count[0] += 1
+            cur = MagicMock()
+            if call_count[0] == 1:
+                cur.fetchone.return_value = existing_row  # existing item found
+            else:
+                cur.fetchall.return_value = []  # no active rows for deletion check
+            yield cur
+
+        with patch("app.routers.menu._airtable_list_all", return_value=[at_record]), \
+             patch("app.routers.menu.get_cursor", side_effect=_cursor_ctx):
+            resp = client.post("/api/menu/sync")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["upserted"] == 1
+
+    def test_sync_discards_deleted_items(self, client):
+        """Items in DB but not in Airtable are marked inactive."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        # Empty Airtable but DB has one active item
+        db_item = {
+            "id": 10, "item_name": "Old Item",
+            "airtable_record_id": "rec_OLD123",
+        }
+
+        call_count = [0]
+
+        @contextmanager
+        def _cursor_ctx(commit=True):
+            call_count[0] += 1
+            cur = MagicMock()
+            cur.fetchall.return_value = [db_item]
+            yield cur
+
+        with patch("app.routers.menu._airtable_list_all", return_value=[]), \
+             patch("app.routers.menu.get_cursor", side_effect=_cursor_ctx):
+            resp = client.post("/api/menu/sync")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["discarded"] == 1
+
+    def test_sync_airtable_error_returns_502(self, client):
+        """When Airtable raises an exception, returns 502."""
+        import httpx
+        with patch("app.routers.menu._airtable_list_all",
+                   side_effect=httpx.ConnectError("timeout")):
+            resp = client.post("/api/menu/sync")
+        assert resp.status_code == 502
+
+
+class TestMenuItemHistory:
+    def test_get_history_not_found_returns_404(self, client):
+        """GET /items/{id}/history for unknown item returns 404."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None  # item not found
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.menu.get_cursor", side_effect=_cursor_ctx):
+            resp = client.get("/api/menu/items/9999/history")
+
+        assert resp.status_code == 404
+
+    def test_get_history_empty(self, client):
+        """GET /items/{id}/history for known item with no history returns empty list."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+
+        # The endpoint uses ONE cursor context with two DB calls:
+        # 1. fetchone() to check item exists
+        # 2. fetchall() to get history
+        cur = MagicMock()
+        cur.fetchone.return_value = {"id": 5}  # item exists check passes
+        cur.fetchall.return_value = []          # no history rows
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.menu.get_cursor", side_effect=_cursor_ctx):
+            resp = client.get("/api/menu/items/5/history")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 0
+        assert data["history"] == []
