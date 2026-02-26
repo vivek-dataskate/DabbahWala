@@ -150,7 +150,7 @@ def _handle_customer_lookup(
         f"**Last Order**: {contact.get('last_order_at', 'Never')}",
         f"**Source**: {contact.get('primary_source', 'N/A')}",
         f"**Subscription**: {contact.get('subscription_type', 'None')}",
-        f"**Current Campaign**: {contact.get('current_campaign', 'None')}",
+        f"**Current Campaign**: {contact.get('current_campaign') or contact.get('lifecycle_segment', 'None')}",
         "",
         "### Engagement (7-day)",
         f"- Opens: {rollup.get('opens_7d', 0)}",
@@ -244,19 +244,20 @@ def _handle_pipeline_snapshot(question: str) -> tuple[str, dict]:
 
 def _handle_campaign_performance(question: str) -> tuple[str, dict]:
     with get_cursor(commit=False) as cur:
-        # Get per-campaign stats from recent events
+        # Get per-campaign stats from recent events (derive campaign from lifecycle_segment)
         cur.execute("""
             SELECT
-                c.current_campaign,
+                cr.default_campaign AS current_campaign,
                 count(DISTINCT c.id) as contacts,
                 count(DISTINCT CASE WHEN e.event_type = 'email_open' THEN e.id END) as opens,
                 count(DISTINCT CASE WHEN e.event_type = 'email_click' THEN e.id END) as clicks,
                 count(DISTINCT CASE WHEN e.event_type = 'order_placed' THEN e.id END) as orders
             FROM contacts c
+            JOIN campaign_routing cr ON cr.lifecycle_segment = c.lifecycle_segment
             LEFT JOIN events e ON e.contact_id = c.id
                 AND e.occurred_at > now() - interval '30 days'
-            WHERE c.current_campaign IS NOT NULL
-            GROUP BY c.current_campaign
+            WHERE c.lifecycle_segment NOT IN ('optout', 'cooling')
+            GROUP BY cr.default_campaign
             ORDER BY contacts DESC
         """)
         campaigns = [dict(r) for r in cur.fetchall()]
