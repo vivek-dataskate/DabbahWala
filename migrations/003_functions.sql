@@ -5,6 +5,32 @@
 SET search_path TO dabbahwala;
 
 -- ---------------------------------------------------------------------------
+-- Schema fixes (002_tables.sql was backfilled without completing its transaction)
+-- ---------------------------------------------------------------------------
+
+-- Add template_file column to campaign_routing if not present
+ALTER TABLE campaign_routing ADD COLUMN IF NOT EXISTS template_file TEXT;
+
+-- Deduplicate agent_playbook rule_name before adding unique constraint
+DELETE FROM agent_playbook a
+USING agent_playbook b
+WHERE a.id > b.id AND a.rule_name = b.rule_name;
+
+-- Add unique constraint on rule_name if not already present
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'uq_playbook_rule_name'
+          AND conrelid = 'agent_playbook'::regclass
+    ) THEN
+        ALTER TABLE agent_playbook ADD CONSTRAINT uq_playbook_rule_name UNIQUE (rule_name);
+    END IF;
+END $$;
+
+-- Drop get_pending_campaign_moves so it can be recreated below with updated return type
+DROP FUNCTION IF EXISTS get_pending_campaign_moves();
+
+-- ---------------------------------------------------------------------------
 -- Helper: split full name into first/last
 -- ---------------------------------------------------------------------------
 
