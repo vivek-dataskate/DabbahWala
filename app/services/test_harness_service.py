@@ -1268,6 +1268,18 @@ def _g11_orders(suite: TestSuite) -> None:
         )}
     _run(suite, "field_agent_pending_calls_has_script", G, field_agent_pending_calls_has_script)
 
+    def shipday_import_pipeline_endpoint():
+        """Verify import-all-and-run-agents and import-pipeline-status endpoints are reachable."""
+        # Status endpoint must always respond
+        sc, body = _req("GET", f"{LOCAL_BASE}/api/shipday/import-pipeline-status")
+        assert sc == 200, f"import-pipeline-status returned {sc}"
+        assert "pipeline_state" in body, "missing pipeline_state key"
+        state = body["pipeline_state"]
+        assert "running" in state, "pipeline_state missing 'running'"
+        assert "phase" in state, "pipeline_state missing 'phase'"
+        return {"pipeline_state_ok": True, "running": state.get("running"), "phase": state.get("phase")}
+    _run(suite, "shipday_import_pipeline_endpoint", G, shipday_import_pipeline_endpoint)
+
 
 # ─── GROUP 12: Reports ────────────────────────────────────────────────────────
 
