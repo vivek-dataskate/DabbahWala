@@ -14,37 +14,37 @@
               "fieldOptions": {
                 "values": [
                   {
-                    "option": "Pipeline Snapshot — Lifecycle stage distribution"
+                    "option": "Pipeline Snapshot \u2014 Lifecycle stage distribution"
                   },
                   {
-                    "option": "Who to Contact Today — Prioritized outreach list"
+                    "option": "Who to Contact Today \u2014 Prioritized outreach list"
                   },
                   {
-                    "option": "Daily Summary — Today's orders and activity"
+                    "option": "Daily Summary \u2014 Today's orders and activity"
                   },
                   {
-                    "option": "Order Analytics — Top dishes, revenue, trends"
+                    "option": "Order Analytics \u2014 Top dishes, revenue, trends"
                   },
                   {
-                    "option": "Campaign Performance — Email campaign stats"
+                    "option": "Campaign Performance \u2014 Email campaign stats"
                   },
                   {
-                    "option": "Customer Lookup — Look up a specific customer"
+                    "option": "Customer Lookup \u2014 Look up a specific customer"
                   },
                   {
-                    "option": "Communication History — SMS/call history for a customer"
+                    "option": "Communication History \u2014 SMS/call history for a customer"
                   },
                   {
-                    "option": "Ground Team Notes — Browse field team observations"
+                    "option": "Ground Team Notes \u2014 Browse field team observations"
                   },
                   {
-                    "option": "Ad Copies — Browse social media ad copies"
+                    "option": "Ad Copies \u2014 Browse social media ad copies"
                   },
                   {
-                    "option": "Submit New Input — Add your own observation or note"
+                    "option": "Submit New Input \u2014 Add your own observation or note"
                   },
                   {
-                    "option": "Ask Anything (AI) — Free-form question answered by AI"
+                    "option": "Ask Anything (AI) \u2014 Free-form question answered by AI"
                   }
                 ]
               }
@@ -74,16 +74,16 @@
               "fieldOptions": {
                 "values": [
                   {
-                    "option": "Ground Note — Field observation"
+                    "option": "Ground Note \u2014 Field observation"
                   },
                   {
-                    "option": "Ad Copy — Social media content"
+                    "option": "Ad Copy \u2014 Social media content"
                   },
                   {
-                    "option": "Observation — General insight"
+                    "option": "Observation \u2014 General insight"
                   },
                   {
-                    "option": "Question — Something to investigate"
+                    "option": "Question \u2014 Something to investigate"
                   }
                 ]
               }
@@ -107,7 +107,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Map the form dropdown selection to our API category\nconst categoryMap = {\n  'Pipeline Snapshot — Lifecycle stage distribution': 'pipeline_snapshot',\n  'Who to Contact Today — Prioritized outreach list': 'who_to_contact',\n  'Daily Summary — Today\\'s orders and activity': 'daily_summary',\n  'Order Analytics — Top dishes, revenue, trends': 'order_analytics',\n  'Campaign Performance — Email campaign stats': 'campaign_performance',\n  'Customer Lookup — Look up a specific customer': 'customer_lookup',\n  'Communication History — SMS/call history for a customer': 'communication_history',\n  'Ground Team Notes — Browse field team observations': 'ground_team_notes',\n  'Ad Copies — Browse social media ad copies': 'ad_copies',\n  'Submit New Input — Add your own observation or note': 'submit_input',\n  'Ask Anything (AI) — Free-form question answered by AI': 'free_form',\n};\n\nconst inputTypeMap = {\n  'Ground Note — Field observation': 'ground_note',\n  'Ad Copy — Social media content': 'ad_copy',\n  'Observation — General insight': 'observation',\n  'Question — Something to investigate': 'question',\n};\n\nconst formCategory = $input.first().json['Query Category'];\nconst category = categoryMap[formCategory] || 'free_form';\nconst inputType = inputTypeMap[$input.first().json['Input Type (for Submit New Input)'] || ''] || 'observation';\n\nreturn [{\n  json: {\n    category: category,\n    question: $input.first().json['Your Question or Details'] || '',\n    contact_email: $input.first().json['Customer Email (if looking up a specific customer)'] || null,\n    author: $input.first().json['Your Name (for Submit New Input)'] || null,\n    input_type: inputType,\n    original_category: formCategory,\n    is_submission: category === 'submit_input',\n  }\n}];"
+        "jsCode": "// Map the form dropdown selection to our API category\nconst categoryMap = {\n  'Pipeline Snapshot \u2014 Lifecycle stage distribution': 'pipeline_snapshot',\n  'Who to Contact Today \u2014 Prioritized outreach list': 'who_to_contact',\n  'Daily Summary \u2014 Today\\'s orders and activity': 'daily_summary',\n  'Order Analytics \u2014 Top dishes, revenue, trends': 'order_analytics',\n  'Campaign Performance \u2014 Email campaign stats': 'campaign_performance',\n  'Customer Lookup \u2014 Look up a specific customer': 'customer_lookup',\n  'Communication History \u2014 SMS/call history for a customer': 'communication_history',\n  'Ground Team Notes \u2014 Browse field team observations': 'ground_team_notes',\n  'Ad Copies \u2014 Browse social media ad copies': 'ad_copies',\n  'Submit New Input \u2014 Add your own observation or note': 'submit_input',\n  'Ask Anything (AI) \u2014 Free-form question answered by AI': 'free_form',\n};\n\nconst inputTypeMap = {\n  'Ground Note \u2014 Field observation': 'ground_note',\n  'Ad Copy \u2014 Social media content': 'ad_copy',\n  'Observation \u2014 General insight': 'observation',\n  'Question \u2014 Something to investigate': 'question',\n};\n\nconst formCategory = $input.first().json['Query Category'];\nconst category = categoryMap[formCategory] || 'free_form';\nconst inputType = inputTypeMap[$input.first().json['Input Type (for Submit New Input)'] || ''] || 'observation';\n\nreturn [{\n  json: {\n    category: category,\n    question: $input.first().json['Your Question or Details'] || '',\n    contact_email: $input.first().json['Customer Email (if looking up a specific customer)'] || null,\n    author: $input.first().json['Your Name (for Submit New Input)'] || null,\n    input_type: inputType,\n    original_category: formCategory,\n    is_submission: category === 'submit_input',\n  }\n}];"
       },
       "id": "map-category",
       "name": "Map Category",
@@ -140,7 +140,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Format the API response for display on the form completion page\nconst response = $input.first().json;\nconst answer = response.answer || 'No answer received.';\nconst category = response.category || 'unknown';\nconst question = response.question || '';\n\n// Build a formatted response\nlet formatted = '';\nformatted += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';\nformatted += 'DabbahWala Marketing Intelligence\\n';\nformatted += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n\\n';\nformatted += 'Category: ' + category.replace(/_/g, ' ').toUpperCase() + '\\n';\nif (question) {\n  formatted += 'Question: ' + question + '\\n';\n}\nformatted += '\\n' + answer + '\\n';\nformatted += '\\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\\n';\nformatted += 'Powered by DabbahWala Intelligence Engine\\n';\n\nreturn [{\n  json: {\n    formatted_answer: formatted,\n    raw_answer: answer,\n    category: category,\n    question: question,\n    timestamp: new Date().toISOString(),\n    is_submission: $('Map Category').first().json.is_submission || false,\n    author: $('Map Category').first().json.author || 'Anonymous',\n    input_type: $('Map Category').first().json.input_type || 'observation',\n  }\n}];"
+        "jsCode": "// Format the API response for display on the form completion page\nconst response = $input.first().json;\nconst answer = response.answer || 'No answer received.';\nconst category = response.category || 'unknown';\nconst question = response.question || '';\n\n// Build a formatted response\nlet formatted = '';\nformatted += '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n';\nformatted += 'DabbahWala Marketing Intelligence\\n';\nformatted += '\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n\\n';\nformatted += 'Category: ' + category.replace(/_/g, ' ').toUpperCase() + '\\n';\nif (question) {\n  formatted += 'Question: ' + question + '\\n';\n}\nformatted += '\\n' + answer + '\\n';\nformatted += '\\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\\n';\nformatted += 'Powered by DabbahWala Intelligence Engine\\n';\n\nreturn [{\n  json: {\n    formatted_answer: formatted,\n    raw_answer: answer,\n    category: category,\n    question: question,\n    timestamp: new Date().toISOString(),\n    is_submission: $('Map Category').first().json.is_submission || false,\n    author: $('Map Category').first().json.author || 'Anonymous',\n    input_type: $('Map Category').first().json.input_type || 'observation',\n  }\n}];"
       },
       "id": "format-response",
       "name": "Format Response",
@@ -178,83 +178,26 @@
       ]
     },
     {
-      "parameters": {
-        "operation": "create",
-        "base": {
-          "__rl": true,
-          "value": "appuy2VTIao6XVpIW",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Team Inputs",
-          "mode": "name"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "Author": "={{ $json.author }}",
-            "Type": "={{ $json.input_type }}",
-            "Content": "={{ $json.question }}",
-            "Date": "={{ $json.timestamp }}",
-            "Status": "New"
-          }
-        }
-      },
       "id": "create-team-input-airtable",
-      "name": "Store in Airtable Team Inputs",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "name": "Store in Airtable Team Inputs (removed)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
       "position": [
         1450,
         200
       ],
-      "credentials": {
-        "airtableTokenApi": {
-          "id": "hJpO8jdlT4Rmkjtx",
-          "name": "Airtable API Key"
-        }
-      },
-      "continueOnFail": true
+      "parameters": {}
     },
     {
-      "parameters": {
-        "operation": "create",
-        "base": {
-          "__rl": true,
-          "value": "appuy2VTIao6XVpIW",
-          "mode": "id"
-        },
-        "table": {
-          "__rl": true,
-          "value": "Marketing Queries",
-          "mode": "name"
-        },
-        "columns": {
-          "mappingMode": "defineBelow",
-          "value": {
-            "Category": "={{ $json.category }}",
-            "Question": "={{ $json.question }}",
-            "Answer": "={{ $json.raw_answer.substring(0, 10000) }}",
-            "Timestamp": "={{ $json.timestamp }}"
-          }
-        }
-      },
       "id": "log-to-airtable",
-      "name": "Log to Airtable",
-      "type": "n8n-nodes-base.airtable",
-      "typeVersion": 2.1,
+      "name": "Log to Airtable (removed)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
       "position": [
         1450,
         400
       ],
-      "credentials": {
-        "airtableTokenApi": {
-          "id": "hJpO8jdlT4Rmkjtx",
-          "name": "Airtable API Key"
-        }
-      },
-      "continueOnFail": true
+      "parameters": {}
     }
   ],
   "connections": {

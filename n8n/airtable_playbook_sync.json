@@ -36,8 +36,7 @@
       "parameters": {
         "method": "GET",
         "url": "=https://api.airtable.com/v0/appuy2VTIao6XVpIW/Agent%20Playbook",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
@@ -51,7 +50,16 @@
             }
           ]
         },
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
+            }
+          ]
+        }
       },
       "id": "fetch-airtable",
       "name": "Fetch Playbook Rules",
@@ -60,13 +68,7 @@
       "position": [
         350,
         350
-      ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "hJpO8jdlT4Rmkjtx",
-          "name": "Airtable API Key"
-        }
-      }
+      ]
     },
     {
       "parameters": {
@@ -147,13 +149,36 @@
     {
       "parameters": {},
       "id": "no-changes",
-      "name": "No Changes — Skip",
+      "name": "No Changes \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
         1350,
         450
       ]
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
@@ -161,7 +186,7 @@
       "main": [
         [
           {
-            "node": "Fetch Playbook Rules",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -172,7 +197,7 @@
       "main": [
         [
           {
-            "node": "Fetch Playbook Rules",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -223,7 +248,18 @@
         ],
         [
           {
-            "node": "No Changes — Skip",
+            "node": "No Changes \u2014 Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
+      "main": [
+        [
+          {
+            "node": "Fetch Playbook Rules",
             "type": "main",
             "index": 0
           }

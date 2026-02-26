@@ -160,6 +160,7 @@ class DriveUploadRequest(BaseModel):
     filename: str
     content: str          # file content as a string (CSV, HTML, etc.)
     mimetype: str = "text/csv"
+    folder_id: str | None = None  # optional override; uses GOOGLE_DRIVE_FOLDER_ID env var if omitted
 
 
 @router.post("/drive/upload")
@@ -176,13 +177,46 @@ def drive_upload(payload: DriveUploadRequest, x_admin_secret: str | None = Heade
     logger.info("POST /api/internal/drive/upload — filename=%s mimetype=%s", payload.filename, payload.mimetype)
 
     from app.services.drive import upload_csv
-    if payload.mimetype == "text/csv":
-        link = upload_csv(payload.content, payload.filename)
-    else:
-        # Generic upload using the same service account pattern
-        link = upload_csv(payload.content, payload.filename)
+    link = upload_csv(payload.content, payload.filename, folder_id=payload.folder_id)
 
     if not link:
         raise HTTPException(status_code=502, detail="Drive upload failed — check GOOGLE_SERVICE_ACCOUNT_JSON env var")
 
     return {"status": "uploaded", "filename": payload.filename, "link": link}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/internal/drive/files
+# ---------------------------------------------------------------------------
+@router.get("/drive/files")
+def list_drive_files(
+    folder_id: str | None = None,
+    x_admin_secret: str | None = Header(default=None),
+):
+    """
+    List files in a Google Drive folder.
+    Uses GOOGLE_DRIVE_FOLDER_ID env var if folder_id query param is not provided.
+    Returns {"files": [{id, name, mimeType, modifiedTime, lastModifyingUser}, ...]}.
+    Used by [Chatbot] Docs Sync workflow to replace googleDrive list node.
+    """
+    _check_admin_secret(x_admin_secret)
+    from app.services.drive import list_folder_files
+    return list_folder_files(folder_id)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/internal/docs/{doc_id}
+# ---------------------------------------------------------------------------
+@router.get("/docs/{doc_id}")
+def read_google_doc(
+    doc_id: str,
+    x_admin_secret: str | None = Header(default=None),
+):
+    """
+    Read a Google Doc and return its plain-text content.
+    Returns {"id": ..., "title": ..., "text": ...}.
+    Used by [Chatbot] Docs Sync workflow to replace googleDocs read node.
+    """
+    _check_admin_secret(x_admin_secret)
+    from app.services.drive import read_doc
+    return read_doc(doc_id)

@@ -33,35 +33,25 @@
       ]
     },
     {
-      "parameters": {
-        "operation": "list",
-        "folderId": {
-          "__rl": true,
-          "value": "1O0ES9uiDL6AWf9QMMYiyRUWGtymDjPF5",
-          "mode": "id"
-        },
-        "options": {
-          "fields": [
-            "id",
-            "name",
-            "mimeType",
-            "modifiedTime",
-            "lastModifyingUser"
-          ]
-        }
-      },
       "id": "list-drive-files",
       "name": "List Drive Files",
-      "type": "n8n-nodes-base.googleDrive",
-      "typeVersion": 3,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         350,
         350
       ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/internal/drive/files",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
       "credentials": {
-        "googleDriveOAuth2Api": {
-          "id": "LUu1v42BgnEflv6f",
-          "name": "Google Drive OAuth2"
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
         }
       }
     },
@@ -105,26 +95,25 @@
       ]
     },
     {
-      "parameters": {
-        "operation": "get",
-        "documentId": {
-          "__rl": true,
-          "value": "={{ $json.google_doc_id }}",
-          "mode": "id"
-        }
-      },
       "id": "read-doc",
       "name": "Read Google Doc",
-      "type": "n8n-nodes-base.googleDocs",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1100,
         250
       ],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://dabbahwala-latest.onrender.com/api/internal/docs/{{ $json.google_doc_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
       "credentials": {
-        "googleDocsOAuth2Api": {
-          "id": "FcNSuTgdmTt3M4D5",
-          "name": "Google Docs OAuth2"
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
         }
       }
     },
@@ -165,13 +154,49 @@
     {
       "parameters": {},
       "id": "no-docs",
-      "name": "No New Docs — Skip",
+      "name": "No New Docs \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
         1100,
         450
       ]
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
+    },
+    {
+      "id": "split-files",
+      "name": "Split Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        350
+      ],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nreturn (data.files || []).map(f => ({json: f}));"
+      }
     }
   ],
   "connections": {
@@ -179,7 +204,7 @@
       "main": [
         [
           {
-            "node": "List Drive Files",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -190,7 +215,7 @@
       "main": [
         [
           {
-            "node": "List Drive Files",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -201,7 +226,7 @@
       "main": [
         [
           {
-            "node": "Filter & Classify",
+            "node": "Split Files",
             "type": "main",
             "index": 0
           }
@@ -230,7 +255,7 @@
         ],
         [
           {
-            "node": "No New Docs — Skip",
+            "node": "No New Docs \u2014 Skip",
             "type": "main",
             "index": 0
           }
@@ -253,6 +278,28 @@
         [
           {
             "node": "Sync to API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
+      "main": [
+        [
+          {
+            "node": "List Drive Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Files": {
+      "main": [
+        [
+          {
+            "node": "Filter & Classify",
             "type": "main",
             "index": 0
           }

@@ -146,12 +146,20 @@
       "parameters": {
         "method": "POST",
         "url": "https://api.telnyx.com/v2/messages",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"from\": \"+18444322224\",\n  \"to\": \"{{ $json.phone }}\",\n  \"text\": \"{{ $json.sms_message }}\"\n}",
-        "options": {}
+        "options": {},
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.TELNYX_API_KEY }}"
+            }
+          ]
+        }
       },
       "id": "send-sms-telnyx",
       "name": "Send SMS via Telnyx",
@@ -161,12 +169,6 @@
         1320,
         100
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "XnntvX8AXpdR97oQ",
-          "name": "Telnyx API Key"
-        }
-      },
       "continueOnFail": true
     },
     {
@@ -239,7 +241,7 @@
     {
       "parameters": {},
       "id": "no-pending",
-      "name": "No Pending — Skip",
+      "name": "No Pending \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -257,6 +259,29 @@
         460
       ],
       "parameters": {}
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
@@ -264,7 +289,7 @@
       "main": [
         [
           {
-            "node": "Fetch Pending Recipients",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -293,7 +318,7 @@
         ],
         [
           {
-            "node": "No Pending — Skip",
+            "node": "No Pending \u2014 Skip",
             "type": "main",
             "index": 0
           }
@@ -365,6 +390,17 @@
       ]
     },
     "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
       "main": [
         [
           {

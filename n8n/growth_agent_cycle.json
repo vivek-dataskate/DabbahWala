@@ -96,7 +96,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Build the weekly growth report email body\nconst newExp = $('Design + Launch New Experiment').first().json;\nconst measured = $('Measure Previous Experiments').first().json;\nconst insights = $('Get Growth Insights').first().json;\nconst baseline = $('Refresh Baseline Conv Rate').first().json;\n\nconst winners = (measured.results || []).filter(r => r.is_winner);\nconst losers = (measured.results || []).filter(r => !r.is_winner);\n\nconst lines = [\n  '=== GROWTH AGENT WEEKLY REPORT ===',\n  '',\n  `Baseline 7-day conversion rate: ${((baseline.baseline_conv_rate || 0) * 100).toFixed(1)}%`,\n  '',\n  '--- EXPERIMENTS MEASURED THIS WEEK ---',\n  `Total measured: ${measured.measured || 0}`,\n  `Winners: ${winners.length}`,\n  `Losses: ${losers.length}`,\n  '',\n];\n\nfor (const r of (measured.results || [])) {\n  lines.push(\n    `• [${r.is_winner ? '✅ WIN' : '❌ LOSS'}] ${r.name}`,\n    `  Conv: ${((r.conversion_rate || 0) * 100).toFixed(1)}%  |  Orders: ${r.orders_won}/${r.cohort_size}`,\n    `  Learning: ${r.learnings || 'N/A'}`,\n    ''\n  );\n}\n\nlines.push('--- NEW EXPERIMENT LAUNCHED ---');\nif (newExp.status === 'launched') {\n  lines.push(\n    `Name: ${newExp.name}`,\n    `Type: ${newExp.experiment_type}  |  Channel: ${newExp.channel}  |  Cohort: ${newExp.cohort_size}`,\n    `Hypothesis: ${newExp.hypothesis}`,\n    `Measure by: ${newExp.measure_at}`,\n    ''\n  );\n} else {\n  lines.push(`Status: ${newExp.status || 'unknown'} — ${newExp.reason || ''}`, '');\n}\n\nlines.push('--- DISTILLED INSIGHTS ---');\nlines.push(insights.insights_summary || 'Not enough experiments completed yet.');\n\nreturn [{ json: { body: lines.join('\\n'), subject: `Growth Agent — Week of ${new Date().toISOString().slice(0, 10)}` } }];"
+        "jsCode": "// Build the weekly growth report email body\nconst newExp = $('Design + Launch New Experiment').first().json;\nconst measured = $('Measure Previous Experiments').first().json;\nconst insights = $('Get Growth Insights').first().json;\nconst baseline = $('Refresh Baseline Conv Rate').first().json;\n\nconst winners = (measured.results || []).filter(r => r.is_winner);\nconst losers = (measured.results || []).filter(r => !r.is_winner);\n\nconst lines = [\n  '=== GROWTH AGENT WEEKLY REPORT ===',\n  '',\n  `Baseline 7-day conversion rate: ${((baseline.baseline_conv_rate || 0) * 100).toFixed(1)}%`,\n  '',\n  '--- EXPERIMENTS MEASURED THIS WEEK ---',\n  `Total measured: ${measured.measured || 0}`,\n  `Winners: ${winners.length}`,\n  `Losses: ${losers.length}`,\n  '',\n];\n\nfor (const r of (measured.results || [])) {\n  lines.push(\n    `\u2022 [${r.is_winner ? '\u2705 WIN' : '\u274c LOSS'}] ${r.name}`,\n    `  Conv: ${((r.conversion_rate || 0) * 100).toFixed(1)}%  |  Orders: ${r.orders_won}/${r.cohort_size}`,\n    `  Learning: ${r.learnings || 'N/A'}`,\n    ''\n  );\n}\n\nlines.push('--- NEW EXPERIMENT LAUNCHED ---');\nif (newExp.status === 'launched') {\n  lines.push(\n    `Name: ${newExp.name}`,\n    `Type: ${newExp.experiment_type}  |  Channel: ${newExp.channel}  |  Cohort: ${newExp.cohort_size}`,\n    `Hypothesis: ${newExp.hypothesis}`,\n    `Measure by: ${newExp.measure_at}`,\n    ''\n  );\n} else {\n  lines.push(`Status: ${newExp.status || 'unknown'} \u2014 ${newExp.reason || ''}`, '');\n}\n\nlines.push('--- DISTILLED INSIGHTS ---');\nlines.push(insights.insights_summary || 'Not enough experiments completed yet.');\n\nreturn [{ json: { body: lines.join('\\n'), subject: `Growth Agent \u2014 Week of ${new Date().toISOString().slice(0, 10)}` } }];"
       },
       "id": "build-report",
       "name": "Build Weekly Report",
@@ -108,26 +108,51 @@
       ]
     },
     {
-      "parameters": {
-        "fromEmail": "core@dabbahwala.com",
-        "toEmail": "={{ $env.REPORT_EMAIL_TO || 'core@dabbahwala.com' }}",
-        "subject": "={{ $json.subject }}",
-        "emailType": "text",
-        "message": "={{ $json.body }}",
-        "options": {}
-      },
       "id": "email-report",
       "name": "Email Growth Report",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1420,
         300
       ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/internal/send-email",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"to\": $('Get Credentials').first().json.REPORT_EMAIL_TO, \"subject\": $('Build Weekly Report').first().json.subject, \"body_html\": \"<pre>\" + $('Build Weekly Report').first().json.body + \"</pre>\"}) }}",
+        "options": {}
+      },
       "credentials": {
-        "smtp": {
-          "id": "Sk6XzPNPnJTXHEbr",
-          "name": "Gmail-SMTP"
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
         }
       }
     }
@@ -137,7 +162,7 @@
       "main": [
         [
           {
-            "node": "Refresh Baseline Conv Rate",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -193,6 +218,28 @@
         [
           {
             "node": "Email Growth Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
+      "main": [
+        [
+          {
+            "node": "Refresh Baseline Conv Rate",
             "type": "main",
             "index": 0
           }

@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "content": "NAME: [System] Connectivity Check\nPURPOSE: Verifies that all 6 external services are reachable. Each node is independently green/red — failures are visible at a glance in n8n execution view.\nTRIGGER: Manual or daily scheduled run.\nCREDENTIALS USED: Telnyx API Key, Airtable API Key, Instantly Bearer (fetched from /api/credentials).\nSERVICES CHECKED: FastAPI health, Telnyx API, Airtable API, Instantly API, Shipday API, Google Drive.",
+        "content": "NAME: [System] Connectivity Check\nPURPOSE: Verifies that all 6 external services are reachable. Each node is independently green/red \u2014 failures are visible at a glance in n8n execution view.\nTRIGGER: Manual or daily scheduled run.\nCREDENTIALS USED: Telnyx API Key, Airtable API Key, Instantly Bearer (fetched from /api/credentials).\nSERVICES CHECKED: FastAPI health, Telnyx API, Airtable API, Instantly API, Shipday API, Google Drive.",
         "height": 200,
         "width": 600
       },
@@ -11,7 +11,10 @@
       "name": "Sticky Note",
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
-      "position": [100, 100]
+      "position": [
+        100,
+        100
+      ]
     },
     {
       "parameters": {},
@@ -19,7 +22,10 @@
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [200, 380]
+      "position": [
+        200,
+        380
+      ]
     },
     {
       "parameters": {
@@ -33,51 +39,64 @@
       "name": "FastAPI Health",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [500, 200]
+      "position": [
+        500,
+        200
+      ]
     },
     {
       "parameters": {
         "method": "GET",
         "url": "https://api.telnyx.com/v2/messaging_profiles?page[size]=1",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "options": {
           "timeout": 15000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.TELNYX_API_KEY }}"
+            }
+          ]
         }
       },
       "id": "check-telnyx",
       "name": "Telnyx API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [500, 340],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "XnntvX8AXpdR97oQ",
-          "name": "Telnyx API Key"
-        }
-      }
+      "position": [
+        500,
+        340
+      ]
     },
     {
       "parameters": {
         "method": "GET",
         "url": "=https://api.airtable.com/v0/appuy2VTIao6XVpIW/Agent%20Playbook?maxRecords=1",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "authentication": "none",
         "options": {
           "timeout": 15000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
+            }
+          ]
         }
       },
       "id": "check-airtable",
       "name": "Airtable API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [500, 480],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "hJpO8jdlT4Rmkjtx",
-          "name": "Airtable API Key"
-        }
-      }
+      "position": [
+        500,
+        480
+      ]
     },
     {
       "parameters": {
@@ -88,19 +107,23 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOmVwbU1CSFRWa3ZiaQ=="
+              "value": "=Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}"
             }
           ]
         },
         "options": {
           "timeout": 15000
-        }
+        },
+        "authentication": "none"
       },
       "id": "check-instantly",
       "name": "Instantly API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [500, 620]
+      "position": [
+        500,
+        620
+      ]
     },
     {
       "parameters": {
@@ -111,31 +134,89 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "=Basic {{ $env?.SHIPDAY_API_KEY || '' }}"
+              "value": "={{ $('Get Credentials').first().json.SHIPDAY_API_KEY }}"
             }
           ]
         },
         "options": {
           "timeout": 15000
         },
-        "onError": "continueRegularOutput"
+        "onError": "continueRegularOutput",
+        "authentication": "none"
       },
       "id": "check-shipday",
       "name": "Shipday API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [500, 760]
+      "position": [
+        500,
+        760
+      ]
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        350,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
     "Manual Trigger": {
       "main": [
         [
-          {"node": "FastAPI Health", "type": "main", "index": 0},
-          {"node": "Telnyx API", "type": "main", "index": 0},
-          {"node": "Airtable API", "type": "main", "index": 0},
-          {"node": "Instantly API", "type": "main", "index": 0},
-          {"node": "Shipday API", "type": "main", "index": 0}
+          {
+            "node": "Get Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
+      "main": [
+        [
+          {
+            "node": "FastAPI Health",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Telnyx API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Airtable API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Instantly API",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Shipday API",
+            "type": "main",
+            "index": 0
+          }
         ]
       ]
     }
