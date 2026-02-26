@@ -13,9 +13,12 @@ Endpoints:
 """
 import json
 import logging
-from datetime import datetime, timezone
+import os
+import time
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
@@ -25,6 +28,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+SHIPDAY_API_BASE = "https://api.shipday.com"
+
+
+def _get_shipday_key() -> str:
+    key = os.environ.get("SHIPDAY_API_KEY", "") or os.environ.get("SHIPDAY_KEY", "")
+    if not key:
+        raise HTTPException(status_code=500, detail="SHIPDAY_API_KEY not configured")
+    return key
 
 
 def _sync_one_order(payload: dict) -> dict:
@@ -233,6 +244,19 @@ def run_shipday_migration():
 # Full import pipeline: orders → notes/feedback → evidence → agents
 # ─────────────────────────────────────────────────────────────────
 
+# State dict for Phase 1: direct Shipday order pull
+_hist_sync_state: dict = {
+    "running":          False,
+    "started_at":       None,
+    "completed_at":     None,
+    "orders_synced":    0,
+    "orders_matched":   0,
+    "contacts_created": 0,
+    "orders_created":   0,
+    "orders_updated":   0,
+    "errors":           0,
+}
+
 _pipeline_state = {
     "running":           False,
     "phase":             None,   # "orders" | "feedback" | "rollups" | "agents" | "done"
@@ -248,6 +272,84 @@ _pipeline_state = {
     "agent_errors":      0,
     "error":             None,
 }
+
+
+def _run_historical_sync(api_key: str, from_date: str, max_pages: int) -> None:
+    """
+    Pull ALL Shipday orders starting from from_date and sync them into shipday_orders_raw.
+    Results are accumulated in _hist_sync_state for the pipeline to read.
+    """
+    global _hist_sync_state
+    _hist_sync_state.update({
+        "running":          True,
+        "started_at":       datetime.now(timezone.utc).isoformat(),
+        "completed_at":     None,
+        "orders_synced":    0,
+        "orders_matched":   0,
+        "contacts_created": 0,
+        "orders_created":   0,
+        "orders_updated":   0,
+        "errors":           0,
+    })
+
+    headers = {
+        "Authorization": f"Basic {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    try:
+        for page in range(max_pages):
+            params = {"pageNumber": page, "pageSize": 100, "startDate": from_date}
+            try:
+                with httpx.Client(timeout=30.0) as client:
+                    resp = client.get(f"{SHIPDAY_API_BASE}/orders", headers=headers, params=params)
+                    resp.raise_for_status()
+                    data = resp.json()
+            except Exception as e:
+                logger.error("Historical sync page %d fetch failed: %s", page, e)
+                _hist_sync_state["errors"] += 1
+                break
+
+            orders = data if isinstance(data, list) else data.get("orders", [])
+            if not orders:
+                break
+
+            for order in orders:
+                try:
+                    result = _sync_one_order(order)
+                    status = result.get("status", "")
+                    if status != "skipped":
+                        _hist_sync_state["orders_synced"] += 1
+                    if result.get("matched"):
+                        _hist_sync_state["orders_matched"] += 1
+                    if result.get("contact_created"):
+                        _hist_sync_state["contacts_created"] += 1
+                    if status == "created":
+                        _hist_sync_state["orders_created"] += 1
+                    elif status == "updated":
+                        _hist_sync_state["orders_updated"] += 1
+                except Exception as e:
+                    _hist_sync_state["errors"] += 1
+                    logger.warning(
+                        "Historical sync: failed order %s: %s",
+                        order.get("orderId", "?"), e,
+                    )
+
+            time.sleep(0.5)  # respectful API pacing
+
+    finally:
+        _hist_sync_state["running"]      = False
+        _hist_sync_state["completed_at"] = datetime.now(timezone.utc).isoformat()
+        logger.info(
+            "Historical order sync done: synced=%d matched=%d contacts=%d "
+            "created=%d updated=%d errors=%d",
+            _hist_sync_state["orders_synced"],
+            _hist_sync_state["orders_matched"],
+            _hist_sync_state["contacts_created"],
+            _hist_sync_state["orders_created"],
+            _hist_sync_state["orders_updated"],
+            _hist_sync_state["errors"],
+        )
 
 
 def _run_import_pipeline(api_key: str, days_back: int, max_pages: int) -> None:
@@ -283,11 +385,11 @@ def _run_import_pipeline(api_key: str, days_back: int, max_pages: int) -> None:
         logger.info("=== PIPELINE Phase 1: Syncing historic Shipday orders ===")
         from_date = (datetime.now(timezone.utc) - timedelta(days=days_back)).strftime("%Y-%m-%d")
         _run_historical_sync(api_key, from_date, max_pages)
-        _pipeline_state["orders_synced"]    = _sync_state.get("orders_synced", 0)
-        _pipeline_state["orders_matched"]   = _sync_state.get("orders_matched", 0)
-        _pipeline_state["contacts_created"] = _sync_state.get("contacts_created", 0)
-        _pipeline_state["orders_created"]   = _sync_state.get("orders_created", 0)
-        _pipeline_state["orders_updated"]   = _sync_state.get("orders_updated", 0)
+        _pipeline_state["orders_synced"]    = _hist_sync_state.get("orders_synced", 0)
+        _pipeline_state["orders_matched"]   = _hist_sync_state.get("orders_matched", 0)
+        _pipeline_state["contacts_created"] = _hist_sync_state.get("contacts_created", 0)
+        _pipeline_state["orders_created"]   = _hist_sync_state.get("orders_created", 0)
+        _pipeline_state["orders_updated"]   = _hist_sync_state.get("orders_updated", 0)
         logger.info(
             "Pipeline Phase 1 done: synced=%d matched=%d contacts_created=%d "
             "orders_created=%d orders_updated=%d errors=%d",
@@ -296,7 +398,7 @@ def _run_import_pipeline(api_key: str, days_back: int, max_pages: int) -> None:
             _pipeline_state["contacts_created"],
             _pipeline_state["orders_created"],
             _pipeline_state["orders_updated"],
-            _sync_state.get("errors", 0),
+            _hist_sync_state.get("errors", 0),
         )
 
         # ── Phase 2: Pull all notes / feedback into evidence ───────────────
@@ -398,11 +500,12 @@ async def import_all_and_run_agents(req: ImportAllRequest, background_tasks: Bac
     if _pipeline_state["running"]:
         return {"status": "already_running", "state": _pipeline_state}
 
-    if _sync_state["running"]:
+    from app.routers import shipday_sync as _ss
+    if _ss._sync_state["running"]:
         return {
             "status": "blocked",
-            "reason": "A historical sync is already running. Wait for it to finish.",
-            "sync_state": _sync_state,
+            "reason": "A feedback sync is already running. Wait for it to finish.",
+            "sync_state": _ss._sync_state,
         }
 
     api_key = _get_shipday_key()
