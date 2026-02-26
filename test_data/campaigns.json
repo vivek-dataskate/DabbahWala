@@ -1,0 +1,36 @@
+{
+  "_comment": "Instantly campaign fixtures used by Group 8 (Email Campaigns) in the E2E test harness. These names must match the actual Instantly campaign names. IDs are resolved at runtime via the Instantly API.",
+  "expected_campaigns": [
+    {
+      "name": "DW-NurtureSlow-ColdContacts",
+      "target_segment": "cold",
+      "campaign_type": "NURTURE_SLOW"
+    },
+    {
+      "name": "DW-PromoStandard-ActiveEngaged",
+      "target_segment": "active_customer",
+      "campaign_type": "PROMO_STANDARD"
+    },
+    {
+      "name": "DW-NewCustomerOnboarding",
+      "target_segment": "new_customer",
+      "campaign_type": "NEW_CUSTOMER_ONBOARDING"
+    },
+    {
+      "name": "DW-PromoAggressive-LapsedCustomers",
+      "target_segment": "lapsed_customer",
+      "campaign_type": "PROMO_AGGRESSIVE"
+    },
+    {
+      "name": "DW-Reactivation-LongDormant",
+      "target_segment": "reactivation_candidate",
+      "campaign_type": "REACTIVATION"
+    }
+  ],
+  "test_lead": {
+    "_comment": "Sample lead payload used when testing adding/removing a lead in Group 8.",
+    "email": "testlead-harness@dabbahwala.com",
+    "first_name": "TestHarness",
+    "last_name": "Lead"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "_comment": "Test order fixtures used by Group 4 (Event & Webhook Ingestion) in the E2E test harness.",
+  "test_order_ref": "TH-ORDER-TEST-001",
+  "webhooks": {
+    "delivered": {
+      "order_ref": "TH-ORDER-TEST-001",
+      "status": "delivered",
+      "updated_by": "test_harness",
+      "notes": "Test harness delivery simulation",
+      "metadata": {"source": "test_harness"}
+    },
+    "failed": {
+      "order_ref": "TH-ORDER-TEST-001-FAIL",
+      "status": "failed",
+      "updated_by": "test_harness",
+      "notes": "Test harness failure simulation",
+      "metadata": {"source": "test_harness"}
+    }
+  },
+  "shipday_import": {
+    "_comment": "Parameters used when testing POST /api/shipday/import-all-and-run-agents.",
+    "days_back": 1,
+    "max_pages": 1
+  }
+}

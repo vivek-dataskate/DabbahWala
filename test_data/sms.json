@@ -1,0 +1,24 @@
+{
+  "_comment": "Test SMS fixtures used by Groups 4 and 5 in the E2E test harness.",
+  "from_number": "+18444322224",
+  "to_number": "+18444322224",
+  "inbound_webhook": {
+    "_comment": "Payload for POST /api/telnyx/message simulating an inbound SMS.",
+    "direction": "inbound",
+    "body": "[TEST HARNESS] Automated inbound SMS check",
+    "status": "received",
+    "metadata": {"source": "test_harness"}
+  },
+  "outbound_send": {
+    "_comment": "Real Telnyx outbound SMS — sent from our number to Vivek's phone (Group 5).",
+    "from": "+18444322224",
+    "to": "+12144996143",
+    "text": "[DabbahWala TestHarness] Automated SMS connectivity check. Please ignore.",
+    "messaging_profile_id": "400191f9-0057-41f5-9f10-375fb3fe1a70"
+  },
+  "action_queue_entry": {
+    "_comment": "Action queue entry created during Group 6 agent pipeline test.",
+    "action_type": "send_sms",
+    "payload": {"phone": "+18444322224", "body": "[TEST] Agent pipeline SMS check"}
+  }
+}

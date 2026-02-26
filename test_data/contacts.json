@@ -1,0 +1,15 @@
+{
+  "_comment": "Test fixture contacts used by the E2E test harness. These values must match the constants in app/services/test_harness_service.py.",
+  "test_contact": {
+    "first_name": "DWTest",
+    "last_name": "Harness",
+    "phone": "+18444322224",
+    "email": "vivek@dabbahwala.com",
+    "source": "test_harness"
+  },
+  "sms_target": {
+    "_comment": "Real phone number used for outbound SMS delivery tests (Group 5).",
+    "phone": "+12144996143",
+    "label": "Vivek personal"
+  }
+}
