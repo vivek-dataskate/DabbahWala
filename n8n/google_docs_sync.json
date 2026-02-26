@@ -16,10 +16,7 @@
       "name": "Every 30 Minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        100,
-        300
-      ]
+      "position": [100, 300]
     },
     {
       "parameters": {},
@@ -27,20 +24,14 @@
       "name": "Manual Sync",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [
-        100,
-        450
-      ]
+      "position": [100, 450]
     },
     {
       "id": "list-drive-files",
       "name": "List Drive Files",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        350,
-        350
-      ],
+      "position": [320, 370],
       "parameters": {
         "method": "GET",
         "url": "https://dabbahwala-latest.onrender.com/api/internal/drive/files",
@@ -56,17 +47,24 @@
       }
     },
     {
+      "id": "split-files",
+      "name": "Split Files",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [540, 370],
       "parameters": {
-        "jsCode": "// Filter to only Google Docs and classify by title pattern\nconst files = $input.all().map(item => item.json);\n\nconst docs = files.filter(f =>\n  f.mimeType === 'application/vnd.google-apps.document'\n);\n\nif (docs.length === 0) {\n  return [{ json: { _empty: true } }];\n}\n\n// Classify content type based on title patterns\nconst classified = docs.map(doc => {\n  let content_type = 'ground_note'; // default\n  const titleLower = (doc.name || '').toLowerCase();\n\n  if (titleLower.includes('ad copy') || titleLower.includes('ad_copy') ||\n      titleLower.includes('social media') || titleLower.includes('facebook') ||\n      titleLower.includes('instagram') || titleLower.includes('social post')) {\n    content_type = 'ad_copy';\n  } else if (titleLower.includes('field note') || titleLower.includes('ground') ||\n             titleLower.includes('delivery note') || titleLower.includes('driver')) {\n    content_type = 'ground_note';\n  }\n\n  return {\n    json: {\n      google_doc_id: doc.id,\n      title: doc.name,\n      content_type: content_type,\n      google_last_modified: doc.modifiedTime,\n      author: doc.lastModifyingUser?.displayName || 'Unknown',\n      doc_url: `https://docs.google.com/document/d/${doc.id}/edit`\n    }\n  };\n});\n\nreturn classified;"
+        "jsCode": "const data = $input.first().json;\nreturn (data.files || []).map(f => ({json: f}));"
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Filter to only Google Docs and classify by title pattern\nconst doc = $input.item.json;\n\nif (doc.mimeType !== 'application/vnd.google-apps.document') {\n  return [];\n}\n\nlet content_type = 'ground_note';\nconst titleLower = (doc.name || '').toLowerCase();\n\nif (titleLower.includes('ad copy') || titleLower.includes('ad_copy') ||\n    titleLower.includes('social media') || titleLower.includes('facebook') ||\n    titleLower.includes('instagram') || titleLower.includes('social post')) {\n  content_type = 'ad_copy';\n} else if (titleLower.includes('field note') || titleLower.includes('ground') ||\n           titleLower.includes('delivery note') || titleLower.includes('driver')) {\n  content_type = 'ground_note';\n}\n\nreturn [{\n  json: {\n    google_doc_id: doc.id,\n    title: doc.name,\n    content_type,\n    google_last_modified: doc.modifiedTime,\n    author: doc.lastModifyingUser?.displayName || 'Unknown',\n    doc_url: `https://docs.google.com/document/d/${doc.id}/edit`\n  }\n}];"
       },
       "id": "classify-files",
       "name": "Filter & Classify",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        600,
-        350
-      ]
+      "position": [760, 370]
     },
     {
       "parameters": {
@@ -89,20 +87,14 @@
       "name": "Has Docs?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [
-        850,
-        350
-      ]
+      "position": [980, 370]
     },
     {
       "id": "read-doc",
       "name": "Read Google Doc",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1100,
-        250
-      ],
+      "position": [1200, 270],
       "parameters": {
         "method": "GET",
         "url": "=https://dabbahwala-latest.onrender.com/api/internal/docs/{{ $json.google_doc_id }}",
@@ -119,16 +111,13 @@
     },
     {
       "parameters": {
-        "jsCode": "// Combine doc metadata with extracted text content\nconst docContent = $input.first().json;\n\n// Google Docs node returns the document body as structured content\n// Extract plain text from paragraphs\nlet textContent = '';\ntry {\n  if (docContent.body && docContent.body.content) {\n    textContent = docContent.body.content.map(block => {\n      if (block.paragraph) {\n        return block.paragraph.elements?.map(el => el.textRun?.content || '').join('');\n      }\n      return '';\n    }).join('');\n  } else if (docContent.text) {\n    textContent = docContent.text;\n  } else {\n    // Fallback: stringify and truncate\n    textContent = JSON.stringify(docContent).substring(0, 5000);\n  }\n} catch (e) {\n  textContent = 'Error extracting content: ' + e.message;\n}\n\n// Get metadata from the classified item\n// Note: For batched items, n8n processes one at a time through the loop\nconst meta = $('Filter & Classify').item.json;\n\nreturn [{\n  json: {\n    google_doc_id: meta.google_doc_id,\n    content_type: meta.content_type,\n    title: meta.title,\n    body: textContent.trim(),\n    author: meta.author,\n    google_last_modified: meta.google_last_modified,\n    doc_url: meta.doc_url,\n    tags: []\n  }\n}];"
+        "jsCode": "const docContent = $input.first().json;\nlet textContent = '';\ntry {\n  if (docContent.text) {\n    textContent = docContent.text;\n  } else if (docContent.body && docContent.body.content) {\n    textContent = docContent.body.content.map(block => {\n      if (block.paragraph) {\n        return block.paragraph.elements?.map(el => el.textRun?.content || '').join('');\n      }\n      return '';\n    }).join('');\n  } else {\n    textContent = JSON.stringify(docContent).substring(0, 5000);\n  }\n} catch (e) {\n  textContent = 'Error extracting content: ' + e.message;\n}\n\nconst meta = $('Filter & Classify').item.json;\n\nreturn [{\n  json: {\n    google_doc_id: meta.google_doc_id,\n    content_type: meta.content_type,\n    title: meta.title,\n    body: textContent.trim(),\n    author: meta.author,\n    google_last_modified: meta.google_last_modified,\n    doc_url: meta.doc_url,\n    tags: []\n  }\n}];"
       },
       "id": "build-payload",
       "name": "Build Document Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1350,
-        250
-      ]
+      "position": [1420, 270]
     },
     {
       "parameters": {
@@ -145,10 +134,7 @@
       "name": "Sync to API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1600,
-        250
-      ],
+      "position": [1640, 270],
       "continueOnFail": true
     },
     {
@@ -157,154 +143,36 @@
       "name": "No New Docs \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
-      "position": [
-        1100,
-        450
-      ]
-    },
-    {
-      "id": "get-credentials",
-      "name": "Get Credentials",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        350,
-        300
-      ],
-      "parameters": {
-        "method": "GET",
-        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "dw-admin-secret",
-          "name": "DW Admin Secret"
-        }
-      }
-    },
-    {
-      "id": "split-files",
-      "name": "Split Files",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        600,
-        350
-      ],
-      "parameters": {
-        "jsCode": "const data = $input.first().json;\nreturn (data.files || []).map(f => ({json: f}));"
-      }
+      "position": [1200, 480]
     }
   ],
   "connections": {
     "Every 30 Minutes": {
-      "main": [
-        [
-          {
-            "node": "Get Credentials",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "List Drive Files", "type": "main", "index": 0}]]
     },
     "Manual Sync": {
-      "main": [
-        [
-          {
-            "node": "Get Credentials",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "List Drive Files", "type": "main", "index": 0}]]
     },
     "List Drive Files": {
-      "main": [
-        [
-          {
-            "node": "Split Files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Split Files", "type": "main", "index": 0}]]
+    },
+    "Split Files": {
+      "main": [[{"node": "Filter & Classify", "type": "main", "index": 0}]]
     },
     "Filter & Classify": {
-      "main": [
-        [
-          {
-            "node": "Has Docs?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Has Docs?", "type": "main", "index": 0}]]
     },
     "Has Docs?": {
       "main": [
-        [
-          {
-            "node": "Read Google Doc",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "No New Docs \u2014 Skip",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        [{"node": "Read Google Doc", "type": "main", "index": 0}],
+        [{"node": "No New Docs \u2014 Skip", "type": "main", "index": 0}]
       ]
     },
     "Read Google Doc": {
-      "main": [
-        [
-          {
-            "node": "Build Document Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Build Document Payload", "type": "main", "index": 0}]]
     },
     "Build Document Payload": {
-      "main": [
-        [
-          {
-            "node": "Sync to API",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Credentials": {
-      "main": [
-        [
-          {
-            "node": "List Drive Files",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Split Files": {
-      "main": [
-        [
-          {
-            "node": "Filter & Classify",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
+      "main": [[{"node": "Sync to API", "type": "main", "index": 0}]]
     }
   },
   "settings": {
@@ -312,19 +180,5 @@
   },
   "meta": {
     "instanceId": "digitalworker-dataskate"
-  },
-  "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Google",
-      "id": "tag-google"
-    },
-    {
-      "name": "Evidence",
-      "id": "tag-evidence"
-    }
-  ]
+  }
 }
