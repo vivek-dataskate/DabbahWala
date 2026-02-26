@@ -488,3 +488,151 @@ class TestIngestInstantlyEvents:
         assert data["total"] == 1
         assert data["errors"] == 1
         assert data["ingested"] == 0
+
+
+# ---------------------------------------------------------------------------
+# 4. Direct phase function tests (cover internal phase code)
+# ---------------------------------------------------------------------------
+
+class TestPhaseCollect:
+    """Test _phase_collect directly to cover its internal logic."""
+
+    def test_phase_collect_no_events(self):
+        """_phase_collect with empty events returns all zeros."""
+        from app.routers.intelligence import _phase_collect
+        cur = MagicMock()
+        cur.fetchall.return_value = []
+        cur.fetchone.return_value = {"cnt": 0}
+
+        result = _phase_collect(cur)
+        assert result["email_opens"] == 0
+        assert result["email_clicks"] == 0
+        assert result["new_events_total"] == 0
+        assert result["telnyx_messages"] == 0
+        assert result["telnyx_calls"] == 0
+
+    def test_phase_collect_with_event_types(self):
+        """_phase_collect tallies events by type correctly."""
+        from app.routers.intelligence import _phase_collect
+        event_rows = [
+            {"event_type": "email_open", "cnt": 5},
+            {"event_type": "email_click", "cnt": 2},
+            {"event_type": "sms_received", "cnt": 3},
+            {"event_type": "order_placed", "cnt": 4},
+        ]
+        cur = MagicMock()
+        cur.fetchall.return_value = event_rows
+        cur.fetchone.return_value = {"cnt": 1}  # for telnyx counts
+
+        result = _phase_collect(cur)
+        assert result["email_opens"] == 5
+        assert result["email_clicks"] == 2
+        assert result["orders_placed"] == 4
+        assert result["new_events_total"] == 14  # 5+2+3+4
+
+
+class TestPhaseProfile:
+    """Test _phase_profile directly."""
+
+    def test_phase_profile_returns_correct_keys(self):
+        """_phase_profile returns rollups_refreshed, active_contacts, lifecycle_distribution."""
+        from app.routers.intelligence import _phase_profile
+        cur = MagicMock()
+        cur.fetchone.return_value = {"active_contacts": 42}
+        cur.fetchall.return_value = [
+            {"lifecycle_segment": "active", "cnt": 100},
+            {"lifecycle_segment": "lapsed_customer", "cnt": 30},
+        ]
+
+        result = _phase_profile(cur)
+        assert result["rollups_refreshed"] is True
+        assert result["active_contacts"] == 42
+        assert result["lifecycle_distribution"]["active"] == 100
+
+
+class TestPhaseSignal:
+    """Test _phase_signal directly."""
+
+    def test_phase_signal_all_empty(self):
+        """_phase_signal returns zeros when all stored procs return empty."""
+        from app.routers.intelligence import _phase_signal
+        cur = MagicMock()
+        cur.fetchall.return_value = []
+
+        counts, raw = _phase_signal(cur)
+        assert all(v == 0 for v in counts.values())
+        assert all(len(v) == 0 for v in raw.values())
+
+    def test_phase_signal_engaged_no_order(self):
+        """_phase_signal counts engaged_no_order from detect_engaged_no_order()."""
+        from app.routers.intelligence import _phase_signal
+        engaged_rows = [
+            {"id": 1, "email": "alice@test.com", "first_name": "Alice",
+             "last_name": "Smith", "phone": "+14041111111",
+             "opens_7d": 3, "clicks_7d": 1, "lifecycle_segment": "active"},
+        ]
+        cur = MagicMock()
+        # First fetchall (detect_engaged_no_order), then the rest return []
+        cur.fetchall.side_effect = [engaged_rows] + [[]] * 10
+
+        counts, raw = _phase_signal(cur)
+        assert counts["engaged_no_order"] == 1
+        assert len(raw["engaged_no_order"]) == 1
+
+    def test_phase_signal_handles_stored_proc_exception(self):
+        """_phase_signal catches exceptions from broken stored procs gracefully."""
+        from app.routers.intelligence import _phase_signal
+        cur = MagicMock()
+        cur.fetchall.side_effect = Exception("proc not found")
+
+        # Should not raise — exceptions are caught internally
+        counts, raw = _phase_signal(cur)
+        # All signals will be empty due to exceptions
+        assert all(v == 0 for v in counts.values())
+
+
+class TestPhaseDispatch:
+    """Test _phase_dispatch directly."""
+
+    def test_phase_dispatch_returns_stage_stats(self):
+        """_phase_dispatch returns stage engine stats and pending counts."""
+        from app.routers.intelligence import _phase_dispatch
+        cur = MagicMock()
+        cur.fetchone.side_effect = [
+            {"contacts_updated": 10, "campaigns_queued": 2},
+            {"cnt": 5},
+            {"cnt": 12},
+        ]
+
+        result = _phase_dispatch(cur)
+        assert result["stage_contacts_updated"] == 10
+        assert result["stage_campaigns_queued"] == 2
+        assert result["pending_campaign_moves"] == 5
+        assert result["pending_opportunities"] == 12
+
+
+class TestRunCycleIntegration:
+    """Test run-cycle without mocking phase functions (integration-style)."""
+
+    def test_run_cycle_full_flow_no_signals(self, client):
+        """POST /run-cycle with empty signals covers all 5 phases."""
+        cur = MagicMock()
+        cur.fetchall.return_value = []
+        cur.fetchone.side_effect = [
+            {"cnt": 0},
+            {"cnt": 0},
+            {"active_contacts": 0},
+            {"contacts_updated": 0, "campaigns_queued": 0},
+            {"cnt": 0},
+            {"cnt": 0},
+        ]
+
+        with patch("app.routers.intelligence.get_cursor",
+                   side_effect=lambda commit=True: _cursor_ctx(cur)):
+            resp = client.post("/api/intelligence/run-cycle")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["collect"]["email_opens"] == 0
+        assert data["profile"]["rollups_refreshed"] is True
+        assert data["dispatch"]["stage_contacts_updated"] == 0
