@@ -129,13 +129,13 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 
 ## 4. Database Schema
 
-**PostgreSQL 16, schema: `dabbahwala`, 59+ migrations**
+**PostgreSQL 16, schema: `dabbahwala`, 62+ migrations**
 
 ### Core Tables
 
 | Table | Purpose |
 |-------|---------|
-| `contacts` | Master customer record — email, phone, lifecycle_segment, channel flags, order counts, current campaign, `source` (origin tag e.g. `test_harness`, `shipday`, `import`) |
+| `contacts` | Master customer record — email, phone, lifecycle_segment, channel flags, order counts, `source` (origin tag e.g. `test_harness`, `shipday`, `import`); active campaign derived via JOIN to `campaign_routing` |
 | `events` | Raw event log — order_placed, email_open, sms_received, delivery_failed, etc. |
 | `orders` | Order records — order_ref, total_amount, delivery_slot, order_type |
 | `order_items` | Line items — menu_item_id, quantity, unit_price |
@@ -169,7 +169,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | Table | Purpose |
 |-------|---------|
 | `rules` | Lifecycle rule predicates + actions (SQL-driven) |
-| `campaign_routing` | Lifecycle segment → Instantly campaign mapping |
+| `campaign_routing` | **Single source of truth** for campaigns — lifecycle segment → Instantly campaign ID/name, email template file, performance stats (leads, opens, replies, etc.); `contacts.current_campaign` is always derived from this table via `lifecycle_segment` JOIN |
 | `campaign_queue` | Pending campaign moves |
 | `campaign_push_log` | Audit log of every Instantly lead-push attempt from n8n — `queue_id`, `email`, `to_campaign`, `success`, `status_code`, `error_message`, `response_body`, `created_at` (migration 060) |
 | `agent_playbook` | User-configured rules (synced from Airtable every 15 min) |
@@ -237,7 +237,7 @@ Airtable ──→  n8n Menu Sync (hourly)  ──→  weekly_menu_schedule tabl
 | `prospects.py` | `/api/prospects` | `GET /template` (new-contact CSV template), `POST /upload-csv` (bulk add new contacts), `GET /update-template` (update CSV template + enqueues Drive upload), `POST /update-csv` (bulk update existing contacts — sets name, address, priority_override, sales_notes by email/phone match), `POST /add` (single manual entry) |
 | `contacts.py` | `/api/contacts` | `PATCH /{id}/priority`, `PATCH /{id}/notes` |
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |
-| `campaigns.py` | `/api/campaigns` | `GET /pending` (returns first/last name), `GET /active-contacts` (all contacts with active campaign — for Instantly seed), `GET /active-contacts-stats` (diagnostic — filter exclusion counts + campaign distribution), `POST /log-push` (record Instantly push result), `GET /push-log` (diagnostic — filter by success), `POST /bulk-executed` (batch mark), `POST /{id}/executed`, `POST /bulk-push-to-instantly` (background: push all pending campaign_queue moves directly to Instantly, deduplicated by email) |
+| `campaigns.py` | `/api/campaigns` | `GET /pending` (returns first/last name), `GET /active-contacts` (contacts with active campaign derived from lifecycle_segment via campaign_routing JOIN — for Instantly seed), `GET /active-contacts-stats` (diagnostic — filter exclusion counts + campaign distribution), `POST /log-push` (record Instantly push result), `GET /push-log` (diagnostic — filter by success, optional ?verify cross-checks against Instantly API), `POST /repair-push` (background: re-push leads that have campaign=null in Instantly), `POST /bulk-executed` (batch mark), `POST /{id}/executed`, `POST /bulk-push-to-instantly` (background: push all pending campaign_queue moves directly to Instantly, deduplicated by email), `GET /analytics`, `GET /templates`, `GET /templates/{name}`, `PUT /templates/{name}`, `POST /templates/{name}/rewrite`, `POST /setup-instantly` |
 | `telnyx.py` | `/api/telnyx` | `POST /message`, `POST /call`, `POST /field-agent-message` |
 | `webhooks.py` | `/api/webhooks` | `POST /instantly` (Instantly email events), `POST /telnyx` (Telnyx inbound SMS push webhook), `POST /shipday` / `GET /shipday` (Shipday delivery status), `POST /sync-campaigns`, `GET /campaigns`, `POST /campaign-stats` |
 | `delivery.py` | `/api/delivery` | `POST /status` |
@@ -424,8 +424,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Telnyx** | SMS Dispatch | Every 10 min | Poll action_queue for `send_sms` → Telnyx API → mark done |
 | **Telnyx** | Broadcast Dispatch | Every 5 min | Dispatch queued broadcasts (SMS via Telnyx, email via SMTP) |
 | **Telnyx** | Broadcast Form | On form submit | n8n form UI for delay alerts and promo broadcasts |
-| **Instantly** | Campaign Performance | Hourly | Fetch Instantly analytics → DB |
-| **Instantly** | Campaign Sync | Every 6 h | Sync campaigns tagged `dabbahwala` → `POST /api/webhooks/sync-campaigns` |
+| **Instantly** | Campaign Performance | Hourly | Fetch Instantly analytics per campaign → `POST /api/webhooks/campaign-stats` (updates `campaign_routing` stats columns) |
 | **Instantly** | Campaign Setup | Daily midnight | Create missing Instantly campaigns (no-op if all exist) |
 | **Instantly** | Bulk Lead Seeder | Manual only | One-shot: seed all active contacts into their Instantly campaign; skips missing `first_name`; `skip_if_in_workspace=true` (idempotent) |
 | **Google** | Docs & Drive Sync | Every 30 min | List Drive folder → read Google Docs → `POST /api/team-content/sync` |
@@ -470,17 +469,20 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 
 ### Instantly (Email Campaigns)
 
-5 lifecycle-mapped campaigns:
+6 lifecycle-mapped campaigns — all stored exclusively in `campaign_routing` (single source of truth):
 
 | Campaign | Target Segment |
 |----------|---------------|
 | DW-NurtureSlow-ColdContacts | cold |
-| DW-PromoStandard-ActiveEngaged | engaged, active_customer |
+| DW-PromoStandard-ActiveEngaged | engaged |
+| DW-ActiveCustomer | active_customer |
 | DW-PromoAggressive-LapsedCustomers | lapsed_customer |
 | DW-NewCustomerOnboarding | new_customer |
 | DW-Reactivation-LongDormant | reactivation_candidate |
 
-Campaign routing defined in `campaign_routing` table. Updated by migrations 014, 023, 026, 031, 042–045.
+`campaign_routing` holds: `lifecycle_segment` (PK), `default_campaign`, `instantly_campaign_id`, `instantly_campaign_name`, `template_file`, and performance stats (leads, opens, replies, etc.). The `instantly_campaigns` table was dropped in migration 062 — all campaign data now lives in `campaign_routing`.
+
+A contact's current campaign is always derived via `JOIN campaign_routing ON lifecycle_segment` — it is not stored on the `contacts` row.
 
 ### Airtable
 
