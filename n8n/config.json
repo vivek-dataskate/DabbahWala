@@ -32,8 +32,7 @@
       "note": "API key stored in .env as AIRTABLE_API_KEY",
       "base_id": "appuy2VTIao6XVpIW",
       "field_sales_table": "Field Sales Tasks",
-      "team_inputs_table": "Team Inputs",
-      "team_content_table": "Team Content"
+      "agent_playbook_table": "Agent Playbook"
     },
     "telnyx": {
       "n8n_credential_id": "XnntvX8AXpdR97oQ",
@@ -462,7 +461,7 @@
       ],
       "schedule": "Every 30 minutes",
       "file": "action_queue_executor.json",
-      "note": "Central action hub. Routes pending action_queue rows to external APIs: Airtable (sync_airtable_task, log_query_to_airtable), Instantly (push_instantly_lead, push_instantly_sequences), Google Drive (upload_google_drive), SMTP (send_email_report), Telnyx (send_sms)"
+      "note": "Central action hub. Routes pending action_queue rows to external APIs: Airtable (sync_airtable_task), Instantly (push_instantly_lead, push_instantly_sequences), Google Drive (upload_google_drive), SMTP (send_email_report), Telnyx (send_sms)"
     },
     "chatbot_docs_reindex": {
       "name": "[System — Maintenance] Chatbot Docs Reindex",

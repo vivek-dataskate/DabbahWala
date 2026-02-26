@@ -18,7 +18,6 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.db import get_cursor
-from app.services.airtable_sync import log_query_to_airtable
 
 router = APIRouter()
 

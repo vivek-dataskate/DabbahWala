@@ -2090,7 +2090,7 @@ def run_agent_cycle_lapsed():
     """Weekly agent cycle for lapsed one-time buyers (ordered 90+ days ago).
 
     Intended to run once per week (Sunday night) via n8n, separate from the
-    nightly active-contact run. Limits to 300 contacts per run to control cost.
+    nightly active-contact run. Limits to 200 contacts per run to control cost.
 
     Eligibility:
       - Has placed at least 1 order
@@ -2129,7 +2129,7 @@ def run_agent_cycle_lapsed():
                     )
               )
             ORDER BY c.last_order_at DESC NULLS LAST
-            LIMIT 300
+            LIMIT 200
             """
         )
         contact_ids = [r["id"] for r in cur.fetchall()]
