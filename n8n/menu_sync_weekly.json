@@ -1,5 +1,5 @@
 {
-  "name": "[Claude — Evidence] Weekly Menu Sync",
+  "name": "[Claude \u2014 Evidence] Weekly Menu Sync",
   "nodes": [
     {
       "parameters": {
@@ -8,7 +8,9 @@
             {
               "field": "weeks",
               "weeksInterval": 1,
-              "triggerAtDay": [1],
+              "triggerAtDay": [
+                1
+              ],
               "triggerAtHour": 6,
               "triggerAtMinute": 0
             }
@@ -19,7 +21,10 @@
       "name": "Every Monday 6 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [100, 300]
+      "position": [
+        100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -42,7 +47,10 @@
       "name": "Trigger Menu Scraper",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [320, 300]
+      "position": [
+        320,
+        300
+      ]
     },
     {
       "parameters": {
@@ -71,7 +79,10 @@
       "name": "Scrape OK?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [540, 300]
+      "position": [
+        540,
+        300
+      ]
     },
     {
       "parameters": {
@@ -83,7 +94,10 @@
       "name": "Get Current Menu",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [760, 200]
+      "position": [
+        760,
+        200
+      ]
     },
     {
       "parameters": {
@@ -93,47 +107,60 @@
       "name": "Build Menu Summary",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [980, 200]
+      "position": [
+        980,
+        200
+      ]
     },
     {
+      "id": "email-success",
+      "name": "Email \u2014 Menu Synced",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1200,
+        200
+      ],
       "parameters": {
-        "fromEmail": "core@dabbahwala.com",
-        "toEmail": "={{ $env.REPORT_EMAIL_TO || 'core@dabbahwala.com' }}",
-        "subject": "=✅ Weekly Menu Synced — {{ $json.week_start }}",
-        "emailType": "text",
-        "message": "=Weekly menu has been scraped and synced successfully.\n\n{{ $json.summary }}\n\nYou can view the full menu at:\nhttps://dabbahwala-latest.onrender.com/api/menu/current",
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/internal/send-email",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"to\": $(\"Get Credentials\").first().json.REPORT_EMAIL_TO, \"subject\": \"=\u2705 Weekly Menu Synced \u2014 {{ $json.week_start }}\", \"body_html\": =Weekly menu has been scraped and synced successfully.\n\n{{ $json.summary }}\n\nYou can view the full menu at:\nhttps://dabbahwala-latest.onrender.com/api/menu/current  }) }}",
         "options": {}
       },
-      "id": "email-success",
-      "name": "Email — Menu Synced",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
-      "position": [1200, 200],
       "credentials": {
-        "smtp": {
-          "id": "Sk6XzPNPnJTXHEbr",
-          "name": "Gmail-SMTP"
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
         }
       }
     },
     {
+      "id": "email-failure",
+      "name": "Email \u2014 Sync Failed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        760,
+        420
+      ],
       "parameters": {
-        "fromEmail": "core@dabbahwala.com",
-        "toEmail": "={{ $env.REPORT_EMAIL_TO || 'core@dabbahwala.com' }}",
-        "subject": "=⚠️ Weekly Menu Sync FAILED",
-        "emailType": "text",
-        "message": "=The weekly menu scraper did not complete successfully.\n\nStatus: {{ $('Trigger Menu Scraper').first().json.status }}\nError: {{ $('Trigger Menu Scraper').first().json.stderr || 'Unknown error' }}\n\nPlease manually update the menu via:\nPOST https://dabbahwala-latest.onrender.com/api/menu/sync",
+        "method": "POST",
+        "url": "https://dabbahwala-latest.onrender.com/api/internal/send-email",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\"to\": $(\"Get Credentials\").first().json.REPORT_EMAIL_TO, \"subject\": \"=\u26a0\ufe0f Weekly Menu Sync FAILED\", \"body_html\": =The weekly menu scraper did not complete successfully.\n\nStatus: {{ $('Trigger Menu Scraper').first().json.status }}\nError: {{ $('Trigger Menu Scraper').first().json.stderr || 'Unknown error' }}\n\nPlease manually update the menu via:\nPOST https://dabbahwala-latest.onrender.com/api/menu/sync  }) }}",
         "options": {}
       },
-      "id": "email-failure",
-      "name": "Email — Sync Failed",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
-      "position": [760, 420],
       "credentials": {
-        "smtp": {
-          "id": "Sk6XzPNPnJTXHEbr",
-          "name": "Gmail-SMTP"
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
         }
       }
     }
@@ -172,7 +199,7 @@
         ],
         [
           {
-            "node": "Email — Sync Failed",
+            "node": "Email \u2014 Sync Failed",
             "type": "main",
             "index": 0
           }
@@ -194,7 +221,7 @@
       "main": [
         [
           {
-            "node": "Email — Menu Synced",
+            "node": "Email \u2014 Menu Synced",
             "type": "main",
             "index": 0
           }

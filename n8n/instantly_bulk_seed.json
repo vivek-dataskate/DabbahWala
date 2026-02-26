@@ -97,7 +97,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOmVwbU1CSFRWa3ZiaQ=="
+              "value": "=Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}"
             }
           ]
         },
@@ -137,7 +137,8 @@
               "batchInterval": 2000
             }
           }
-        }
+        },
+        "authentication": "none"
       },
       "id": "add-lead-to-instantly",
       "name": "Add Lead to Instantly",
@@ -152,13 +153,36 @@
     {
       "parameters": {},
       "id": "skipped-no-op",
-      "name": "Skipped — No First Name",
+      "name": "Skipped \u2014 No First Name",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
         1320,
         400
       ]
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
@@ -166,7 +190,7 @@
       "main": [
         [
           {
-            "node": "Fetch Active Contacts",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -217,7 +241,18 @@
         ],
         [
           {
-            "node": "Skipped — No First Name",
+            "node": "Skipped \u2014 No First Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
+      "main": [
+        [
+          {
+            "node": "Prepare Seed Payload",
             "type": "main",
             "index": 0
           }

@@ -60,7 +60,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOmVwbU1CSFRWa3ZiaQ=="
+              "value": "=Bearer {{ $('Get Credentials').first().json.INSTANTLY_BEARER }}"
             }
           ]
         },
@@ -79,7 +79,8 @@
         },
         "options": {
           "timeout": 60000
-        }
+        },
+        "authentication": "none"
       },
       "id": "fetch-analytics",
       "name": "Fetch Campaign Analytics from Instantly",
@@ -94,7 +95,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Normalise Instantly analytics response → shape Render expects\n// /api/v2/campaigns/analytics returns an array; unwrap it.\n// When the API returns [] (no data for this campaign), alwaysOutputData passes\n// through the split-node input {campaign_id, campaign_name} — detect by absence\n// of emails_sent_count and return zero-value stats so save-stats always runs.\nconst raw = $input.first().json;\nconst a = Array.isArray(raw) ? (raw[0] || {}) : raw;\n\nconst campaignId = a.campaign_id || $('Split Into One Per Campaign').first().json.campaign_id;\n\n// No analytics data — campaign not yet launched or has no sends\nif (typeof a.emails_sent_count === 'undefined') {\n  return [{ json: {\n    campaign_id:  campaignId,\n    leads_count:  0,\n    emails_sent:  0,\n    unique_opens: 0,\n    opens:        0,\n    replies:      0,\n    clicks:       0,\n    bounces:      0,\n    unsubscribes: 0,\n    open_rate:    0,\n    reply_rate:   0\n  }}];\n}\n\nconst emailsSent   = a.emails_sent_count  ?? 0;\nconst opens        = a.open_count         ?? 0;\nconst uniqueOpens  = a.open_count_unique  ?? opens;\nconst replies      = a.reply_count        ?? 0;\nconst clicks       = a.link_click_count   ?? 0;\nconst bounces      = a.bounced_count      ?? 0;\nconst unsubscribes = a.unsubscribed_count ?? 0;\nconst leadsCount   = a.leads_count        ?? 0;\n\nconst openRate  = emailsSent > 0 ? Math.round(opens   / emailsSent * 10000) / 100 : 0;\nconst replyRate = emailsSent > 0 ? Math.round(replies / emailsSent * 10000) / 100 : 0;\n\nreturn [{\n  json: {\n    campaign_id:  campaignId,\n    leads_count:  leadsCount,\n    emails_sent:  emailsSent,\n    unique_opens: uniqueOpens,\n    opens,\n    replies,\n    clicks,\n    bounces,\n    unsubscribes,\n    open_rate:    openRate,\n    reply_rate:   replyRate\n  }\n}];"
+        "jsCode": "// Normalise Instantly analytics response \u2192 shape Render expects\n// /api/v2/campaigns/analytics returns an array; unwrap it.\n// When the API returns [] (no data for this campaign), alwaysOutputData passes\n// through the split-node input {campaign_id, campaign_name} \u2014 detect by absence\n// of emails_sent_count and return zero-value stats so save-stats always runs.\nconst raw = $input.first().json;\nconst a = Array.isArray(raw) ? (raw[0] || {}) : raw;\n\nconst campaignId = a.campaign_id || $('Split Into One Per Campaign').first().json.campaign_id;\n\n// No analytics data \u2014 campaign not yet launched or has no sends\nif (typeof a.emails_sent_count === 'undefined') {\n  return [{ json: {\n    campaign_id:  campaignId,\n    leads_count:  0,\n    emails_sent:  0,\n    unique_opens: 0,\n    opens:        0,\n    replies:      0,\n    clicks:       0,\n    bounces:      0,\n    unsubscribes: 0,\n    open_rate:    0,\n    reply_rate:   0\n  }}];\n}\n\nconst emailsSent   = a.emails_sent_count  ?? 0;\nconst opens        = a.open_count         ?? 0;\nconst uniqueOpens  = a.open_count_unique  ?? opens;\nconst replies      = a.reply_count        ?? 0;\nconst clicks       = a.link_click_count   ?? 0;\nconst bounces      = a.bounced_count      ?? 0;\nconst unsubscribes = a.unsubscribed_count ?? 0;\nconst leadsCount   = a.leads_count        ?? 0;\n\nconst openRate  = emailsSent > 0 ? Math.round(opens   / emailsSent * 10000) / 100 : 0;\nconst replyRate = emailsSent > 0 ? Math.round(replies / emailsSent * 10000) / 100 : 0;\n\nreturn [{\n  json: {\n    campaign_id:  campaignId,\n    leads_count:  leadsCount,\n    emails_sent:  emailsSent,\n    unique_opens: uniqueOpens,\n    opens,\n    replies,\n    clicks,\n    bounces,\n    unsubscribes,\n    open_rate:    openRate,\n    reply_rate:   replyRate\n  }\n}];"
       },
       "id": "normalise-stats",
       "name": "Normalise Stats",
@@ -147,6 +148,29 @@
         460
       ],
       "parameters": {}
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        470,
+        300
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "dw-admin-secret",
+          "name": "DW Admin Secret"
+        }
+      }
     }
   ],
   "connections": {
@@ -154,7 +178,7 @@
       "main": [
         [
           {
-            "node": "Get DabbahWala Campaigns",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
@@ -220,7 +244,18 @@
       "main": [
         [
           {
-            "node": "Get DabbahWala Campaigns",
+            "node": "Get Credentials",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Credentials": {
+      "main": [
+        [
+          {
+            "node": "Fetch Campaign Analytics from Instantly",
             "type": "main",
             "index": 0
           }
