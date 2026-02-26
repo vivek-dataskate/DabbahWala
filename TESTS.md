@@ -42,7 +42,7 @@ Validates that all required tables, stored functions, and seed data are present.
 
 **Core tables checked:** `contacts`, `events`, `orders`, `order_items`, `telnyx_messages`, `telnyx_calls`, `delivery_status`, `engagement_rollups`, `menu_catalog`, `menu_catalog_history`, `opportunities`
 
-**Agent tables checked:** `customer_goals`, `inference_results`, `decision_recommendations`, `orchestrator_log`, `action_queue`
+**Agent tables checked:** `customer_goals`, `contact_observations`, `action_plans`, `orchestrator_log`, `action_queue`
 
 **Stored functions checked:** `ingest_event`, `run_lifecycle_cycle`, `refresh_engagement_rollups`, `store_telnyx_message`, `update_delivery_status`
 
@@ -102,8 +102,8 @@ Runs the full 4-layer Claude agent cycle and verifies all pipeline tables are wr
 |-----------|----------------|
 | `agent_goal_create` | Inserts `customer_goals` row for test contact |
 | `agent_cycle_run` | `POST /api/agents/cycle/run-for-contact` completes successfully |
-| `agent_inference_results` | `inference_results` rows written for test contact |
-| `agent_decision_results` | `decision_recommendations` rows written |
+| `agent_observations` | `contact_observations` rows written for test contact |
+| `agent_action_plans` | `action_plans` rows written |
 | `agent_orchestrator_log` | `orchestrator_log` entry created |
 | `agent_action_queued` | `GET /api/agents/action-queue/pending` returns valid response |
 

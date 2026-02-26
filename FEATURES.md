@@ -4,7 +4,7 @@ Each section describes a business-critical capability and the technical assets t
 
 > **Navigation:** [README](README.md) · [System Reference](SYSTEM.md) · [Claude Instructions](CLAUDE.md)
 >
-> **Deep-dive reading:** [LIFECYCLE.md](LIFECYCLE.md) — how the lifecycle engine, intelligence engine, and AI pipeline work together and why all three are necessary to convert customers. Includes the full customer journey and the feedback loop.
+> **Deep-dive reading:** [LIFECYCLE.md](LIFECYCLE.md) — how the Stage Engine, Contact Sweep, and AI Stack work together and why all three are necessary to convert customers. Includes the full customer journey and the feedback loop.
 
 ---
 
@@ -14,9 +14,9 @@ Contacts are automatically classified into 8 stages and moved between them based
 
 **Stages:** `cold` → `engaged` → `new_customer` → `active_customer` → `cooling` → `lapsed_customer` → `reactivation_candidate` → `optout`
 
-This is a **pure SQL system — no Claude involved.** Transitions are driven by predicate rules evaluated hourly. See [LIFECYCLE.md §5](LIFECYCLE.md#5-engine-1--the-lifecycle-engine-sql-hourly) for the full rule table and stage descriptions.
+This is a **pure SQL system — no Claude involved.** Transitions are driven by predicate rules evaluated hourly. See [LIFECYCLE.md §5](LIFECYCLE.md) for the full rule table and stage descriptions.
 
-**How it relates to the other engines:** The lifecycle engine classifies contacts and routes them to the right email campaign. The Intelligence Engine (Feature 6) separately detects which contacts need urgent one-off action. The AI Agent Pipeline (Feature 2) personalises what to say to each contact. All three are needed — this engine handles the always-on email channel; the other two handle targeted individual outreach.
+**How it relates to the other engines:** The Stage Engine classifies contacts and routes them to the right email campaign. The Contact Sweep (Feature 6) separately detects which contacts need urgent one-off action. The AI Stack (Feature 2) personalises what to say to each contact. All three are needed — this engine handles the always-on email channel; the other two handle targeted individual outreach.
 
 **Assets**
 
@@ -62,8 +62,8 @@ See [LIFECYCLE.md §7](LIFECYCLE.md#7-engine-3--the-ai-agent-pipeline-claude-eve
 |-------|------|
 | `routers/agents.py` | Full 4-layer pipeline implementation |
 | `customer_goals` table | One active goal per contact (`convert_to_order` / `retain` / `reactivate`) |
-| `inference_results` table | Layer 1 outputs — sentiment, intent, engagement |
-| `decision_recommendations` table | Layer 2 outputs — stage, channel, offer, escalation |
+| `contact_observations` table | Layer 1 (Observer) outputs — sentiment, intent, engagement |
+| `action_plans` table | Layer 2 (Advisor) outputs — stage, channel, offer, escalation |
 | `orchestrator_log` table | Layer 3 chosen action, full reasoning, guardrails applied |
 | `action_queue` table | Pending → executing → done/failed lifecycle for each action |
 | `agent_playbook` table | User-configured rules injected into all 9 Claude system prompts (synced from Airtable every 15 min) |
@@ -108,7 +108,7 @@ Actions decided by the agent pipeline are dispatched to the correct channel (SMS
 
 ## 4. Daily Order Processing
 
-A CSV file of the day's orders is uploaded every afternoon and automatically creates/updates contacts, records orders and menu items, detects opportunities, and triggers agent cycles.
+A CSV file of the day's orders is uploaded every afternoon and automatically creates/updates contacts, records orders and menu items, detects opportunities, and triggers AI Stack runs.
 
 **Assets**
 
@@ -122,9 +122,9 @@ A CSV file of the day's orders is uploaded every afternoon and automatically cre
 
 **Menu item resolution:** case-insensitive direct match on `menu_catalog.item_name`; new items auto-created in catalog if not found
 
-**Post-upload triggers:** lifecycle run → opportunity detection → agent cycle for new/returning contacts
+**Post-upload triggers:** lifecycle run → opportunity detection → AI Stack run for new/returning contacts
 
-> **No immediate Airtable outreach on upload.** Airtable tasks are no longer created at CSV upload time. Outreach is handled entirely by the AI agent cycle post-delivery (DELIVERED triggers a 4h delayed cycle; the agent then decides whether to SMS, email, or escalate to a call).
+> **No immediate Airtable outreach on upload.** Airtable tasks are no longer created at CSV upload time. Outreach is handled entirely by the AI Stack post-delivery (DELIVERED triggers a 4h delayed AI Stack run; the Orchestrator then decides whether to SMS, email, or escalate to a call).
 
 ---
 
@@ -168,7 +168,7 @@ Real-time delivery status from Shipday is ingested and used by the AI orchestrat
 | `[Shipday] Feedback Sync` n8n | Polls feedback, delivery instructions, proof-of-delivery hourly |
 | `[Shipday] Historical Import` n8n | Manual one-shot backfill (intentionally inactive) |
 | Layer 3 orchestrator guardrails | Reads latest delivery event; overrides standard action logic |
-| `routers/webhooks.py` | Shipday webhook handler — DELIVERED schedules a 4h delayed agent cycle; FAILED fires immediately |
+| `routers/webhooks.py` | Shipday webhook handler — DELIVERED schedules a 4h delayed AI Stack run; FAILED fires immediately |
 
 ---
 
@@ -176,7 +176,7 @@ Real-time delivery status from Shipday is ingested and used by the AI orchestrat
 
 A 5-phase SQL engine runs daily (7:00 AM) to detect behavioural signals across all contacts and generate **opportunity** records — without any Claude calls, without waiting for a specific inbound event. Poll window is 24 hours to match the daily cadence.
 
-> ⚠️ **Naming note:** Two phases are called "INFERENCE" and "DECISION." This is confusing because the AI Agent Pipeline (Feature 2) has layers with the same names. The Intelligence Cycle phases are **pure SQL** — no Claude anywhere. See [LIFECYCLE.md §4](LIFECYCLE.md#4-important-the-naming-collision).
+> **Note:** The Contact Sweep is entirely rule-based SQL. No Claude calls happen here. When ROUTE creates an opportunity, the AI Stack (Feature 2) is triggered separately per-contact.
 
 **How it relates to the other engines:** The Lifecycle Engine (Feature 1) keeps contacts in the right email campaign. The Intelligence Engine finds the contacts who need urgent one-off action *right now* — it is the system's radar. The AI Agent Pipeline (Feature 2) then handles the personalised response for those contacts. Without the Intelligence Engine, there would be no mechanism to detect that a lapsed customer just clicked a link, or that a high-value customer hasn't ordered in 14 days, until the next scheduled batch cycle.
 
@@ -184,11 +184,11 @@ A 5-phase SQL engine runs daily (7:00 AM) to detect behavioural signals across a
 
 | Phase | What it actually does |
 |-------|----------------------|
-| **INTAKE** | Count events from the last 2 hours (email opens/clicks, SMS, calls, orders) — snapshot for reporting |
-| **EVIDENCE** | Recalculate every contact's 7d/30d engagement rollups (`refresh_engagement_rollups()`) |
-| **INFERENCE** (SQL, not Claude) | Run 7 SQL detection functions to find contacts matching behavioural patterns |
-| **DECISION** (SQL, not Claude) | Call `create_opportunity()` for each detected contact — write rows to `opportunities` table |
-| **EXECUTION** | Run `run_lifecycle_cycle()` — ensures stage transitions are current before any actions are dispatched |
+| **COLLECT** | Count events from the last 2 hours (email opens/clicks, SMS, calls, orders) — snapshot for reporting |
+| **PROFILE** | Recalculate every contact's 7d/30d engagement rollups (`refresh_engagement_rollups()`) |
+| **SIGNAL** | Run 7 SQL detection functions to find contacts matching behavioural patterns (SQL only, no Claude) |
+| **ROUTE** (SQL, not Claude) | Call `create_opportunity()` for each detected contact — write rows to `opportunities` table |
+| **DISPATCH** | Run Stage Engine (`run_lifecycle_cycle()`) — ensures stage transitions are current before any actions are dispatched |
 
 **7 SQL signals → opportunity actions:**
 
@@ -215,7 +215,7 @@ A 5-phase SQL engine runs daily (7:00 AM) to detect behavioural signals across a
 | `create_opportunity()` stored proc | Creates opportunity with deduplication (no duplicate pending opportunities per contact) |
 | `routers/opportunities.py` | CRUD + detection endpoints |
 | `[Claude] Daily Intelligence Cycle` n8n | Fires `POST /api/intelligence/run-cycle` daily at 7:00 AM (24 h poll window) |
-| `[Instantly] Campaign Performance` n8n | Ingests Instantly email events into DB hourly so EVIDENCE phase has fresh data |
+| `[Instantly] Campaign Performance` n8n | Ingests Instantly email events into DB hourly so PROFILE phase has fresh data |
 
 ---
 
@@ -341,7 +341,7 @@ Two Claude-written email reports land in the team inbox each morning — an oper
 
 ## 11. Team Empowerment
 
-Ground team observations, social media ad copies, and user-configured agent rules flow into Claude's decision-making — so institutional knowledge shapes every outreach message.
+Ground team observations, social media ad copies, and user-configured agent rules flow into Claude's reasoning — so institutional knowledge shapes every outreach message.
 
 **Assets**
 
@@ -351,7 +351,7 @@ Ground team observations, social media ad copies, and user-configured agent rule
 | `routers/team_content.py` | `POST /sync` (Google Docs), `POST /submit` (form), `GET /browse`, `POST /search` |
 | `[Google] Docs & Drive Sync` n8n | Polls Drive folder every 30 min; classifies docs as `ground_note` or `ad_copy` |
 | Google Drive folder `1O0ES9uiDL6AWf9QMMYiyRUWGtymDjPF5` | Source of team documents |
-| `agent_playbook` table | 6 rule categories: exclusion, priority, inference, decision, messaging, general |
+| `agent_playbook` table | 6 rule categories: exclusion, priority, observer, advisor, messaging, general |
 | `routers/playbook.py` | CRUD + Airtable sync for playbook rules |
 | `[Airtable] Playbook Sync` n8n | Syncs rules from Airtable every 15 min |
 | Layer 1–3 system prompts | Inject active playbook rules before every Claude call |
@@ -390,7 +390,7 @@ Every system, agent, integration, and automation workflow is automatically valid
 | 3 — Test Contact Setup | Create isolated contact; verify DB round-trip |
 | 4 — Events & Webhooks | `ingest_event` (SMS, email_open); Telnyx inbound webhook; Shipday DELIVERED + FAILED webhooks |
 | 5 — Telnyx / SMS | Real outbound SMS self-loop; `telnyx_messages` DB check; action_queue SMS flow |
-| 6 — AI Agent Pipeline | 4-layer Claude cycle on test contact → verify inference_results, decision_recommendations, orchestrator_log, action_queue |
+| 6 — AI Stack | 4-layer Claude cycle on test contact → verify contact_observations, action_plans, orchestrator_log, action_queue |
 | 7 — Intelligence & Lifecycle | `POST /api/lifecycle/run` (SQL rules); `POST /api/intelligence/run-cycle` (all 5 phases); segment distribution |
 | 8 — Instantly Email | All 5 DW campaigns exist; add `vivek@` as lead → verify → fetch analytics → remove |
 | 9 — Airtable | Weekly Menu fetch; menu sync; playbook sync; Field Sales Task create + delete |
@@ -442,7 +442,7 @@ Marketing and ops team members can query live Postgres data conversationally in 
 | `mcp_server/tools/communications.py` | `get_communication_history()`, delivery tracking |
 | `mcp_server/tools/recommendations.py` | `suggest_reactivation_targets()`, `recommend_content_strategy()` |
 | `mcp_server/tools/opportunities.py` | `detect_opportunities()`, `create_opportunity()`, `get_high_intent_signals()` |
-| `mcp_server/tools/agents.py` | `get_latest_inference()`, `get_latest_decision()`, `get_orchestrator_history()`, `get_pending_actions()`, `get_agent_cycle_summary()` |
+| `mcp_server/tools/agents.py` | `get_latest_observations()`, `get_latest_action_plan()`, `get_orchestrator_history()`, `get_pending_actions()`, `get_ai_stack_summary()` |
 | `mcp_server/tools/instantly.py` | `instantly_list_campaigns()`, `instantly_get_campaign_analytics()`, `instantly_list_leads()`, `instantly_get_email_events()` |
 | `mcp_server/tools/shipday.py` | `get_shipday_order()`, `list_shipday_orders()`, `get_shipday_carriers()`, `get_shipday_order_tracking()` |
 

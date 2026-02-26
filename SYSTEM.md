@@ -4,7 +4,7 @@ Complete technical reference for the DabbahWala automated marketing platform.
 
 > **Navigation:** [README](README.md) · [Features](FEATURES.md) · [Claude Instructions](CLAUDE.md)
 >
-> **Deep-dive reading:** [LIFECYCLE.md](LIFECYCLE.md) — plain-language explanation of how the lifecycle engine, intelligence engine, and AI pipeline work together to convert customers, including why all three are necessary and not redundant.
+> **Deep-dive reading:** [LIFECYCLE.md](LIFECYCLE.md) — plain-language explanation of how the Stage Engine, Contact Sweep, and AI Stack work together to convert customers, including why all three are necessary and not redundant.
 
 ---
 
@@ -29,7 +29,7 @@ Complete technical reference for the DabbahWala automated marketing platform.
 
 DabbahWala is a fresh Indian food delivery service in Atlanta. This backend system automates the entire customer lifecycle — from cold lead nurture through active customer engagement to lapsed customer reactivation — using:
 
-- **Rule-based automation** — SQL lifecycle engine + n8n workflows
+- **Rule-based automation** — Stage Engine (SQL rules) + Contact Sweep (hourly loop) + n8n workflows
 - **AI-powered reasoning** — 4-layer Claude agent pipeline (8 Claude calls per contact per cycle)
 - **Multi-channel outreach** — SMS (Telnyx), email (Instantly), field sales (Airtable)
 - **Self-service intelligence** — Marketing query form + Claude Desktop MCP tools
@@ -113,8 +113,8 @@ INPUTS
     ├─ Action Queue Executor  ──→  Telnyx / Instantly / Airtable
     ├─ SMS Dispatch           ──→  Telnyx
     ├─ Broadcast Dispatch     ──→  Telnyx + SMTP
-    ├─ Hourly Intelligence    ──→  /intelligence/run-cycle
-    ├─ Lifecycle Runner       ──→  /lifecycle/run
+    ├─ Contact Sweep (hourly) ──→  /intelligence/run-cycle
+    ├─ Stage Runner (hourly)  ──→  /lifecycle/run
     └─ Data collectors        ──→  Shipday / Telnyx / Google Docs / Airtable
 ```
 
@@ -156,8 +156,8 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 | Table | Purpose |
 |-------|---------|
 | `customer_goals` | One active goal per contact — convert_to_order / retain / reactivate |
-| `inference_results` | Layer 1 outputs — sentiment, intent, engagement per cycle run |
-| `decision_recommendations` | Layer 2 outputs — stage, channel, offer, escalation per run |
+| `contact_observations` | Layer 1 outputs (Observer agents) — sentiment, intent, engagement per cycle run |
+| `action_plans` | Layer 2 outputs (Advisor agents) — stage, channel, offer, escalation per run |
 | `orchestrator_log` | Layer 3 chosen action, full reasoning text, guardrails applied |
 | `action_queue` | Approved actions (pending → executing → done / failed) awaiting n8n |
 
@@ -267,19 +267,18 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 
 ---
 
-## 6. Claude AI Agent Pipeline
+## 6. AI Stack (Claude Agent Pipeline)
 
 **Model routing:** Sonnet (`claude-sonnet-4-5-20250929`) for complex reasoning (Intent, Offer, Escalation, Orchestrator); Haiku (`claude-haiku-4-5-20251001`) for fast classification (Menu, Sentiment, Engagement, Stage, Channel).
 
-> ⚠️ **Naming note:** The Intelligence Cycle (§7) also uses the words "Inference" and "Decision" as phase names, but those phases contain **zero Claude calls** — they are pure SQL. The layers described here are the only place in the system where Claude is actually called. See [LIFECYCLE.md §4](LIFECYCLE.md#4-important-the-naming-collision) for the full disambiguation.
 
 **Prompt caching:** All system prompts are sent as cacheable content blocks (`cache_control: ephemeral`). The static prefix (role instructions + playbook) is identical across contacts, giving a 90% token discount from contact #2 onward in a batch.
 
-**Playbook RAG:** Each agent layer receives only the relevant playbook categories (inference agents: exclusion+priority+inference; decision agents: exclusion+priority+decision+messaging; orchestrator: exclusion+priority only).
+**Playbook RAG:** Each agent layer receives only the relevant playbook categories (Observer agents: exclusion+priority+observer; Advisor agents: exclusion+priority+advisor+messaging; Orchestrator: exclusion+priority only).
 
 **Playbook hash cache:** `_fetch_playbook_rules()` stores a SHA-256 hash of the formatted playbook. DB is only re-queried when the content actually changes — not on every contact.
 
-### Layer 1 — Inference (Menu + 3 agents)
+### Layer 1 — Observer (Menu + 3 agents)
 
 Input: contact profile + 30-day events + full communication history + active goal + this week's menu.
 
@@ -291,9 +290,9 @@ Input: contact profile + 30-day events + full communication history + active goa
 | **Engagement** | Haiku | `submit_engagement` | `engagement_score` (0–1), `trend` (rising/flat/falling), `last_touch_hours_ago` |
 
 Menu picks feed into Intent (weights toward `ready_to_order` when favourites are available) and Offer (copy references specific items).
-Stored in: `inference_results`
+Stored in: `contact_observations`
 
-### Layer 2 — Decision (4 agents)
+### Layer 2 — Advisor (4 agents)
 
 Input: contact profile + full Layer 1 output bundle.
 
@@ -304,19 +303,19 @@ Input: contact profile + full Layer 1 output bundle.
 | **Offer** | Sonnet | `submit_offer` | `offer_type` (discount/reminder/social_proof/none), `suggested_copy` (references menu picks), `reason` |
 | **Escalation** | Sonnet | `submit_escalation` | `should_escalate` (bool), `urgency` (high/medium/none), `reason` |
 
-Stored in: `decision_recommendations`
+Stored in: `action_plans`
 
 ### Layer 3 — Orchestrator (1 Sonnet call)
 
 Input: all four Layer 2 recommendations + latest delivery event + recent action history.
 
-The Orchestrator is the final decision-maker. It reads everything and outputs **one action**. When the four decision agents disagree or a delivery event changes everything, the Orchestrator arbitrates.
+The Orchestrator is the final decision-maker. It reads everything and outputs **one action**. When the four Advisor agents disagree or a delivery event changes everything, the Orchestrator arbitrates.
 
 **Delivery-aware guardrails (checked first, override everything):**
 
 | Delivery event | Forced action |
 |---------------|--------------|
-| `delivered` | Agent cycle fires after a **4-hour delay** (threading.Timer in webhooks.py) — gives the customer time to eat and leave feedback before any outreach decision is made |
+| `delivered` | AI Stack fires after a **4-hour delay** (threading.Timer in webhooks.py) — gives the customer time to eat and leave feedback before any outreach decision is made |
 | `delivery_failed` / `delivery_returned` | `escalate_airtable` with urgency=high — fires immediately, relationship recovery before any selling |
 | `out_for_delivery` / `driver_assigned` | `none` — never interrupt an order in progress |
 
@@ -356,32 +355,33 @@ The `agent_playbook` table (synced from Airtable every 15 min) injects user-conf
 |----------|---------------|
 | `exclusion` | Overrides everything — "Never contact contacts tagged 'do_not_disturb'" |
 | `priority` | Biases reasoning — "Prioritise contacts with 3+ orders over cold leads" |
-| `inference` | Shapes classification — "If SMS mentions 'price', always classify as price_sensitive" |
-| `decision` | Directs actions — "Always use SMS for reactivation, never email" |
+| `observer` | Shapes classification — "If SMS mentions 'price', always classify as price_sensitive" |
+| `advisor` | Directs actions — "Always use SMS for reactivation, never email" |
 | `messaging` | Controls copy style — "Include delivery slot info in all thank-you messages" |
 | `general` | Open-ended instructions |
 
 ---
 
-## 7. Intelligence Cycle
+## 7. Contact Sweep
 
-**5-phase daily cycle (`/api/intelligence/run-cycle`) — runs at 7:00 AM — zero Claude calls, pure SQL throughout.**
+**5-phase hourly loop (`/api/intelligence/run-cycle`) — zero Claude calls, pure SQL throughout.**
 
-> ⚠️ **Naming note:** Two of the five phases are called "INFERENCE" and "DECISION." These names are misleading because they share labels with layers in the Claude Agent Pipeline (§6). They are completely different — the Intelligence Cycle phases are pure SQL functions that scan all contacts at once; the Agent Pipeline layers are per-contact Claude AI calls. See [LIFECYCLE.md §4](LIFECYCLE.md#4-important-the-naming-collision) for the full disambiguation.
+> **Terminology:** The Contact Sweep is entirely rule-based. The AI Stack (§6) is separate — it runs when the ROUTE phase decides a contact needs Claude analysis. See [LIFECYCLE.md](LIFECYCLE.md) for the full explanation.
+
 
 ### What it does
 
-The Intelligence Cycle scans every contact in the database each hour to find behavioural patterns — contacts who are ready to act but haven't been reached yet. When it finds a match, it writes an **opportunity** record to the database. n8n then dispatches that opportunity to the right channel.
+The Contact Sweep scans every contact in the database each hour to find behavioural patterns — contacts who are ready to act but haven't been reached yet. When it finds a match, it writes an **opportunity** record to the database. n8n then dispatches that opportunity to the right channel.
 
-### The 5 Phases
+### The 5 Phases (COLLECT → PROFILE → SIGNAL → ROUTE → DISPATCH)
 
 | Phase | What It Does | Claude? |
 |-------|-------------|---------|
-| **INTAKE** | Count all events in the last 2 hours across the system (email opens/clicks from Instantly, SMS/calls from Telnyx, orders). Snapshot only — no action taken. | No |
-| **EVIDENCE** | Call `refresh_engagement_rollups()` to recalculate every contact's rolling 7-day and 30-day engagement metrics (`opens_7d`, `clicks_7d`, etc.). These metrics are what all signal detection queries read. | No |
-| **INFERENCE** (SQL signal detection) | Run 7 SQL functions that identify contacts matching specific behavioural patterns. The name "Inference" here means pattern matching in SQL, not Claude reasoning. | No |
-| **DECISION** (opportunity creation) | For each contact found by INFERENCE, call `create_opportunity()` — a SQL stored function — to write a row to the `opportunities` table with the action, priority, and suggested message. | No |
-| **EXECUTION** | Call `run_lifecycle_cycle()` to run the lifecycle rule engine and ensure stage transitions are up to date. Count pending opportunities and campaign moves for the cycle summary. | No |
+| **COLLECT** | Count all events in the last 2 hours across the system (email opens/clicks from Instantly, SMS/calls from Telnyx, orders). Snapshot only — no action taken. | No |
+| **PROFILE** | Call `refresh_engagement_rollups()` to recalculate every contact's rolling 7-day and 30-day engagement metrics (`opens_7d`, `clicks_7d`, etc.). These metrics are what all signal detection queries read. | No |
+| **SIGNAL** | Run 7 SQL functions that identify contacts matching specific behavioural patterns (SQL pattern matching only — not Claude). | No |
+| **ROUTE** | For each contact found by SIGNAL, call `create_opportunity()` — a SQL stored function — to write a row to the `opportunities` table with the action, priority, and suggested message. | No |
+| **DISPATCH** | Call `run_lifecycle_cycle()` (Stage Engine) to run SQL lifecycle rules and ensure stage transitions are up to date. Count pending opportunities and campaign moves for the cycle summary. | No |
 
 ### The 7 SQL Signal Types
 
@@ -427,10 +427,10 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **Reporting** | Daily Field Brief | Daily 7:30 AM | `POST /api/field-agent/daily-brief` |
 | **Reporting** | Daily Activity Report | Daily 8:00 AM | `POST /api/agents/report/activity` → Claude HTML + CSV → email |
 | **Reporting** | Daily Outcome Report | Daily 8:30 AM | `POST /api/agents/report/outcome` → Claude HTML + CSV → email |
-| **Claude** | Agent Orchestration | Daily 9:00 AM | `POST /api/agents/cycle/run-daily-sweep` — dormant contacts (cap 200, 72 h cooldown) |
-| **Claude** | Daily Intelligence Cycle | Daily 7:00 AM | `POST /api/intelligence/run-cycle` — full 5-phase cycle (24 h poll window) |
-| **Claude** | Lifecycle Cycle Runner | Hourly | `POST /api/lifecycle/run` — SQL rule engine; for each pending campaign move: removes lead from old Instantly campaign, adds to new campaign, logs attempt to `campaign_push_log` via `POST /api/campaigns/log-push`; only marks `executed` on Instantly success — failures stay `pending` and retry next hour |
-| **Claude** | Lapsed Customer Daily | Daily (random offset) | Persistent re-engagement for lapsed customers |
+| **Intelligence** | AI Stack | Every 3 hours | `POST /api/agents/cycle/run-daily-sweep` — dormant contacts (cap 200, 72 h cooldown); 4-layer Claude pipeline (Observer→Advisor→Orchestrator→Reports) |
+| **Intelligence** | Contact Sweep | Hourly | `POST /api/intelligence/run-cycle` — full 5-phase sweep (COLLECT→PROFILE→SIGNAL→ROUTE→DISPATCH) |
+| **Intelligence** | Stage Runner | Hourly | `POST /api/lifecycle/run` — Stage Engine: pure SQL rules that move contacts between lifecycle stages; for each pending campaign move: removes lead from old Instantly campaign, adds to new campaign, logs attempt to `campaign_push_log` |
+| **Intelligence** | Lapsed Sweep | Daily (random offset) | Persistent re-engagement for lapsed contacts |
 | **Claude** | Menu Sync Weekly | Weekly | Menu suggestion agent cycle |
 | **Claude** | Growth Agent Cycle | Every Monday 7:30 AM | Growth hacker 4-phase experiment loop: refresh baseline → measure → design+launch → email report |
 | **Claude** | Goal-Oriented Agent Cycle | Daily 9:00 AM | `POST /api/goal-agent/run` — 4-phase proactive loop: HYPOTHESIZE → EXPERIMENT → MEASURE → HARVEST; proven experiments become `discovered_signals` |
@@ -529,7 +529,7 @@ Polled every 30 min. Status mapping:
 | `communications.py` | `get_communication_history(contact_id, days)` |
 | `recommendations.py` | `suggest_reactivation_targets(limit)`, `recommend_content_strategy(contact_id)` |
 | `opportunities.py` | `detect_opportunities()`, `create_opportunity()`, `get_high_intent_signals()` |
-| `agents.py` | `get_latest_inference(contact_id)`, `get_latest_decision(contact_id)`, `get_orchestrator_history(contact_id)`, `get_pending_actions(limit)`, `get_agent_cycle_summary(days)` |
+| `agents.py` | `get_latest_observations(contact_id)`, `get_latest_action_plan(contact_id)`, `get_orchestrator_history(contact_id)`, `get_pending_actions(limit)`, `get_ai_stack_summary(days)` |
 | `shipday.py` | `get_shipday_order(order_number)`, `list_shipday_orders(from_date, to_date)`, `get_shipday_carriers()`, `get_shipday_order_tracking(order_number)` |
 | `instantly.py` | `instantly_list_campaigns()`, `instantly_get_campaign_analytics(campaign_id)`, `instantly_list_leads(campaign_id)`, `instantly_get_email_events(campaign_id)` |
 

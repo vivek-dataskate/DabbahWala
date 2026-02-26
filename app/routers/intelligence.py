@@ -1,17 +1,21 @@
 """
-Intelligence Engine — The brain of DabbahWala marketing system.
+Contact Sweep — The DabbahWala hourly rule-based orchestration loop.
 
-Runs the full cycle: INTAKE -> EVIDENCE -> INFERENCE -> DECISION -> EXECUTION
+Runs the full sweep: COLLECT -> PROFILE -> SIGNAL -> ROUTE -> DISPATCH
 
-Called hourly by n8n to:
-1. INTAKE: Pull Instantly campaign events (opens/clicks/replies), poll recent Telnyx SMS/calls
-2. EVIDENCE: Update engagement rollups, contact stats, order history
-3. INFERENCE: Detect signals (high-intent, lapsed return, app->direct, sub potential)
-4. DECISION: Create opportunities, move campaigns, trigger SMS, flag for sales calls
-5. EXECUTION: Return actions for n8n to dispatch
+This is entirely rule-based (SQL). No Claude calls happen here.
+When a contact needs AI attention the ROUTE phase triggers the AI Stack separately.
 
-This is the system that constantly finds opportunities to get new orders/subscriptions,
-change campaigns, or ask sales agents to call.
+1. COLLECT: Pull Instantly campaign events (opens/clicks/replies), poll recent Telnyx SMS/calls
+2. PROFILE: Update engagement rollups, contact stats, order history
+3. SIGNAL: Detect signals (high-intent, lapsed return, app->direct, sub potential)
+4. ROUTE:   Create opportunities, move campaigns, trigger SMS, flag for sales calls
+5. DISPATCH: Return actions for n8n to dispatch
+
+Three Engines — quick reference:
+  Stage Engine  = SQL rules that move contacts between lifecycle stages (no AI)
+  Contact Sweep = this file — hourly rule-based loop (no AI)
+  AI Stack      = 4-layer Claude pipeline in agents.py (Observer → Advisor → Orchestrator → Reports)
 """
 import json
 import logging
@@ -32,11 +36,11 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 class CycleResult(BaseModel):
     timestamp: str
-    intake: dict
-    evidence: dict
-    inference: dict
-    decisions: dict
-    execution: dict
+    collect: dict
+    profile: dict
+    signal: dict
+    route: dict
+    dispatch: dict
 
 
 class ActionItem(BaseModel):
@@ -52,9 +56,9 @@ class ActionItem(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# PHASE 1: INTAKE — Collect new data from all sources
+# PHASE 1: COLLECT — Collect new data from all sources
 # ---------------------------------------------------------------------------
-def _phase_intake(cur) -> dict:
+def _phase_collect(cur) -> dict:
     """Pull new events that haven't been processed yet."""
     stats = {
         'email_opens': 0, 'email_clicks': 0, 'sms_received': 0,
@@ -101,10 +105,10 @@ def _phase_intake(cur) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# PHASE 2: EVIDENCE — Update engagement rollups and contact stats
+# PHASE 2: PROFILE — Update engagement rollups and contact stats
 # ---------------------------------------------------------------------------
-def _phase_evidence(cur) -> dict:
-    """Refresh materialized evidence: rollups, lifecycle, order counts."""
+def _phase_profile(cur) -> dict:
+    """Refresh materialized profile data: rollups, lifecycle, order counts."""
     stats = {}
 
     # Refresh 7-day engagement rollups
@@ -132,9 +136,9 @@ def _phase_evidence(cur) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# PHASE 3: INFERENCE — Detect signals and patterns
+# PHASE 3: SIGNAL — Detect signals and patterns (rule-based, no AI)
 # ---------------------------------------------------------------------------
-def _phase_inference(cur) -> dict:
+def _phase_signal(cur) -> dict:
     """Run all signal detection functions to find opportunities."""
     signals = {
         'engaged_no_order': [],
@@ -238,16 +242,16 @@ def _phase_inference(cur) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# PHASE 4: DECISION — Create opportunities and determine actions
+# PHASE 4: ROUTE — Create opportunities and determine actions (rule-based, no AI)
 # ---------------------------------------------------------------------------
-def _phase_decision(cur, signals: dict) -> tuple:
+def _phase_route(cur, signals: dict) -> tuple:
     """Turn signals into concrete opportunities and actions."""
     actions = []
     opp_created = 0
     campaign_moves = 0
     sms_triggered = 0
 
-    # Decision 1: Engaged contacts who haven't ordered -> send promo email
+    # Route 1: Engaged contacts who haven't ordered -> send promo email
     for contact in signals.get('engaged_no_order', [])[:20]:
         cur.execute(
             "SELECT create_opportunity(%s, 'send_email'::opportunity_action, 'warm', %s, %s, 0.75)",
@@ -263,7 +267,7 @@ def _phase_decision(cur, signals: dict) -> tuple:
             'priority': 'warm', 'reason': 'Engaged but no order',
         })
 
-    # Decision 2: New customer no repeat -> SMS nudge + subscription pitch
+    # Route 2: New customer no repeat -> SMS nudge + subscription pitch
     for contact in signals.get('new_customer_no_repeat', [])[:15]:
         cur.execute(
             "SELECT create_opportunity(%s, 'send_sms'::opportunity_action, 'warm', %s, %s, 0.80)",
@@ -281,7 +285,7 @@ def _phase_decision(cur, signals: dict) -> tuple:
             'priority': 'warm', 'reason': 'New customer no repeat',
         })
 
-    # Decision 3: Lapsed re-engaged -> Sales call (high intent!)
+    # Route 3: Lapsed re-engaged -> Sales call (high intent!)
     for contact in signals.get('lapsed_reengaged', []):
         cur.execute(
             "SELECT create_opportunity(%s, 'field_sales_call'::opportunity_action, 'hot', %s, %s, 0.90)",
@@ -297,7 +301,7 @@ def _phase_decision(cur, signals: dict) -> tuple:
             'priority': 'hot', 'reason': 'Lapsed customer re-engaged',
         })
 
-    # Decision 4: Reorder intent in transcripts -> Immediate SMS
+    # Route 4: Reorder intent in transcripts -> Immediate SMS
     for contact in signals.get('reorder_intent', []):
         cur.execute(
             "SELECT create_opportunity(%s, 'send_sms'::opportunity_action, 'hot', %s, %s, 0.92)",
@@ -314,7 +318,7 @@ def _phase_decision(cur, signals: dict) -> tuple:
             'priority': 'hot', 'reason': 'Reorder intent in transcript',
         })
 
-    # Decision 5: App customers -> Campaign move to APP_TO_DIRECT + SMS
+    # Route 5: App customers -> Campaign move to APP_TO_DIRECT + SMS
     for contact in signals.get('app_customers_for_conversion', [])[:25]:
         # Move to APP_TO_DIRECT Instantly campaign
         cur.execute(
@@ -342,7 +346,7 @@ def _phase_decision(cur, signals: dict) -> tuple:
             'priority': 'warm', 'reason': f"App customer -> direct conversion",
         })
 
-    # Decision 6: Subscription candidates -> SMS pitch
+    # Route 6: Subscription candidates -> SMS pitch
     for contact in signals.get('subscription_candidates', [])[:20]:
         cur.execute(
             "SELECT create_opportunity(%s, 'send_sms'::opportunity_action, 'warm', %s, %s, 0.78)",
@@ -360,7 +364,7 @@ def _phase_decision(cur, signals: dict) -> tuple:
             'priority': 'warm', 'reason': f"Subscription candidate ({contact.get('total_orders', 0)} orders)",
         })
 
-    # Decision 7: High-value at risk -> Sales call
+    # Route 7: High-value at risk -> Sales call
     for contact in signals.get('high_value_at_risk', [])[:10]:
         cur.execute(
             "SELECT create_opportunity(%s, 'field_sales_call'::opportunity_action, 'hot', %s, %s, 0.88)",
@@ -386,17 +390,17 @@ def _phase_decision(cur, signals: dict) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# PHASE 5: EXECUTION — Run lifecycle engine and return actions for n8n
+# PHASE 5: DISPATCH — Run Stage Engine and return actions for n8n
 # ---------------------------------------------------------------------------
-def _phase_execution(cur) -> dict:
-    """Run lifecycle rules and prepare execution payload for n8n."""
+def _phase_dispatch(cur) -> dict:
+    """Run Stage Engine rules and prepare dispatch payload for n8n."""
     stats = {}
 
-    # Run the full lifecycle rule engine
+    # Run the Stage Engine (rule-based lifecycle segment transitions)
     cur.execute("SELECT * FROM run_lifecycle_cycle()")
     row = cur.fetchone()
-    stats['lifecycle_contacts_updated'] = row.get('contacts_updated', 0)
-    stats['lifecycle_campaigns_queued'] = row.get('campaigns_queued', 0)
+    stats['stage_contacts_updated'] = row.get('contacts_updated', 0)
+    stats['stage_campaigns_queued'] = row.get('campaigns_queued', 0)
 
     # Get pending actions for n8n
     cur.execute("SELECT count(*) as cnt FROM campaign_queue WHERE status = 'pending'")
@@ -409,39 +413,40 @@ def _phase_execution(cur) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# MAIN ENDPOINT — Full intelligence cycle
+# MAIN ENDPOINT — Full Contact Sweep
 # ---------------------------------------------------------------------------
 @router.post("/run-cycle", response_model=CycleResult)
 def run_intelligence_cycle():
     """
-    Run the complete intelligence cycle.
+    Run the complete Contact Sweep.
     Called hourly by n8n. Returns all actions that need execution.
 
-    Flow: INTAKE -> EVIDENCE -> INFERENCE -> DECISION -> EXECUTION
+    Flow: COLLECT -> PROFILE -> SIGNAL -> ROUTE -> DISPATCH
+    (Entirely rule-based — no Claude calls. AI Stack runs separately via agents.py.)
     """
     with get_cursor(commit=True) as cur:
-        # Phase 1: Intake
-        intake_stats = _phase_intake(cur)
+        # Phase 1: Collect
+        collect_stats = _phase_collect(cur)
 
-        # Phase 2: Evidence
-        evidence_stats = _phase_evidence(cur)
+        # Phase 2: Profile
+        profile_stats = _phase_profile(cur)
 
-        # Phase 3: Inference
-        inference_counts, raw_signals = _phase_inference(cur)
+        # Phase 3: Signal
+        signal_counts, raw_signals = _phase_signal(cur)
 
-        # Phase 4: Decision
-        decision_stats, actions = _phase_decision(cur, raw_signals)
+        # Phase 4: Route
+        route_stats, actions = _phase_route(cur, raw_signals)
 
-        # Phase 5: Execution
-        execution_stats = _phase_execution(cur)
+        # Phase 5: Dispatch
+        dispatch_stats = _phase_dispatch(cur)
 
     return CycleResult(
         timestamp=datetime.utcnow().isoformat(),
-        intake=intake_stats,
-        evidence=evidence_stats,
-        inference=inference_counts,
-        decisions=decision_stats,
-        execution=execution_stats,
+        collect=collect_stats,
+        profile=profile_stats,
+        signal=signal_counts,
+        route=route_stats,
+        dispatch=dispatch_stats,
     )
 
 

@@ -218,6 +218,56 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
 .info-banner { border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; font-size: 0.85rem; line-height: 1.5; }
 .info-banner.warn { background: #fff5f5; border: 1.5px solid #f5c2c7; color: #842029; }
 .info-banner.info { background: #f0f8ff; border: 1.5px solid #bee5eb; color: #0c5460; }
+
+/* ── Chat Panel Tiles ───────────────────────────────────────── */
+.cb-section-label {
+  font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.09em;
+  color: #aaa; font-weight: 700; margin: 18px 0 8px;
+}
+/* Three-engine cards */
+.engine-tiles { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; }
+.engine-tile {
+  padding: 15px 16px; border-radius: 10px; cursor: pointer;
+  color: white; border: none; text-align: left; line-height: 1.3;
+  transition: opacity 0.15s, transform 0.12s; width: 100%;
+}
+.engine-tile:hover { opacity: 0.88; transform: translateY(-2px); }
+.engine-tile .e-icon { font-size: 1.4rem; display: block; margin-bottom: 5px; }
+.engine-tile .e-name { font-weight: 700; font-size: 0.92rem; }
+.engine-tile .e-desc { font-size: 0.73rem; opacity: 0.82; margin-top: 3px; }
+.engine-stage { background: linear-gradient(135deg,#2a9d8f,#1c7a72); }
+.engine-sweep { background: linear-gradient(135deg,#457b9d,#2c5e7c); }
+.engine-ai    { background: linear-gradient(135deg,#6c63ff,#4a43c0); }
+
+/* 12-feature grid */
+.feature-tiles-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+.feature-tile {
+  padding: 11px 13px; border-radius: 8px; cursor: pointer; text-align: left;
+  background: white; border: 1.5px solid #e8e8f0;
+  transition: border-color 0.14s, box-shadow 0.14s; width: 100%;
+}
+.feature-tile:hover { border-color: #1a1a2e; box-shadow: 0 2px 8px rgba(0,0,0,.09); }
+.feature-tile .ft-icon { font-size: 1.1rem; display: block; margin-bottom: 4px; }
+.feature-tile .ft-name { font-weight: 600; color: #1a1a2e; font-size: 0.82rem; }
+.feature-tile .ft-desc { font-size: 0.7rem; color: #999; margin-top: 2px; line-height: 1.3; }
+
+/* Customer lifecycle stages */
+.lifecycle-flow { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.lc-stage {
+  padding: 7px 13px; border-radius: 18px; cursor: pointer; font-size: 0.78rem;
+  font-weight: 600; border: 2px solid transparent; transition: all 0.13s; white-space: nowrap;
+}
+.lc-stage:hover { border-color: currentColor; transform: translateY(-1px); }
+.lc-arrow { color: #ccc; font-size: 0.9rem; user-select: none; }
+.lc-cold    { background:#f0f4f8; color:#5c7080; }
+.lc-engaged { background:#edf5ff; color:#2567a4; }
+.lc-new     { background:#e8f8f1; color:#1b7a50; }
+.lc-active  { background:#d4f7e8; color:#0d6640; }
+.lc-lapsed  { background:#fff4e5; color:#b05600; }
+.lc-churned { background:#ffeaea; color:#b91c1c; }
+
+/* override max-width for chat panel */
+#panel-chat.panel { max-width: 1100px; }
 </style>
 </head>
 <body>
@@ -455,19 +505,136 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
 
 <!-- ══════════════════════════════════════════════ CHAT ══════════════════ -->
 <div id="panel-chat" class="panel">
+
+  <div style="font-size:0.85rem;color:#666;margin-bottom:2px;line-height:1.5">
+    Click any tile to explore that feature, or ask anything below.
+    <span style="color:#e63946;font-weight:600"> For live data queries, use the Search tab.</span>
+  </div>
+
+  <!-- ── Three Engines ── -->
+  <div class="cb-section-label">Three Engines</div>
+  <div class="engine-tiles">
+    <button class="engine-tile engine-stage" onclick="askTile('How does the Stage Engine work? What SQL rules move contacts between lifecycle stages, what triggers each transition, and where are those rules maintained?')">
+      <span class="e-icon">⚙️</span>
+      <div class="e-name">Stage Engine</div>
+      <div class="e-desc">SQL rules · lifecycle segment transitions · no Claude</div>
+    </button>
+    <button class="engine-tile engine-sweep" onclick="askTile('Walk me through the 5 Contact Sweep phases in detail — COLLECT, PROFILE, SIGNAL, ROUTE, DISPATCH — what each does, what data it reads, and what it produces.')">
+      <span class="e-icon">🔄</span>
+      <div class="e-name">Contact Sweep</div>
+      <div class="e-desc">Hourly loop · COLLECT → PROFILE → SIGNAL → ROUTE → DISPATCH · no Claude</div>
+    </button>
+    <button class="engine-tile engine-ai" onclick="askTile('How does the AI Stack work? Explain the 4 layers — Observer agents (sentiment/intent/engagement), Advisor agents (stage/channel/offer/escalation), Orchestrator (final action), and Report agents — what each does and when it runs.')">
+      <span class="e-icon">🧠</span>
+      <div class="e-name">AI Stack</div>
+      <div class="e-desc">Claude layers · Observer → Advisor → Orchestrator → Reports</div>
+    </button>
+  </div>
+
+  <!-- ── 12 Features ── -->
+  <div class="cb-section-label">Features</div>
+  <div class="feature-tiles-grid">
+
+    <button class="feature-tile" onclick="askTile('How does Order Intake work end-to-end? What happens when a daily CSV is uploaded — how are contacts created or updated, what order records are written, and what triggers fire after ingestion?')">
+      <span class="ft-icon">🛍️</span>
+      <div class="ft-name">Order Intake</div>
+      <div class="ft-desc">CSV upload · contact upsert · Shipday sync</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('How does the SMS system work? What triggers an outbound SMS, how is it sent via Telnyx, how are inbound replies collected, and how does the system handle call recordings and transcripts?')">
+      <span class="ft-icon">📱</span>
+      <div class="ft-name">SMS</div>
+      <div class="ft-desc">Telnyx · outbound dispatch · inbound MDR · call transcripts</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('How does the Broadcast feature work? How do I create a delay alert or a promo broadcast, how are recipients selected, and how is the message dispatched across SMS and email channels?')">
+      <span class="ft-icon">📢</span>
+      <div class="ft-name">Broadcast</div>
+      <div class="ft-desc">Delay alerts · promo blasts · SMS + email dispatch</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('How does the email campaign system work with Instantly? How are contacts assigned to campaigns based on lifecycle stage, how do campaign moves happen, and how does performance get synced back to the DB?')">
+      <span class="ft-icon">📧</span>
+      <div class="ft-name">Email Campaigns</div>
+      <div class="ft-desc">Instantly · lifecycle-mapped campaigns · campaign moves</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('How does the Contact Sweep signal detection work? What are the 7 SQL signal types it detects, what SQL functions run for each, and what opportunities does each signal create?')">
+      <span class="ft-icon">🔍</span>
+      <div class="ft-name">Intelligence</div>
+      <div class="ft-desc">7 SQL signals · opportunity creation · Contact Sweep SIGNAL phase</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('Explain the AI Stack in detail — which Claude model handles each agent, what inputs each agent receives, what tools they call, and how the Orchestrator makes the final decision. Include the contact_observations and action_plans tables.')">
+      <span class="ft-icon">🤖</span>
+      <div class="ft-name">AI Stack</div>
+      <div class="ft-desc">Observer · Advisor · Orchestrator · 4 layers · Claude</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('How does the Field Agent feature work? What does the daily field brief contain, how are Airtable sales tasks created, and how do call outcomes feed back into the system?')">
+      <span class="ft-icon">👷</span>
+      <div class="ft-name">Field Agent</div>
+      <div class="ft-desc">Daily brief · Airtable tasks · call outcome sync</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('How does the Playbook (Agent Rules) system work? What are the 6 rule categories (exclusion, priority, observer, advisor, messaging, general), how are they stored in Airtable and synced to DB, and how does each layer of the AI Stack receive only the rules relevant to it?')">
+      <span class="ft-icon">📋</span>
+      <div class="ft-name">Agent Rules</div>
+      <div class="ft-desc">Playbook · 6 categories · Airtable sync · RAG per layer</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('How is the menu managed end-to-end? How does Airtable Menu Catalog sync to Postgres, how does the AI Stack use menu data to personalise copy, and how does the weekly menu sync work?')">
+      <span class="ft-icon">🍽️</span>
+      <div class="ft-name">Menu</div>
+      <div class="ft-desc">Airtable catalog · Postgres sync · AI personalisation</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('How does the Growth Agent work? Explain the 4-phase loop — HYPOTHESIZE, EXPERIMENT, MEASURE, HARVEST — what the Competitor Research Agent does, and how proven experiments become discovered signals.')">
+      <span class="ft-icon">📈</span>
+      <div class="ft-name">Growth</div>
+      <div class="ft-desc">A/B experiments · competitor research · hypothesis loop</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('How does the customer-facing chatbot work? How is it indexed from Google Docs, how does the RAG retrieval work, what is the chunking strategy, and what kinds of questions can it answer?')">
+      <span class="ft-icon">💬</span>
+      <div class="ft-name">Chatbot</div>
+      <div class="ft-desc">Google Docs index · RAG · vector search · customer Q&amp;A</div>
+    </button>
+
+    <button class="feature-tile" onclick="askTile('What system-level workflows run and what does each one do? Explain the Action Queue Executor — what action types it handles, which external services it calls, and how it processes each row from action_queue.')">
+      <span class="ft-icon">⚙️</span>
+      <div class="ft-name">System</div>
+      <div class="ft-desc">Action Queue Executor · E2E tests · maintenance jobs</div>
+    </button>
+
+  </div><!-- /feature-tiles-grid -->
+
+  <!-- ── Customer Journey ── -->
+  <div class="cb-section-label">Customer Journey — click any stage</div>
+  <div class="lifecycle-flow">
+    <button class="lc-stage lc-cold" onclick="askTile('What defines a Cold contact in DabbahWala? How does a contact enter the Cold stage, what email campaign do they receive, and what actions does the system take to move them toward Engaged?')">🧊 Cold</button>
+    <span class="lc-arrow">→</span>
+    <button class="lc-stage lc-engaged" onclick="askTile('What defines an Engaged contact? What behaviour (email opens, clicks) triggers entry into this stage, what does the Contact Sweep SIGNAL phase detect for them, and what opportunity is created?')">👀 Engaged</button>
+    <span class="lc-arrow">→</span>
+    <button class="lc-stage lc-new" onclick="askTile('What defines a New Customer in the system? What triggers this stage transition, what campaign do they enter, and what does the system do differently for first-time customers versus repeat customers?')">🆕 New Customer</button>
+    <span class="lc-arrow">→</span>
+    <button class="lc-stage lc-active" onclick="askTile('What defines an Active Customer? What makes someone remain active versus slip to lapsed, what campaign keeps them engaged, and how does the AI Stack personalise outreach for repeat customers?')">✅ Active Customer</button>
+    <span class="lc-arrow">→</span>
+    <button class="lc-stage lc-lapsed" onclick="askTile('What defines a Lapsed Customer and how does the system detect lapsing? What does the Lapsed Sweep workflow do, how does re-engagement escalate over time, and what signals does the Contact Sweep detect for lapsed contacts who re-engage?')">⚠️ Lapsed</button>
+    <span class="lc-arrow">→</span>
+    <button class="lc-stage lc-churned" onclick="askTile('What defines a Churned or Opted-out contact? How is opt-out handled across SMS and email, what happens in the database when someone churns, and are there any re-engagement attempts after churn?')">🚫 Churned / Opt-out</button>
+  </div>
+
+  <!-- ── Chat ── -->
+  <div class="cb-section-label" style="margin-top:22px">Ask anything</div>
   <div class="chat-layout">
 
     <!-- Left: input + history -->
     <div class="chat-main">
-      <div style="font-size:0.87rem;color:#666;margin-bottom:4px;line-height:1.5">
-        Ask anything about <strong>how this system works</strong> — business logic, lifecycle rules,
-        agent pipeline, n8n workflows, integrations.
-        <span style="color:#e63946;font-weight:600"> For live data, use the Search tab.</span>
-      </div>
       <div class="cb-suggest-wrap">
         <div class="chat-input-row">
           <textarea id="cb-question"
-            placeholder="Ask about the system…"
+            placeholder="Ask about features, lifecycle, the three engines, or technical details…"
             oninput="_cbInput(this)"
             onkeydown="_cbKeyDown(event)"
             onblur="setTimeout(_hideSuggest, 150)"></textarea>
@@ -479,53 +646,52 @@ textarea { resize: vertical; min-height: 80px; font-family: inherit; }
       <div id="cb-history" class="chat-history"></div>
     </div>
 
-    <!-- Right: categorised chips -->
+    <!-- Right: technical questions -->
     <div class="chat-sidebar">
 
       <div class="chip-section">
-        <div class="chip-category" style="color:#6c63ff">Functionality</div>
+        <div class="chip-category" style="color:#2a9d8f">Architecture</div>
         <div class="chip-row" style="flex-direction:column">
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">Why is a 4-layer AI pipeline better than a single AI call?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the FastAPI router layer decide which agent to invoke?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the RAG layer retrieve context for the chatbot?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the MCP layer work and what tools does it expose?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How do the Stage Engine, Contact Sweep, and AI Stack work together?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What is the overall FastAPI + n8n + Postgres architecture?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does data flow from an order CSV to an SMS being sent?</button>
         </div>
       </div>
 
       <div class="chip-section">
-        <div class="chip-category" style="color:#2a9d8f">Business Process</div>
+        <div class="chip-category" style="color:#6c63ff">AI Stack — Technical</div>
         <div class="chip-row" style="flex-direction:column">
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What happens end-to-end when a new order is placed?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How do contacts progress through lifecycle stages?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the system re-engage lapsed customers?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What triggers an escalation to Airtable?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">Why is a 4-layer AI pipeline better than a single Claude call?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What does contact_observations store vs action_plans?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does prompt caching work and why does it matter?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the Orchestrator break ties between Advisor agents?</button>
         </div>
       </div>
 
       <div class="chip-section">
-        <div class="chip-category" style="color:#e76f51">Goal Oriented</div>
+        <div class="chip-category" style="color:#457b9d">Database</div>
         <div class="chip-row" style="flex-direction:column">
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What is the purpose of this system and how does it achieve it?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the system decide whether to send SMS vs email?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How are daily reports generated and what do they cover?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What database tables power the Stage Engine?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does campaign_routing work and why is it the single source of truth?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What stored procedures exist and what does each one do?</button>
         </div>
       </div>
 
       <div class="chip-section">
-        <div class="chip-category" style="color:#457b9d">Technical</div>
+        <div class="chip-category" style="color:#e76f51">n8n Workflows</div>
         <div class="chip-row" style="flex-direction:column">
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What is the overall system architecture?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What database tables power the lifecycle engine?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How are API endpoints authenticated?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What n8n workflows are active and when does each trigger?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the Action Queue Executor route action_queue rows?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the Contact Sweep n8n workflow call the Python API?</button>
         </div>
       </div>
 
       <div class="chip-section">
-        <div class="chip-category" style="color:#c77dff">Agents &amp; MCP</div>
+        <div class="chip-category" style="color:#c77dff">MCP &amp; Integrations</div>
         <div class="chip-row" style="flex-direction:column">
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What agents exist and what is each one responsible for?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does the orchestrator decide which specialist agent to use?</button>
-          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How would you add a new agent or MCP tool to this system?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">What MCP tools are available and what data can they query?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does Telnyx SMS sending and MDR polling work?</button>
+          <button class="chip" style="text-align:left;border-radius:8px" onclick="askSuggestion(this)">How does Instantly campaign assignment and lead seeding work?</button>
         </div>
       </div>
 
@@ -838,6 +1004,7 @@ function _cbKeyDown(e) {
 }
 
 function askSuggestion(btn){document.getElementById('cb-question').value=btn.textContent.trim();sendChat();}
+function askTile(question){document.getElementById('cb-question').value=question;sendChat();}
 
 function _renderMd(t){
   return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
