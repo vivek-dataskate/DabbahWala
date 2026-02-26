@@ -311,10 +311,10 @@ def get_campaign_analytics():
         campaign_id = meta["instantly_id"]
         try:
             resp = httpx.get(
-                "https://api.instantly.ai/api/v2/analytics/campaigns/summary",
+                "https://api.instantly.ai/api/v2/campaigns/analytics",
                 headers=headers,
-                params={"id": campaign_id},
-                timeout=10,
+                params={"id": campaign_id, "exclude_total_leads_count": "true"},
+                timeout=30,
             )
             resp.raise_for_status()
             raw = resp.json()

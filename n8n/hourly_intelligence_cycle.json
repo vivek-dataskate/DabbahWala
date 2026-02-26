@@ -26,23 +26,28 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://api.instantly.ai/api/v1/analytics/campaign/summary",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
+        "url": "=https://api.instantly.ai/api/v2/campaigns/analytics",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer OThjYmE4NjQtMjMwYS00ZGM2LWIzMTgtNWY2YzYxZTZmNDEyOmVwbU1CSFRWa3ZiaQ=="
+            }
+          ]
+        },
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
-              "name": "limit",
-              "value": "100"
-            },
-            {
-              "name": "since",
-              "value": "={{ $now.minus(2, 'hours').toISO() }}"
+              "name": "start_date",
+              "value": "={{ $now.minus(2, 'hours').format('yyyy-MM-dd') }}"
             }
           ]
         },
-        "options": {}
+        "options": {
+          "timeout": 60000
+        }
       },
       "id": "poll-instantly",
       "name": "Poll Instantly Events",
@@ -52,12 +57,7 @@
         300,
         300
       ],
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "instantly-api-key",
-          "name": "Instantly API Key"
-        }
-      }
+      "onError": "continueRegularOutput"
     },
     {
       "parameters": {
