@@ -11,6 +11,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _fire_agent_cycle_by_id(contact_id: int, trigger: str) -> None:
+    """Run agent cycle for a contact we only know by id (no email yet)."""
+    try:
+        from app.routers.agents import _run_full_cycle
+        logger.info("Agent cycle triggered by %s for contact_id=%s", trigger, contact_id)
+        _run_full_cycle(contact_id)
+    except Exception as e:
+        logger.error("Background agent cycle failed contact_id=%s trigger=%s: %s", contact_id, trigger, e, exc_info=True)
+
+
 def _fire_agent_cycle(contact_email: str, trigger: str) -> None:
     """Look up contact_id by email and run the full agent cycle — non-blocking.
 
@@ -68,7 +78,63 @@ def get_pending_sms():
 def store_message(payload: TelnyxMessageIn):
     # For inbound SMS, we have from_number (customer phone) but not email — resolve it
     inbound_phone = payload.from_number if payload.direction == "inbound" else None
-    contact_email = _resolve_email(payload.contact_phone or inbound_phone, payload.contact_email)
+    phone_for_lookup = payload.contact_phone or inbound_phone
+
+    try:
+        contact_email = _resolve_email(phone_for_lookup, payload.contact_email)
+    except HTTPException as exc:
+        if exc.status_code == 404 and payload.direction == "inbound" and phone_for_lookup:
+            # First message from an unknown number — create the contact now so the
+            # message body is stored before the agent cycle runs. Observer will then
+            # read the SMS text and Advisor/Orchestrator will respond appropriately.
+            normalized = "".join(c for c in phone_for_lookup if c.isdigit() or c == "+")
+            contact_phone = normalized or phone_for_lookup
+            with get_cursor(commit=True) as cur:
+                cur.execute(
+                    """INSERT INTO contacts
+                           (phone, first_name, last_name, lifecycle_segment,
+                            email_nurture_enabled, primary_source)
+                       VALUES (%s, 'Unknown', '', 'cold', false, 'Inbound')
+                       ON CONFLICT DO NOTHING""",
+                    (contact_phone,),
+                )
+                cur.execute("SELECT id FROM contacts WHERE phone = %s LIMIT 1", (contact_phone,))
+                contact_row = cur.fetchone()
+                if not contact_row:
+                    logger.error("store_message: failed to create/find contact phone=%s", phone_for_lookup)
+                    raise
+                contact_id = contact_row["id"]
+                cur.execute(
+                    """INSERT INTO telnyx_messages
+                           (contact_id, direction, from_number, to_number, body,
+                            telnyx_msg_id, status, is_delivery_staff, metadata, source)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, 'telnyx_auto')
+                       RETURNING id""",
+                    (
+                        contact_id, payload.direction, payload.from_number,
+                        payload.to_number, payload.body, payload.telnyx_msg_id,
+                        payload.status, payload.is_delivery_staff,
+                        json.dumps(payload.metadata),
+                    ),
+                )
+                msg_id = cur.fetchone()["id"]
+                cur.execute(
+                    "INSERT INTO events (contact_id, event_type, metadata) VALUES (%s, 'sms_received', %s::jsonb)",
+                    (contact_id, json.dumps({"telnyx_msg_id": payload.telnyx_msg_id or ""})),
+                )
+            logger.info(
+                "store_message: auto-created contact phone=%s id=%s — stored inbound msg id=%s body=%r",
+                phone_for_lookup, contact_id, msg_id, (payload.body or "")[:80],
+            )
+            # Fire agent cycle by contact_id — Observer reads the SMS body and reasons
+            threading.Thread(
+                target=_fire_agent_cycle_by_id,
+                args=(contact_id, "sms_inbound_new_contact"),
+                daemon=True,
+            ).start()
+            return IdResponse(id=msg_id)
+        raise
+
     logger.info(
         "store_message: dir=%s from=%s to=%s email=%s",
         payload.direction, payload.from_number, payload.to_number, contact_email,
@@ -100,7 +166,6 @@ def store_message(payload: TelnyxMessageIn):
             raise
 
     # For inbound SMS only, fire agent immediately — customer replied, context is live
-    # Outbound SMS is evidence stored; nightly cycle reads it with full context
     if payload.direction == "inbound":
         threading.Thread(
             target=_fire_agent_cycle,
