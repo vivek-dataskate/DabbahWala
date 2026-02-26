@@ -89,9 +89,15 @@ If the env var is empty, read it from that file and use it directly in API calls
   - Categories: exclusion, priority, inference, decision, messaging, general
 
 ### n8n Workflow Status (2026-02-26)
-- **34 total workflows**: 28 active-scheduled + 4 manual-only + 2 deactivated
+- **31 total workflows**: 26 active-scheduled + 4 manual-only + 1 deactivated (3 deleted this session)
+- All workflows use **centralized credentials**: single "DW Admin Secret" HTTP Header Auth → `GET /api/credentials` bootstrap
 - All workflows renamed to **12-feature taxonomy** format: `[Feature Group] Descriptive Name`
 - Full ID mapping in `n8n/config.json`
+
+**Deleted (no longer in n8n):**
+- `[System] Daily Tests` (`M7bwNMGrUMRvAHH4`) — superseded by `[System] Feature Tests`
+- `[Claude — Evidence] Weekly Menu Sync` (`sb0jHek7Q9gPeCUd`) — superseded by `[Menu] Catalog Sync`
+- `[Claude — Inference] Goal-Oriented Agent Cycle` (`NzNeVrjbIoKGge5M`) — duplicate of `[Growth] Goal Agent`
 
 **Key workflow IDs:**
 | Workflow | ID | Schedule |
@@ -127,9 +133,10 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 **Manual-only (inactive):** `[Order Intake] Historical Import` (`apAefjZE2Uy6F17n`), `[SMS] Historical Import` (`YANIKsHk767NDEXL`), `[Email Campaigns] Bulk Seed` (`1s7npKViuy1eyowW`), `[Broadcast] Broadcast Form` (`mUptDrymXZrtlrp8`)
 
-**Deactivated:** `[System] Daily Tests` (`M7bwNMGrUMRvAHH4`) — superseded by `[System] Feature Tests`; `[Claude — Evidence] Weekly Menu Sync` (`sb0jHek7Q9gPeCUd`) — superseded by `[Menu] Catalog Sync`
+**Deactivated:** `[Chatbot] Query Form` (`gm3qFxu22akrTV3Z`) — on-demand only
 
-- Credential IDs for all integrations are tracked in `n8n/config.json`
+- Credential IDs: only `DW Admin Secret` (HTTP Header Auth) remains; all others removed from n8n
+- All other integration keys fetched at runtime via `GET /api/credentials` (requires `ADMIN_SECRET` Render env var)
 
 ### Python Router Reorganization (2026-02-26)
 - `app/routers/orders.py` — merged from `shipday_historical.py` + `shipday_sync.py`; prefix `/api/shipday`
