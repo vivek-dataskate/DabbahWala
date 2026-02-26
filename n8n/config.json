@@ -399,16 +399,17 @@
     },
     "airtable_menu_sync": {
       "id": "baZV5ViA5lXNCTWR",
-      "name": "[Airtable — Evidence] Menu Sync",
+      "name": "[Airtable — Evidence] Menu Catalog Sync",
       "tags": [
         "DabbahWala",
         "Airtable",
         "Evidence"
       ],
-      "schedule": "Every hour",
+      "schedule": "Daily 6:30 AM",
       "active": true,
       "file": "airtable_menu_sync.json",
-      "note": "Pulls all records from Airtable 'Weekly Menu' table and POSTs to POST /api/menu/sync to upsert into weekly_menu_schedule in Postgres."
+      "airtable_table_id": "tblmZBNdQvmFcvVai",
+      "note": "Pulls all records from Airtable 'Menu Catalog' (tblmZBNdQvmFcvVai), upserts into menu_catalog in Postgres, detects deletions and marks them discarded, records history in menu_catalog_history."
     },
     "competitor_agent_cycle": {
       "id": "",

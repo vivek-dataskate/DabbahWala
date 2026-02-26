@@ -1,5 +1,5 @@
 {
-  "name": "[Airtable \u2014 Evidence] Menu Sync",
+  "name": "[Airtable \u2014 Evidence] Menu Catalog Sync",
   "nodes": [
     {
       "parameters": {
@@ -74,7 +74,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconsole.log(`[Menu Sync] OK \u2014 upserted=${data.upserted} errors=${data.errors} total=${data.total}`);\nreturn [{ json: data }];"
+        "jsCode": "const data = $input.first().json;\nconsole.log(`[Menu Catalog Sync] OK \u2014 upserted=${data.upserted} discarded=${data.discarded} history_events=${data.history_events} errors=${data.errors} total=${data.total}`);\nreturn [{ json: data }];"
       },
       "id": "log-success",
       "name": "Log Success",
@@ -87,7 +87,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconsole.error(`[Menu Sync] Errors \u2014 upserted=${data.upserted} errors=${data.errors} total=${data.total}`);\nreturn [{ json: data }];"
+        "jsCode": "const data = $input.first().json;\nconsole.error(`[Menu Catalog Sync] Errors \u2014 upserted=${data.upserted} discarded=${data.discarded} history_events=${data.history_events} errors=${data.errors} total=${data.total}`);\nreturn [{ json: data }];"
       },
       "id": "log-errors",
       "name": "Log Errors",

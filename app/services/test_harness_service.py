@@ -343,7 +343,7 @@ def _g2_schema(suite: TestSuite) -> None:
     CORE_TABLES = [
         "contacts", "events", "orders", "order_items",
         "telnyx_messages", "telnyx_calls", "delivery_status",
-        "engagement_rollups", "menu_items", "opportunities",
+        "engagement_rollups", "menu_catalog", "menu_catalog_history", "opportunities",
     ]
 
     def core_tables():
@@ -1078,23 +1078,32 @@ def _g9_airtable(suite: TestSuite) -> None:
     def menu_fetch():
         sc, body = _req(
             "GET",
-            f"{AIRTABLE_BASE}/{AIRTABLE_BASE_ID}/Weekly%20Menu?maxRecords=5",
+            f"{AIRTABLE_BASE}/{AIRTABLE_BASE_ID}/Menu%20Catalog?maxRecords=5",
             headers=_airtable_headers(),
         )
-        assert sc == 200, f"Airtable Weekly Menu returned {sc}: {str(body)[:300]}"
+        assert sc == 200, f"Airtable Menu Catalog returned {sc}: {str(body)[:300]}"
         records = (body or {}).get("records", [])
+        assert len(records) > 0, "Airtable Menu Catalog has no records"
         return {"record_count": len(records)}
     _run(suite, "airtable_menu_fetch", G, menu_fetch)
 
     def menu_sync():
-        # /api/menu/sync is also used by the Playwright scraper (requires a body).
-        # Verify Airtable menu data reached Postgres instead.
         with get_cursor(commit=False) as cur:
-            cur.execute("SELECT COUNT(*) AS cnt FROM menu_items")
+            cur.execute("SELECT COUNT(*) AS cnt FROM menu_catalog WHERE active = TRUE")
             cnt = cur.fetchone()["cnt"]
-        assert cnt > 0, f"menu_items table is empty — Airtable sync may not have run"
-        return {"menu_items_in_db": cnt}
+        assert cnt > 0, f"menu_catalog table has no active items — Airtable sync may not have run"
+        return {"active_menu_items": cnt}
     _run(suite, "airtable_menu_sync", G, menu_sync)
+
+    def menu_catalog_history():
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT COUNT(*) AS cnt FROM menu_catalog_history WHERE change_type = 'added'"
+            )
+            cnt = cur.fetchone()["cnt"]
+        assert cnt >= 100, f"menu_catalog_history has only {cnt} 'added' events — expected ≥ 100"
+        return {"history_added_events": cnt}
+    _run(suite, "menu_catalog_history", G, menu_catalog_history)
 
     def playbook_sync():
         sc, body = _local("POST", "/api/playbook/sync-from-airtable",
@@ -1268,12 +1277,12 @@ def _g11_orders(suite: TestSuite) -> None:
     _run(suite, "order_csv_first_name_backfill", G, order_csv_first_name_backfill)
 
     def menu_items_present():
-        """Verify menu_items table has content (synced from Airtable)."""
+        """Verify menu_catalog has active items (synced from Airtable)."""
         with get_cursor(commit=False) as cur:
-            cur.execute("SELECT COUNT(*) AS cnt FROM menu_items")
+            cur.execute("SELECT COUNT(*) AS cnt FROM menu_catalog WHERE active = TRUE")
             cnt = cur.fetchone()["cnt"]
-        assert cnt > 0, f"menu_items table is empty — Airtable sync may have failed"
-        return {"menu_item_count": cnt}
+        assert cnt > 0, f"menu_catalog has no active items — Airtable sync may have failed"
+        return {"active_menu_item_count": cnt}
     _run(suite, "menu_items_present", G, menu_items_present)
 
     def order_summary_endpoint():

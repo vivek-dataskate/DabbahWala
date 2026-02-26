@@ -6,7 +6,7 @@ import traceback
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
-from app.routers import agents, agent, airtable_menu, auth, campaigns, broadcasts, chatbot, competitor_agent, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, menu_sync, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, test_harness, webhooks
+from app.routers import agents, agent, airtable_menu, auth, campaigns, broadcasts, chatbot, competitor_agent, contacts, daily_orders, delivery, events, field_agent, goal_agent, growth_agent, intelligence, lifecycle, opportunities, playbook, prospects, query, reports, shipday_historical, shipday_sync, team_content, telnyx, test_harness, webhooks
 
 # ---------------------------------------------------------------------------
 # Structured logging — INFO by default, DEBUG when LOG_LEVEL=DEBUG in env
@@ -178,7 +178,6 @@ app.include_router(shipday_sync.router,       prefix="/api/shipday", tags=["ship
 app.include_router(daily_orders.router, prefix="/api/daily-orders", tags=["daily-orders"])
 app.include_router(intelligence.router, prefix="/api/intelligence", tags=["intelligence"])
 app.include_router(agent.router, prefix="/api/agent", tags=["agent"])
-app.include_router(menu_sync.router, prefix="/api/menu", tags=["menu"])
 app.include_router(growth_agent.router, prefix="/api/growth", tags=["growth"])
 app.include_router(playbook.router, prefix="/api/playbook", tags=["playbook"])
 app.include_router(query.router, prefix="/api/query", tags=["query"])
@@ -204,17 +203,6 @@ def dashboard(request: Request):
     with open(html_path) as f:
         return f.read()
 
-
-@app.get("/menu-dashboard", response_class=HTMLResponse)
-def menu_dashboard(request: Request):
-    """Menu management dashboard — requires @dabbahwala.com login."""
-    from app.routers.auth import get_current_user
-    from fastapi.responses import RedirectResponse
-    if not get_current_user(request):
-        return RedirectResponse(url="/login")
-    html_path = os.path.join(os.path.dirname(__file__), "menu_dashboard.html")
-    with open(html_path) as f:
-        return f.read()
 
 
 @app.get("/health")
