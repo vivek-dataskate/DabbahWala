@@ -8,7 +8,8 @@ Unlike the Intelligence Engine (which reacts to known signals) and the Claude Ag
      message angles, channel sequences that haven't been tried.
   2. SELECTS cohorts — picks an appropriately sized group of untouched contacts.
   3. DISPATCHES — creates opportunities the existing action queue will execute.
-  4. MEASURES — after 7 days, checks whether contacted contacts ordered.
+  4. MEASURES — after 14–28 days (depending on experiment type), checks whether contacted contacts ordered.
+               Adaptive early cutoff: scores sooner if 30+ conversion events already observed.
   5. LEARNS — Claude analyses results, updates the knowledge base, and informs
      the next round of hypotheses.
 
@@ -40,6 +41,18 @@ router = APIRouter()
 MODEL = "claude-sonnet-4-5-20250929"
 COHORT_MIN = 15
 COHORT_MAX = 60
+
+# Measurement window by experiment type.
+# Offer experiments need 3-4 ordering cycles; timing/angle need at least 2 weeks.
+MEASURE_DAYS = {
+    "offer":            28,  # 4 weeks — pricing/offer experiments need multiple ordering cycles
+    "channel_sequence": 21,  # 3 weeks — multi-step sequences need more time
+    "timing":           14,  # 2 weeks minimum
+    "message_angle":    14,  # 2 weeks minimum
+}
+# Adaptive early cutoff: score an experiment before its measure_at deadline if
+# the cohort has already generated this many conversion events (enough for significance).
+MIN_EVENTS_REQUIRED = 30
 
 
 # ---------------------------------------------------------------------------
@@ -313,7 +326,10 @@ def _measure_experiment(cur, experiment: dict) -> dict:
     """Check which cohort members ordered and compute conversion rate."""
     exp_id = experiment["id"]
 
-    # Check orders placed by cohort members since the experiment started
+    # Check orders placed by cohort members up to the experiment's measure_at deadline.
+    # Using the actual measure_at (not a fixed 7-day window) so the attribution window
+    # matches the experiment's configured length (14/21/28 days).
+    measure_at = experiment.get("measure_at")
     cur.execute(
         """UPDATE experiment_contacts ec
            SET ordered = true,
@@ -324,9 +340,9 @@ def _measure_experiment(cur, experiment: dict) -> dict:
            WHERE ec.experiment_id = %s
              AND o.contact_id = ec.contact_id
              AND o.created_at >= ec.sent_at
-             AND o.created_at <= ec.sent_at + interval '7 days'
+             AND o.created_at <= %s
              AND ec.ordered = false""",
-        (exp_id,),
+        (exp_id, measure_at),
     )
 
     # Totals
@@ -407,8 +423,10 @@ def run_growth_cycle():
                 "design": design,
             }
 
-        # Persist experiment
-        measure_at = datetime.now(tz=timezone.utc) + timedelta(days=7)
+        # Persist experiment — measurement window depends on experiment type
+        exp_type = design.get("experiment_type", "timing")
+        days = MEASURE_DAYS.get(exp_type, 14)
+        measure_at = datetime.now(tz=timezone.utc) + timedelta(days=days)
         cur.execute(
             """INSERT INTO experiments
                 (name, hypothesis, experiment_type, cohort_size, channel,
@@ -468,13 +486,29 @@ def measure_experiments():
 
     with get_cursor(commit=False) as cur:
         cur.execute(
-            """SELECT id, name, hypothesis, experiment_type, channel,
-                      message_template, offer_detail, cohort_size,
-                      started_at, measure_at
-               FROM experiments
-               WHERE status = 'running'
-                 AND measure_at <= now()
-               ORDER BY measure_at""",
+            """SELECT e.id, e.name, e.hypothesis, e.experiment_type, e.channel,
+                      e.message_template, e.offer_detail, e.cohort_size,
+                      e.started_at, e.measure_at
+               FROM experiments e
+               WHERE e.status = 'running'
+                 AND (
+                   -- Normal: measurement deadline has passed
+                   e.measure_at <= now()
+                   OR (
+                     -- Adaptive early cutoff: minimum 14-day window has passed
+                     -- AND the cohort has already generated enough conversion events
+                     now() >= e.started_at + interval '14 days'
+                     AND (
+                       SELECT COUNT(*)
+                       FROM experiment_contacts ec2
+                       JOIN orders o ON o.contact_id = ec2.contact_id
+                         AND o.created_at >= ec2.sent_at
+                       WHERE ec2.experiment_id = e.id
+                     ) >= %s
+                   )
+                 )
+               ORDER BY e.measure_at""",
+            (MIN_EVENTS_REQUIRED,),
         )
         due = [dict(r) for r in cur.fetchall()]
 

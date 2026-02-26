@@ -1,121 +1,114 @@
 {
   "name": "[Growth] Weekly Growth Agent",
+  "settings": {"executionOrder": "v1", "callerPolicy": "workflowsFromSameOwner", "availableInMCP": false},
+  "connections": {
+    "Every Monday 7:30 AM": {"main": [[{"node": "Get Credentials", "type": "main", "index": 0}]]},
+    "Get Credentials": {"main": [[{"node": "Refresh Baseline Conv Rate", "type": "main", "index": 0}]]},
+    "Refresh Baseline Conv Rate": {"main": [[{"node": "Measure Previous Experiments", "type": "main", "index": 0}]]},
+    "Measure Previous Experiments": {"main": [[{"node": "Design + Launch New Experiment", "type": "main", "index": 0}]]},
+    "Design + Launch New Experiment": {"main": [[{"node": "Get Growth Insights", "type": "main", "index": 0}]]},
+    "Get Growth Insights": {"main": [[{"node": "Build Weekly Report", "type": "main", "index": 0}]]},
+    "Build Weekly Report": {"main": [[{"node": "Email Growth Report", "type": "main", "index": 0}]]}
+  },
   "nodes": [
     {
       "parameters": {
         "rule": {
-          "interval": [
-            {
-              "field": "weeks",
-              "weeksInterval": 1,
-              "triggerAtDay": [
-                1
-              ],
-              "triggerAtHour": 7,
-              "triggerAtMinute": 30
-            }
-          ]
+          "interval": [{"field": "weeks", "weeksInterval": 1, "triggerAtDay": [1], "triggerAtHour": 7, "triggerAtMinute": 30}]
         }
       },
       "id": "schedule-trigger",
       "name": "Every Monday 7:30 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [
-        100,
-        300
-      ]
+      "position": [100, 300],
+      "notes": "FLOW: Schedule → Get Credentials → Refresh Baseline → Measure Experiments → Launch New Experiment → Get Insights → Build Report → Email Report\n\nFires once per week every Monday at 7:30 AM, kicking off the full growth agent cycle: measure last week's experiments, launch a new one, and email a summary report."
+    },
+    {
+      "id": "get-credentials",
+      "name": "Get Credentials",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [350, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://dabbahwala-latest.onrender.com/api/internal",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "credentials": {"httpHeaderAuth": {"id": "nODhwaXjVuf9ET7H", "name": "DW Admin Secret"}},
+      "notes": "Fetches runtime environment variables (e.g. REPORT_EMAIL_TO) from the backend. Required because n8n environment variables are not available on this instance. The Email Growth Report node reads REPORT_EMAIL_TO from this node's output."
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/growth/baseline/update",
-        "options": {
-          "timeout": 30000
-        }
+        "url": "https://dabbahwala-latest.onrender.com/api/growth/baseline/update",
+        "options": {"timeout": 30000}
       },
       "id": "update-baseline",
       "name": "Refresh Baseline Conv Rate",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        320,
-        300
-      ]
+      "position": [320, 300],
+      "notes": "Recalculates and stores the rolling 7-day baseline conversion rate in Postgres. Must run before measuring experiments so comparisons use a fresh denominator. Returns baseline_conv_rate used in the report."
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/growth/measure",
-        "options": {
-          "timeout": 120000
-        }
+        "url": "https://dabbahwala-latest.onrender.com/api/growth/measure",
+        "options": {"timeout": 120000}
       },
       "id": "measure-experiments",
       "name": "Measure Previous Experiments",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        540,
-        300
-      ]
+      "position": [540, 300],
+      "notes": "Scores all experiments whose measure_at date has passed. For each experiment: computes cohort conversion rate vs. baseline, marks winner/loss, records learnings in Postgres. Returns results[] array (winner flag, conversion rate, orders won, cohort size, learnings text)."
     },
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://dabbahwala-latest.onrender.com/api/growth/run-cycle",
-        "options": {
-          "timeout": 120000
-        }
+        "url": "https://dabbahwala-latest.onrender.com/api/growth/run-cycle",
+        "options": {"timeout": 120000}
       },
       "id": "run-growth-cycle",
       "name": "Design + Launch New Experiment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        760,
-        300
-      ]
+      "position": [760, 300],
+      "notes": "Calls the Claude-backed growth agent on the backend. Reads past experiment learnings, picks a high-leverage hypothesis, selects a cohort of contacts, assigns them a variant treatment (message/offer/channel), and writes the new experiment row to Postgres. Returns the new experiment details for the report."
     },
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://dabbahwala-latest.onrender.com/api/growth/insights",
-        "options": {
-          "timeout": 60000
-        }
+        "url": "https://dabbahwala-latest.onrender.com/api/growth/insights",
+        "options": {"timeout": 60000}
       },
       "id": "get-insights",
       "name": "Get Growth Insights",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        980,
-        300
-      ]
+      "position": [980, 300],
+      "notes": "Reads all completed experiments and returns a distilled insights_summary string — a synthesized paragraph of what has and has not worked across all experiments to date. Used as the closing section of the weekly report."
     },
     {
       "parameters": {
-        "jsCode": "// Build the weekly growth report email body\nconst newExp = $('Design + Launch New Experiment').first().json;\nconst measured = $('Measure Previous Experiments').first().json;\nconst insights = $('Get Growth Insights').first().json;\nconst baseline = $('Refresh Baseline Conv Rate').first().json;\n\nconst winners = (measured.results || []).filter(r => r.is_winner);\nconst losers = (measured.results || []).filter(r => !r.is_winner);\n\nconst lines = [\n  '=== GROWTH AGENT WEEKLY REPORT ===',\n  '',\n  `Baseline 7-day conversion rate: ${((baseline.baseline_conv_rate || 0) * 100).toFixed(1)}%`,\n  '',\n  '--- EXPERIMENTS MEASURED THIS WEEK ---',\n  `Total measured: ${measured.measured || 0}`,\n  `Winners: ${winners.length}`,\n  `Losses: ${losers.length}`,\n  '',\n];\n\nfor (const r of (measured.results || [])) {\n  lines.push(\n    `\u2022 [${r.is_winner ? '\u2705 WIN' : '\u274c LOSS'}] ${r.name}`,\n    `  Conv: ${((r.conversion_rate || 0) * 100).toFixed(1)}%  |  Orders: ${r.orders_won}/${r.cohort_size}`,\n    `  Learning: ${r.learnings || 'N/A'}`,\n    ''\n  );\n}\n\nlines.push('--- NEW EXPERIMENT LAUNCHED ---');\nif (newExp.status === 'launched') {\n  lines.push(\n    `Name: ${newExp.name}`,\n    `Type: ${newExp.experiment_type}  |  Channel: ${newExp.channel}  |  Cohort: ${newExp.cohort_size}`,\n    `Hypothesis: ${newExp.hypothesis}`,\n    `Measure by: ${newExp.measure_at}`,\n    ''\n  );\n} else {\n  lines.push(`Status: ${newExp.status || 'unknown'} \u2014 ${newExp.reason || ''}`, '');\n}\n\nlines.push('--- DISTILLED INSIGHTS ---');\nlines.push(insights.insights_summary || 'Not enough experiments completed yet.');\n\nreturn [{ json: { body: lines.join('\\n'), subject: `Growth Agent \u2014 Week of ${new Date().toISOString().slice(0, 10)}` } }];"
+        "jsCode": "// Build the weekly growth report as HTML\nconst newExp = $('Design + Launch New Experiment').first().json;\nconst measured = $('Measure Previous Experiments').first().json;\nconst insights = $('Get Growth Insights').first().json;\nconst baseline = $('Refresh Baseline Conv Rate').first().json;\n\nconst baselineRate = ((baseline.baseline_conv_rate || 0) * 100).toFixed(1);\nconst winners = (measured.results || []).filter(r => r.is_winner);\nconst losers = (measured.results || []).filter(r => !r.is_winner);\nconst weekOf = new Date().toISOString().slice(0, 10);\n\n// Experiment result rows\nlet resultRows = '';\nfor (const r of (measured.results || [])) {\n  const badge = r.is_winner\n    ? '<span style=\"color:#16a34a;font-weight:bold\">\u2705 WIN</span>'\n    : '<span style=\"color:#dc2626;font-weight:bold\">\u274c LOSS</span>';\n  const conv = ((r.conversion_rate || 0) * 100).toFixed(1);\n  resultRows += `\n    <tr>\n      <td style=\"padding:10px 12px;border-bottom:1px solid #e5e7eb\">${r.name}</td>\n      <td style=\"padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center\">${badge}</td>\n      <td style=\"padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center\">${conv}%</td>\n      <td style=\"padding:10px 12px;border-bottom:1px solid #e5e7eb;text-align:center\">${r.orders_won}/${r.cohort_size}</td>\n      <td style=\"padding:10px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#4b5563\">${r.learnings || 'N/A'}</td>\n    </tr>`;\n}\nif (!resultRows) {\n  resultRows = '<tr><td colspan=\"5\" style=\"padding:12px;color:#9ca3af;text-align:center\">No experiments measured this week</td></tr>';\n}\n\n// New experiment section\nlet newExpHtml = '';\nif (newExp.status === 'launched') {\n  newExpHtml = `\n    <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0\">\n      <tr><td style=\"padding:16px\">\n        <p style=\"margin:0 0 8px\"><strong>Name:</strong> ${newExp.name}</p>\n        <p style=\"margin:0 0 8px\"><strong>Type:</strong> ${newExp.experiment_type} &nbsp;|&nbsp; <strong>Channel:</strong> ${newExp.channel} &nbsp;|&nbsp; <strong>Cohort:</strong> ${newExp.cohort_size} contacts</p>\n        <p style=\"margin:0 0 8px\"><strong>Hypothesis:</strong> ${newExp.hypothesis}</p>\n        <p style=\"margin:0\"><strong>Measure by:</strong> ${newExp.measure_at ? new Date(newExp.measure_at).toDateString() : 'TBD'}</p>\n      </td></tr>\n    </table>`;\n} else {\n  newExpHtml = `<p style=\"color:#6b7280\">Status: ${newExp.status || 'unknown'} — ${newExp.reason || ''}</p>`;\n}\n\n// Insights — convert bullet points to HTML list items\nconst insightText = insights.insights_summary || 'Not enough experiments completed yet.';\nconst insightHtml = insightText.startsWith('<')\n  ? insightText\n  : '<p>' + insightText.replace(/\\n+/g, '</p><p>') + '</p>';\n\nconst body_html = `<!DOCTYPE html>\n<html>\n<head><meta charset=\"utf-8\"></head>\n<body style=\"font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;max-width:700px;margin:0 auto;padding:24px;background:#f9fafb;color:#111827\">\n\n  <div style=\"background:#fff;border-radius:12px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,0.1)\">\n\n    <h1 style=\"margin:0 0 4px;color:#111827;font-size:22px\">Growth Agent — Weekly Report</h1>\n    <p style=\"margin:0 0 24px;color:#6b7280;font-size:14px\">Week of ${weekOf}</p>\n\n    <!-- Baseline metric -->\n    <div style=\"background:#eff6ff;border-radius:8px;padding:16px;margin-bottom:28px;display:inline-block;min-width:220px\">\n      <p style=\"margin:0;font-size:13px;color:#3b82f6;text-transform:uppercase;letter-spacing:.05em\">Baseline 7-day Conversion</p>\n      <p style=\"margin:4px 0 0;font-size:28px;font-weight:700;color:#1d4ed8\">${baselineRate}%</p>\n    </div>\n\n    <!-- Experiments measured -->\n    <h2 style=\"font-size:16px;color:#374151;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid #e5e7eb\">Experiments Measured This Week</h2>\n    <p style=\"margin:0 0 12px;font-size:14px;color:#4b5563\">\n      Total measured: <strong>${measured.measured || 0}</strong> &nbsp;|\n      <span style=\"color:#16a34a\">Winners: <strong>${winners.length}</strong></span> &nbsp;|\n      <span style=\"color:#dc2626\">Losses: <strong>${losers.length}</strong></span>\n    </p>\n    <table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;font-size:14px;margin-bottom:28px\">\n      <thead>\n        <tr style=\"background:#f3f4f6\">\n          <th style=\"padding:10px 12px;text-align:left;font-weight:600\">Experiment</th>\n          <th style=\"padding:10px 12px;text-align:center;font-weight:600\">Result</th>\n          <th style=\"padding:10px 12px;text-align:center;font-weight:600\">Conv Rate</th>\n          <th style=\"padding:10px 12px;text-align:center;font-weight:600\">Orders</th>\n          <th style=\"padding:10px 12px;text-align:left;font-weight:600\">Learnings</th>\n        </tr>\n      </thead>\n      <tbody>${resultRows}</tbody>\n    </table>\n\n    <!-- New experiment -->\n    <h2 style=\"font-size:16px;color:#374151;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid #e5e7eb\">New Experiment Launched</h2>\n    <div style=\"margin-bottom:28px\">${newExpHtml}</div>\n\n    <!-- Distilled insights -->\n    <h2 style=\"font-size:16px;color:#374151;margin:0 0 12px;padding-bottom:8px;border-bottom:2px solid #e5e7eb\">Distilled Insights</h2>\n    <div style=\"font-size:14px;color:#374151;line-height:1.6\">${insightHtml}</div>\n\n    <p style=\"margin:32px 0 0;font-size:12px;color:#9ca3af\">Sent by DabbahWala Growth Agent — automated weekly cycle</p>\n  </div>\n\n</body>\n</html>`;\n\nreturn [{ json: { body_html, subject: `Growth Agent — Week of ${weekOf}` } }];"
       },
       "id": "build-report",
       "name": "Build Weekly Report",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [
-        1200,
-        300
-      ]
+      "position": [1200, 300],
+      "notes": "Assembles all upstream data into a styled HTML email. Reads from: Refresh Baseline Conv Rate (baseline_conv_rate), Measure Previous Experiments (results[]), Design + Launch New Experiment (new experiment details), Get Growth Insights (insights_summary). Outputs body_html and subject."
     },
     {
       "id": "email-report",
       "name": "Email Growth Report",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [
-        1420,
-        300
-      ],
+      "position": [1420, 300],
       "parameters": {
         "method": "POST",
         "url": "https://dabbahwala-latest.onrender.com/api/internal/send-email",
@@ -123,146 +116,11 @@
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\"to\": $('Get Credentials').first().json.REPORT_EMAIL_TO, \"subject\": $('Build Weekly Report').first().json.subject, \"body_html\": \"<pre>\" + $('Build Weekly Report').first().json.body + \"</pre>\"}) }}",
+        "jsonBody": "={{ JSON.stringify({\"to\": $('Get Credentials').first().json.REPORT_EMAIL_TO, \"subject\": $('Build Weekly Report').first().json.subject, \"body_html\": $('Build Weekly Report').first().json.body_html}) }}",
         "options": {}
       },
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "dw-admin-secret",
-          "name": "DW Admin Secret"
-        }
-      }
-    },
-    {
-      "id": "get-credentials",
-      "name": "Get Credentials",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        350,
-        300
-      ],
-      "parameters": {
-        "method": "GET",
-        "url": "https://dabbahwala-latest.onrender.com/api/credentials",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "options": {}
-      },
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "dw-admin-secret",
-          "name": "DW Admin Secret"
-        }
-      }
+      "credentials": {"httpHeaderAuth": {"id": "nODhwaXjVuf9ET7H", "name": "DW Admin Secret"}},
+      "notes": "POSTs the HTML report to /api/internal/send-email (config.py credential proxy), which sends directly via SMTP using SMTP_USER/SMTP_PASSWORD env vars. Requires X-Admin-Secret header (DW Admin Secret credential)."
     }
-  ],
-  "connections": {
-    "Every Monday 7:30 AM": {
-      "main": [
-        [
-          {
-            "node": "Get Credentials",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Refresh Baseline Conv Rate": {
-      "main": [
-        [
-          {
-            "node": "Measure Previous Experiments",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Measure Previous Experiments": {
-      "main": [
-        [
-          {
-            "node": "Design + Launch New Experiment",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Design + Launch New Experiment": {
-      "main": [
-        [
-          {
-            "node": "Get Growth Insights",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Growth Insights": {
-      "main": [
-        [
-          {
-            "node": "Build Weekly Report",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Weekly Report": {
-      "main": [
-        [
-          {
-            "node": "Email Growth Report",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Manual Trigger": {
-      "main": [
-        [
-          {
-            "node": "Get Credentials",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Get Credentials": {
-      "main": [
-        [
-          {
-            "node": "Refresh Baseline Conv Rate",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "tags": [
-    {
-      "name": "DabbahWala",
-      "id": "dabbahwala"
-    },
-    {
-      "name": "Claude",
-      "id": "tag-claude"
-    },
-    {
-      "name": "Inference",
-      "id": "tag-inference"
-    }
-  ],
-  "pinData": {}
+  ]
 }
