@@ -25,6 +25,7 @@ Email proxy:
   POST /api/internal/send-email
   Header: X-Admin-Secret: <value>
   Body: {"to": "...", "subject": "...", "body_html": "...", "cc": "..."}
+  Uses SMTP_USER / SMTP_PASSWORD / SMTP_HOST / SMTP_PORT env vars.
 
 Drive upload proxy:
   POST /api/internal/drive/upload
@@ -76,6 +77,7 @@ def get_credentials(x_admin_secret: str | None = Header(default=None)):
         "TELNYX_API_KEY":                os.environ.get("TELNYX_API_KEY", ""),
         "TELNYX_FROM_NUMBER":             os.environ.get("TELNYX_FROM_NUMBER", "+18444322224"),
         "TELNYX_MESSAGING_PROFILE_ID":    os.environ.get("TELNYX_MESSAGING_PROFILE_ID", "400191f9-0057-41f5-9f10-375fb3fe1a70"),
+        "SMS_TEST_NUMBER":               os.environ.get("SMS_TEST_NUMBER", ""),
         # Airtable
         "AIRTABLE_API_KEY":              os.environ.get("AIRTABLE_API_KEY", ""),
         "AIRTABLE_BASE_ID":              os.environ.get("AIRTABLE_BASE_ID", "appuy2VTIao6XVpIW"),
@@ -86,7 +88,7 @@ def get_credentials(x_admin_secret: str | None = Header(default=None)):
         # Reports
         "REPORT_EMAIL_TO":               os.environ.get("REPORT_EMAIL_TO", "core@dabbahwala.com"),
         # FastAPI base URL (for n8n to call back)
-        "API_BASE_URL":                  os.environ.get("API_BASE_URL", "https://dabbahwala-latest.onrender.com"),
+        "API_BASE_URL":                  os.environ.get("BASE_URL", "https://dabbahwala-latest.onrender.com"),
     }
 
     # Warn about any missing critical credentials so Render logs show it
@@ -111,25 +113,30 @@ class EmailRequest(BaseModel):
 @router.post("/send-email")
 def send_email(payload: EmailRequest, x_admin_secret: str | None = Header(default=None)):
     """
-    Email proxy — sends via Gmail SMTP using GMAIL_SMTP_USER / GMAIL_SMTP_PASSWORD env vars.
+    Email proxy — sends via SMTP using SMTP_USER / SMTP_PASSWORD / SMTP_HOST / SMTP_PORT env vars.
     n8n calls this instead of using the Gmail-SMTP n8n credential.
 
     Required env vars:
-      GMAIL_SMTP_USER     — Gmail address (e.g. core@dabbahwala.com)
-      GMAIL_SMTP_PASSWORD — App password (not the account password)
+      SMTP_USER     — sender address (e.g. vivek@dabbahwala.com)
+      SMTP_PASSWORD — app password
+      SMTP_HOST     — defaults to smtp.gmail.com
+      SMTP_PORT     — defaults to 587 (STARTTLS); use 465 for SSL
     """
     _check_admin_secret(x_admin_secret)
     logger.info("POST /api/internal/send-email — to=%s subject=%s", payload.to, payload.subject)
 
-    smtp_user = os.environ.get("GMAIL_SMTP_USER", "").strip()
-    smtp_pass = os.environ.get("GMAIL_SMTP_PASSWORD", "").strip()
+    smtp_user = os.environ.get("SMTP_USER", "").strip()
+    smtp_pass = os.environ.get("SMTP_PASSWORD", "").strip()
+    smtp_host = os.environ.get("SMTP_HOST", "smtp.gmail.com").strip()
+    smtp_port = int(os.environ.get("SMTP_PORT", "587"))
+    from_addr = os.environ.get("REPORT_EMAIL_FROM", smtp_user).strip() or smtp_user
 
     if not smtp_user or not smtp_pass:
-        logger.error("send-email: GMAIL_SMTP_USER or GMAIL_SMTP_PASSWORD not set")
+        logger.error("send-email: SMTP_USER or SMTP_PASSWORD not set")
         raise HTTPException(status_code=503, detail="Email service not configured")
 
     msg = MIMEMultipart("alternative")
-    msg["From"] = smtp_user
+    msg["From"] = from_addr
     msg["To"] = payload.to
     msg["Subject"] = payload.subject
     if payload.cc:
@@ -143,9 +150,16 @@ def send_email(payload: EmailRequest, x_admin_secret: str | None = Header(defaul
         recipients.extend(payload.cc.split(","))
 
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-            server.login(smtp_user, smtp_pass)
-            server.sendmail(smtp_user, recipients, msg.as_string())
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(from_addr, recipients, msg.as_string())
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.ehlo()
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.sendmail(from_addr, recipients, msg.as_string())
         logger.info("send-email: sent successfully to=%s subject=%s", payload.to, payload.subject)
         return {"status": "sent", "to": payload.to, "subject": payload.subject}
     except smtplib.SMTPException as e:
