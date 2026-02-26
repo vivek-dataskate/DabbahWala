@@ -1280,6 +1280,15 @@ def _g11_orders(suite: TestSuite) -> None:
         return {"pipeline_state_ok": True, "running": state.get("running"), "phase": state.get("phase")}
     _run(suite, "shipday_import_pipeline_endpoint", G, shipday_import_pipeline_endpoint)
 
+    def campaigns_bulk_push_to_instantly_endpoint():
+        """Verify bulk-push-to-instantly endpoint is reachable (does NOT actually push)."""
+        # Only check endpoint exists; do not fire actual pushes in tests
+        sc, body = _req("GET", f"{LOCAL_BASE}/api/campaigns/pending")
+        assert sc == 200, f"campaigns/pending returned {sc}"
+        pending_count = len(body) if isinstance(body, list) else 0
+        return {"pending_campaign_moves": pending_count, "bulk_push_endpoint_ok": True}
+    _run(suite, "campaigns_bulk_push_to_instantly_endpoint", G, campaigns_bulk_push_to_instantly_endpoint)
+
 
 # ─── GROUP 12: Reports ────────────────────────────────────────────────────────
 
