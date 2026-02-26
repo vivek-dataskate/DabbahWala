@@ -501,3 +501,149 @@ class TestDoNotContactOverride:
         if data.get("results"):
             result = data["results"][0]
             assert result["chosen_action"] == "none"
+
+
+# ---------------------------------------------------------------------------
+# _fetch_playbook_rules (internal helper) — direct tests
+# ---------------------------------------------------------------------------
+
+class TestFetchPlaybookRules:
+    """Test _fetch_playbook_rules directly."""
+
+    def test_returns_empty_when_no_rules(self):
+        """_fetch_playbook_rules returns empty string when no active rules."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.agents import _fetch_playbook_rules
+
+        cur = MagicMock()
+        cur.fetchall.return_value = []
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_cursor_ctx):
+            result = _fetch_playbook_rules()
+
+        assert result == ""
+
+    def test_formats_rules_into_prompt_sections(self):
+        """_fetch_playbook_rules with rules returns formatted prompt section."""
+        from contextlib import contextmanager
+        from unittest.mock import MagicMock, patch
+        from app.routers.agents import _fetch_playbook_rules
+
+        rules = [
+            {"category": "exclusion", "rule_name": "No-contact", "instruction": "Never contact opt-outs", "priority": 100},
+            {"category": "messaging", "rule_name": "Warm tone", "instruction": "Use warm, genuine tone", "priority": 50},
+        ]
+        cur = MagicMock()
+        cur.fetchall.return_value = rules
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            yield cur
+
+        # Reset playbook cache to force fresh fetch
+        import app.routers.agents as agents_mod
+        original_cache = agents_mod._playbook_cache.copy()
+        agents_mod._playbook_cache["hash"] = "different_hash"
+
+        try:
+            with patch("app.routers.agents.get_cursor", side_effect=_cursor_ctx):
+                result = _fetch_playbook_rules()
+        finally:
+            agents_mod._playbook_cache = original_cache
+
+        assert "EXCLUSION RULES" in result
+        assert "No-contact" in result
+
+    def test_returns_empty_on_db_exception(self):
+        """_fetch_playbook_rules returns empty string when DB raises exception."""
+        from app.routers.agents import _fetch_playbook_rules
+        from unittest.mock import patch
+
+        with patch("app.routers.agents.get_cursor", side_effect=Exception("DB offline")):
+            result = _fetch_playbook_rules()
+
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# _filter_playbook (internal helper) — direct tests
+# ---------------------------------------------------------------------------
+
+class TestFilterPlaybook:
+    """Test _filter_playbook section filtering."""
+
+    def test_empty_playbook_returns_empty(self):
+        """_filter_playbook with empty string returns empty string."""
+        from app.routers.agents import _filter_playbook
+        assert _filter_playbook("", "observer") == ""
+
+    def test_full_playbook_returned_when_unknown_layer(self):
+        """_filter_playbook returns full playbook for unknown agent_layer."""
+        from app.routers.agents import _filter_playbook
+        playbook = "## Playbook\n### EXCLUSION RULES\n- Rule 1"
+        result = _filter_playbook(playbook, "unknown_layer")
+        assert result == playbook
+
+
+# ---------------------------------------------------------------------------
+# _fetch_contact error path — direct test
+# ---------------------------------------------------------------------------
+
+class TestFetchContactNotFound:
+    def test_fetch_contact_raises_404_when_not_found(self):
+        """_fetch_contact raises HTTPException 404 when contact doesn't exist."""
+        from contextlib import contextmanager
+        from fastapi import HTTPException
+        from unittest.mock import MagicMock, patch
+        from app.routers.agents import _fetch_contact
+        import pytest
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None  # contact not found
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.agents.get_cursor", side_effect=_cursor_ctx):
+            with pytest.raises(HTTPException) as exc_info:
+                _fetch_contact(9999)
+
+        assert exc_info.value.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /api/agents/actions-queue additional tests
+# ---------------------------------------------------------------------------
+
+class TestActionQueueAdditional:
+    def test_action_queue_pending_returns_list(self, client):
+        """GET /api/agents/action-queue/pending returns list of pending actions."""
+        rows = [
+            {"id": 1, "contact_id": 10, "action_type": "send_sms",
+             "status": "pending", "payload": {}, "created_at": "2026-01-15T00:00:00",
+             "executed_at": None}
+        ]
+        cur = _make_cursor(rows=rows)
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/agents/action-queue/pending")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+
+    def test_action_queue_pending_empty(self, client):
+        """GET /api/agents/action-queue/pending with no actions returns empty list."""
+        cur = _make_cursor(rows=[])
+        with patch("app.routers.agents.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/agents/action-queue/pending")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert len(data) == 0
