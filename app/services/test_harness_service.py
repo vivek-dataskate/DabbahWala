@@ -651,6 +651,23 @@ def _g5_telnyx_sms(suite: TestSuite) -> None:
         return {"action_queue_id": aq_id, "status": "verified"}
     _run(suite, "sms_action_queue_flow", G, sms_action_queue_flow)
 
+    def telnyx_n8n_from_number_hardcoded():
+        """Verify sms_dispatch and action_queue_executor n8n workflows use hardcoded from number (+18444322224), not $env.TELNYX_FROM_NUMBER."""
+        import os as _os
+        n8n_dir = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))), "n8n")
+        issues = []
+        for fname in ("sms_dispatch.json", "action_queue_executor.json"):
+            fpath = _os.path.join(n8n_dir, fname)
+            with open(fpath) as _f:
+                content = _f.read()
+            if "TELNYX_FROM_NUMBER" in content:
+                issues.append(f"{fname} still uses $env.TELNYX_FROM_NUMBER")
+            if "+18444322224" not in content:
+                issues.append(f"{fname} missing hardcoded from number +18444322224")
+        assert not issues, "; ".join(issues)
+        return {"checked": ["sms_dispatch.json", "action_queue_executor.json"], "from_number": "+18444322224"}
+    _run(suite, "telnyx_n8n_from_number_hardcoded", G, telnyx_n8n_from_number_hardcoded)
+
 
 # ─── GROUP 6: AI Agent Pipeline ──────────────────────────────────────────────
 
