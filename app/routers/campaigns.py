@@ -76,8 +76,12 @@ def log_push(entry: PushLogEntry):
 
 
 @router.get("/push-log")
-def get_push_log(limit: int = 100, success: Optional[bool] = None):
-    """Return recent campaign push log entries for debugging."""
+def get_push_log(limit: int = 100, success: Optional[bool] = None, verify: bool = False):
+    """
+    Return recent campaign push log entries.
+    Pass ?verify=true to cross-check each successful entry against the Instantly v1 API
+    (capped at 30 records to avoid rate limits).
+    """
     with get_cursor(commit=False) as cur:
         if success is None:
             cur.execute(
@@ -89,8 +93,112 @@ def get_push_log(limit: int = 100, success: Optional[bool] = None):
                 "SELECT * FROM campaign_push_log WHERE success = %s ORDER BY created_at DESC LIMIT %s",
                 (success, limit),
             )
-        rows = cur.fetchall()
-        return [dict(r) for r in rows]
+        rows = [dict(r) for r in cur.fetchall()]
+
+    if verify:
+        verify_cap = min(len(rows), 30)
+        for row in rows[:verify_cap]:
+            if not row.get("success"):
+                row["instantly_found"] = None
+                continue
+            try:
+                r = httpx.get(
+                    "https://api.instantly.ai/api/v1/lead/get",
+                    params={"api_key": "c7kf84j4c54vhjpcc5yv7k35tgs5", "email": row["email"]},
+                    timeout=10.0,
+                )
+                if r.status_code == 200:
+                    data = r.json()
+                    lead = data[0] if isinstance(data, list) and data else data
+                    actual_campaign = lead.get("campaign")
+                    expected_campaign = (_CAMPAIGN_META.get(row.get("to_campaign") or "", {}) or {}).get("instantly_id")
+                    row["instantly_found"] = True
+                    row["instantly_campaign"] = actual_campaign
+                    row["instantly_campaign_match"] = (actual_campaign == expected_campaign) if expected_campaign else None
+                elif r.status_code == 404 or (r.status_code == 200 and "error" in (r.json() or {})):
+                    row["instantly_found"] = False
+                    row["instantly_campaign"] = None
+                    row["instantly_campaign_match"] = False
+                else:
+                    row["instantly_found"] = None
+                    row["instantly_error"] = f"HTTP {r.status_code}"
+            except Exception as e:
+                row["instantly_found"] = None
+                row["instantly_error"] = str(e)[:100]
+        for row in rows[verify_cap:]:
+            row["instantly_found"] = None  # not verified (beyond cap)
+
+    return rows
+
+
+@router.post("/repair-push")
+def repair_push(background_tasks: BackgroundTasks, hours: int = 24):
+    """
+    Re-push leads that were previously logged as successful but landed in
+    Instantly with campaign=null (caused by stale campaign_routing IDs).
+    Pulls distinct email+campaign pairs from push_log within the last N hours
+    and re-posts each to Instantly using _CAMPAIGN_META for the correct campaign ID.
+    """
+    if not INSTANTLY_API_KEY:
+        raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
+
+    with get_cursor(commit=False) as cur:
+        cur.execute(
+            """
+            SELECT DISTINCT ON (email) email, to_campaign, first_name, last_name
+            FROM campaign_push_log pl
+            LEFT JOIN contacts c ON c.email = pl.email
+            WHERE pl.success = true
+              AND pl.created_at >= NOW() - INTERVAL '%s hours'
+            ORDER BY email, pl.created_at DESC
+            """,
+            (hours,),
+        )
+        rows = [dict(r) for r in cur.fetchall()]
+
+    background_tasks.add_task(_run_repair_push, rows)
+    return {"status": "started", "leads_to_repair": len(rows)}
+
+
+def _run_repair_push(rows: list[dict]) -> None:
+    """Background: re-push leads to Instantly using correct campaign IDs from _CAMPAIGN_META."""
+    import time
+    headers = {
+        "Authorization": f"Bearer {INSTANTLY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    pushed = 0
+    skipped = 0
+    errors = 0
+
+    for row in rows:
+        campaign_name = row.get("to_campaign") or ""
+        meta = _CAMPAIGN_META.get(campaign_name)
+        if not meta:
+            skipped += 1
+            continue
+        payload = {
+            "email": row["email"],
+            "first_name": row.get("first_name") or "",
+            "last_name": row.get("last_name") or "",
+            "campaign_id": meta["instantly_id"],
+        }
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                resp = client.post("https://api.instantly.ai/api/v2/leads", headers=headers, json=payload)
+            if resp.status_code < 400:
+                pushed += 1
+            else:
+                errors += 1
+                logger.warning("repair_push: %s → %s %s", row["email"], resp.status_code, resp.text[:200])
+        except Exception as e:
+            errors += 1
+            logger.warning("repair_push: %s → exception %s", row["email"], e)
+
+        if pushed % 5 == 0 and pushed > 0:
+            time.sleep(1.0)
+
+    logger.info("repair_push done: pushed=%d skipped=%d errors=%d", pushed, skipped, errors)
 
 
 @router.post("/bulk-executed")
@@ -689,13 +797,14 @@ Return ONLY a valid JSON object with two keys — "subject" and "body" — no ot
 
 _DABBAHWALA_TAG = "Dabbahwala"
 
-# The 5 campaigns that already exist in Instantly (confirmed IDs)
+# The DabbahWala campaigns that exist in Instantly — keep in sync with _CAMPAIGN_META
 _EXISTING_CAMPAIGN_IDS: list[str] = [
-    "90ecd160-22cc-46b1-9fa5-9342fe970837",  # NURTURE_SLOW
-    "30292b3d-9f39-4ef3-b0ba-ea15c634acef",  # PROMO_STANDARD
-    "c9af877a-77ac-491c-a5ee-a8ea7646416b",  # PROMO_AGGRESSIVE
-    "c4c42e73-83fd-4d43-b629-db5b11be66ae",  # NEW_CUSTOMER_ONBOARDING
-    "0c760ec8-3415-48cd-87ff-b58babc17dde",  # REACTIVATION
+    "76a88797-961a-47b6-af11-77e2211c4e73",  # NURTURE_SLOW
+    "f3e2d621-9bf2-4130-bc1c-f8168fc44e1e",  # PROMO_STANDARD
+    "87d44ff1-8720-4c1d-92ff-b827970f323f",  # PROMO_AGGRESSIVE
+    "8a5ccbfb-500d-4060-ad99-76aa0159bbf2",  # NEW_CUSTOMER_ONBOARDING
+    "69c84455-d9b8-437f-b249-8325d23798e6",  # REACTIVATION
+    "c763e229-f633-468b-bfe4-7f9a4fd21036",  # ACTIVE_CUSTOMER
 ]
 
 # DW sending schedule (mirrors promo_standard.json)
