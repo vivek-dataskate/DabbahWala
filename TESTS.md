@@ -88,6 +88,9 @@ Tests real outbound SMS sending and message queue mechanics.
 | `telnyx_send_sms` | Sends real SMS from/to `+18444322224` (self-loop) via Telnyx API |
 | `telnyx_messages_in_db` | Confirms `telnyx_messages` row exists for test contact |
 | `sms_action_queue_flow` | Inserts `send_sms` action into queue, marks it done via API |
+| `telnyx_n8n_from_number_hardcoded` | Verifies `sms_dispatch.json` and `action_queue_executor.json` use hardcoded `+18444322224`, not `$env.TELNYX_FROM_NUMBER` |
+| `telnyx_inbound_webhook` | POSTs a Telnyx `message.received` webhook payload to `POST /api/webhooks/telnyx` and verifies 200 |
+| `telnyx_inbound_mdr_endpoint` | Verifies `telnyx_inbound_collector.json` uses MDR endpoint (`/v2/reports/messaging/message_detail_records`), not the invalid `/v2/messages` list |
 
 ---
 

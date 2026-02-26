@@ -84,11 +84,13 @@ If the env var is empty, read it from that file and use it directly in API calls
 - Menu table: **`Weekly Menu`** — fields: Name, Category, Is Veg, Description, Image URL, Week Start, Active, Price
 
 ### n8n Workflow Status
-- All **25 workflows** active as of 2026-02-25 (24 scheduled + 1 manual-only)
+- All **26 workflows** active as of 2026-02-26 (24 scheduled + 2 manual-only)
 - `[Claude — Inference] Competitor Research Agent` (ID: TBD — activate after first push) added 2026-02-25
 - `[Airtable — Evidence] Menu Sync` (ID: `baZV5ViA5lXNCTWR`) replaced the old Playwright weekly scrape
 - `[System — Test] Daily E2E Test Suite` (ID: `M7bwNMGrUMRvAHH4`) — daily 5 AM E2E test runner, added 2026-02-25
-- Only `[Shipday — Evidence] Historical Import` is intentionally inactive (manual one-shot trigger)
+- `[Telnyx — Evidence] SMS Historical Import` (ID: `YANIKsHk767NDEXL`) — manual one-shot MDR backfill, added 2026-02-26
+- `[Telnyx — Evidence] Inbound SMS Collector` updated to use MDR endpoint (`/v2/reports/messaging/message_detail_records`) — fixes 404 from invalid `/v2/messages` list endpoint
+- Inactive (manual one-shot): `[Shipday — Evidence] Historical Import`, `[Telnyx — Evidence] SMS Historical Import`
 - Credential IDs for all integrations are tracked in `n8n/config.json`
 
 ### Instantly

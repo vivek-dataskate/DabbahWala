@@ -22,6 +22,17 @@
       ]
     },
     {
+      "id": "a935bda3-5c6a-42fb-9ecd-b5154bfe68e4",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        220,
+        460
+      ],
+      "parameters": {}
+    },
+    {
       "parameters": {
         "jsCode": "// 35-minute window so consecutive 30-min runs overlap and miss nothing\nconst now = new Date();\nconst from = new Date(now.getTime() - 35 * 60 * 1000);\nreturn [{ json: {\n  window_from: from.toISOString(),\n  window_to:   now.toISOString()\n}}];"
       },
@@ -37,15 +48,15 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "https://api.telnyx.com/v2/messages",
+        "url": "https://api.telnyx.com/v2/reports/messaging/message_detail_records",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendQuery": true,
         "queryParameters": {
           "parameters": [
             {
-              "name": "filter[direction][eq]",
-              "value": "inbound"
+              "name": "filter[direction]",
+              "value": "INBOUND"
             },
             {
               "name": "filter[created_at][gte]",
@@ -53,7 +64,7 @@
             },
             {
               "name": "page[size]",
-              "value": "100"
+              "value": "250"
             }
           ]
         },
@@ -62,7 +73,7 @@
         }
       },
       "id": "fetch-inbound-sms",
-      "name": "Fetch Inbound SMS",
+      "name": "Fetch Inbound SMS (MDR)",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -74,7 +85,8 @@
           "id": "XnntvX8AXpdR97oQ",
           "name": "Telnyx API Key"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
@@ -112,11 +124,12 @@
           "id": "XnntvX8AXpdR97oQ",
           "name": "Telnyx API Key"
         }
-      }
+      },
+      "continueOnFail": true
     },
     {
       "parameters": {
-        "jsCode": "// Classify inbound SMS — detect delivery, order, and intent signals\nconst messages = $input.item.json.data || [];\n\nconst ORDER_KEYWORDS    = ['order', 'ordered', 'i want', 'can i order', 'how do i order', 'place an order'];\nconst DELIVERY_KEYWORDS = ['delivered', 'delivery', 'dispatched', 'out for delivery', 'shipped', 'tracking', 'package', 'collect', 'picked up', 'received'];\nconst REORDER_KEYWORDS  = ['again', 'reorder', 'same as last', 'another', 'refill', 'repeat'];\nconst PRICE_KEYWORDS    = ['price', 'cost', 'how much', 'discount', 'offer', 'deal', 'promo'];\n\nreturn messages.map(msg => {\n  const body = (msg.text || '').toLowerCase();\n  const from = msg.from?.phone_number || '';\n  const to   = msg.to?.[0]?.phone_number || '';\n\n  const isOrderSignal    = ORDER_KEYWORDS.some(kw => body.includes(kw));\n  const isDeliverySignal = DELIVERY_KEYWORDS.some(kw => body.includes(kw));\n  const isReorderSignal  = REORDER_KEYWORDS.some(kw => body.includes(kw));\n  const isPriceSignal    = PRICE_KEYWORDS.some(kw => body.includes(kw));\n\n  // Determine event_type to ingest\n  let event_type = 'sms_received';\n  if (isOrderSignal || isReorderSignal) event_type = 'order_intent_sms';\n  else if (isDeliverySignal)            event_type = 'delivery_inquiry_sms';\n  else if (isPriceSignal)               event_type = 'price_inquiry_sms';\n\n  return {\n    json: {\n      telnyx_msg_id: msg.id,\n      from_number: from,\n      to_number: to,\n      body: msg.text || '',\n      direction: 'inbound',\n      status: msg.to?.[0]?.status || 'received',\n      is_delivery_staff: false,\n      is_order_signal: isOrderSignal || isReorderSignal,\n      event_type,\n      metadata: {\n        received_at: msg.received_at,\n        signals: { isOrderSignal, isDeliverySignal, isReorderSignal, isPriceSignal }\n      }\n    }\n  };\n}).filter(m => m.json.from_number);"
+        "jsCode": "// MDR response: data[].from_number, data[].to_number, data[].message_body, data[].id\nconst messages = $input.item.json.data || [];\n\nconst ORDER_KEYWORDS    = ['order', 'ordered', 'i want', 'can i order', 'how do i order', 'place an order'];\nconst DELIVERY_KEYWORDS = ['delivered', 'delivery', 'dispatched', 'out for delivery', 'shipped', 'tracking', 'package', 'collect', 'picked up', 'received'];\nconst REORDER_KEYWORDS  = ['again', 'reorder', 'same as last', 'another', 'refill', 'repeat'];\nconst PRICE_KEYWORDS    = ['price', 'cost', 'how much', 'discount', 'offer', 'deal', 'promo'];\n\nreturn messages.map(msg => {\n  const body = (msg.message_body || msg.text || '').toLowerCase();\n  const from = msg.from_number || (msg.from?.phone_number) || '';\n  const to   = msg.to_number   || (msg.to?.[0]?.phone_number) || '';\n\n  const isOrderSignal    = ORDER_KEYWORDS.some(kw => body.includes(kw));\n  const isDeliverySignal = DELIVERY_KEYWORDS.some(kw => body.includes(kw));\n  const isReorderSignal  = REORDER_KEYWORDS.some(kw => body.includes(kw));\n  const isPriceSignal    = PRICE_KEYWORDS.some(kw => body.includes(kw));\n\n  let event_type = 'sms_received';\n  if (isOrderSignal || isReorderSignal) event_type = 'order_intent_sms';\n  else if (isDeliverySignal)            event_type = 'delivery_inquiry_sms';\n  else if (isPriceSignal)               event_type = 'price_inquiry_sms';\n\n  return {\n    json: {\n      telnyx_msg_id: msg.id,\n      from_number: from,\n      to_number: to,\n      body: msg.message_body || msg.text || '',\n      direction: 'inbound',\n      status: msg.status || 'received',\n      is_order_signal: isOrderSignal || isReorderSignal,\n      event_type,\n      metadata: {\n        received_at: msg.sent_at || msg.received_at,\n        signals: { isOrderSignal, isDeliverySignal, isReorderSignal, isPriceSignal }\n      }\n    }\n  };\n}).filter(m => m.json.from_number);"
       },
       "id": "classify-sms",
       "name": "Classify SMS + Signals",
@@ -351,17 +364,6 @@
         1340,
         600
       ]
-    },
-    {
-      "id": "a935bda3-5c6a-42fb-9ecd-b5154bfe68e4",
-      "name": "Manual Trigger",
-      "type": "n8n-nodes-base.manualTrigger",
-      "typeVersion": 1,
-      "position": [
-        220,
-        460
-      ],
-      "parameters": {}
     }
   ],
   "connections": {
@@ -376,11 +378,22 @@
         ]
       ]
     },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Build Time Window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Build Time Window": {
       "main": [
         [
           {
-            "node": "Fetch Inbound SMS",
+            "node": "Fetch Inbound SMS (MDR)",
             "type": "main",
             "index": 0
           },
@@ -392,7 +405,7 @@
         ]
       ]
     },
-    "Fetch Inbound SMS": {
+    "Fetch Inbound SMS (MDR)": {
       "main": [
         [
           {
@@ -510,17 +523,6 @@
         [
           {
             "node": "Evaluate Opportunity (Call)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Manual Trigger": {
-      "main": [
-        [
-          {
-            "node": "Build Time Window",
             "type": "main",
             "index": 0
           }

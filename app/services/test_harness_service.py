@@ -688,6 +688,59 @@ def _g5_telnyx_sms(suite: TestSuite) -> None:
         return {"action_queue_id": aq_id, "status": "verified"}
     _run(suite, "sms_action_queue_flow", G, sms_action_queue_flow)
 
+    def telnyx_n8n_from_number_hardcoded():
+        """Verify sms_dispatch and action_queue_executor n8n workflows use hardcoded from number (+18444322224), not $env.TELNYX_FROM_NUMBER."""
+        import os as _os
+        n8n_dir = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))), "n8n")
+        issues = []
+        for fname in ("sms_dispatch.json", "action_queue_executor.json"):
+            fpath = _os.path.join(n8n_dir, fname)
+            with open(fpath) as _f:
+                content = _f.read()
+            if "TELNYX_FROM_NUMBER" in content:
+                issues.append(f"{fname} still uses $env.TELNYX_FROM_NUMBER")
+            if "+18444322224" not in content:
+                issues.append(f"{fname} missing hardcoded from number +18444322224")
+        assert not issues, "; ".join(issues)
+        return {"checked": ["sms_dispatch.json", "action_queue_executor.json"], "from_number": "+18444322224"}
+    _run(suite, "telnyx_n8n_from_number_hardcoded", G, telnyx_n8n_from_number_hardcoded)
+
+    def telnyx_inbound_webhook():
+        """Verify POST /api/webhooks/telnyx accepts a valid Telnyx message.received payload."""
+        payload = {
+            "data": {
+                "event_type": "message.received",
+                "id": "test-event-id-harness",
+                "occurred_at": "2026-02-26T00:00:00.000000Z",
+                "payload": {
+                    "id": "test-msg-id-harness",
+                    "text": "[TEST] harness inbound webhook",
+                    "direction": "inbound",
+                    "from": {"phone_number": TEST_PHONE},
+                    "to": [{"phone_number": "+18444322224", "status": "webhook_delivered"}],
+                    "received_at": "2026-02-26T00:00:00.000000Z",
+                    "type": "SMS",
+                },
+                "record_type": "event",
+            }
+        }
+        sc, body = _local("POST", "/api/webhooks/telnyx", json=payload)
+        # 200 ok (stored) or 200 ignored (contact not found for TEST_PHONE) are both acceptable
+        assert sc == 200, f"POST /api/webhooks/telnyx returned {sc}: {body}"
+        return {"status": body.get("status"), "result": body}
+    _run(suite, "telnyx_inbound_webhook", G, telnyx_inbound_webhook)
+
+    def telnyx_inbound_mdr_endpoint():
+        """Verify telnyx_inbound_collector uses MDR endpoint, not /v2/messages."""
+        import os as _os
+        n8n_dir = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(__file__))), "n8n")
+        with open(_os.path.join(n8n_dir, "telnyx_inbound_collector.json")) as _f:
+            content = _f.read()
+        assert "v2/messages\"" not in content, "inbound_collector still uses /v2/messages (list endpoint does not exist)"
+        assert "message_detail_records" in content, "inbound_collector should use MDR endpoint /v2/reports/messaging/message_detail_records"
+        return {"endpoint": "message_detail_records", "status": "correct"}
+    _run(suite, "telnyx_inbound_mdr_endpoint", G, telnyx_inbound_mdr_endpoint)
+
 
 # ─── GROUP 6: AI Agent Pipeline ──────────────────────────────────────────────
 
