@@ -77,7 +77,7 @@ def get_credentials(x_admin_secret: str | None = Header(default=None)):
         "TELNYX_API_KEY":                os.environ.get("TELNYX_API_KEY", ""),
         "TELNYX_FROM_NUMBER":             os.environ.get("TELNYX_FROM_NUMBER", "+18444322224"),
         "TELNYX_MESSAGING_PROFILE_ID":    os.environ.get("TELNYX_MESSAGING_PROFILE_ID", "400191f9-0057-41f5-9f10-375fb3fe1a70"),
-        "SMS_TEST_NUMBER":               os.environ.get("SMS_TEST_NUMBER", ""),
+        "SMS_TEST_NUMBER":               os.environ.get("SMS_TEST_NUMBER", "+12144996143"),
         # Airtable
         "AIRTABLE_API_KEY":              os.environ.get("AIRTABLE_API_KEY", ""),
         "AIRTABLE_BASE_ID":              os.environ.get("AIRTABLE_BASE_ID", "appuy2VTIao6XVpIW"),
@@ -92,7 +92,7 @@ def get_credentials(x_admin_secret: str | None = Header(default=None)):
     }
 
     # Warn about any missing critical credentials so Render logs show it
-    missing = [k for k, v in creds.items() if not v and k not in ("SHIPDAY_API_KEY",)]
+    missing = [k for k, v in creds.items() if not v and k not in ("SHIPDAY_API_KEY", "SMS_TEST_NUMBER")]
     if missing:
         logger.warning("GET /api/credentials — missing env vars: %s", missing)
 
