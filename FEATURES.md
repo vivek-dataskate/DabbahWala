@@ -227,7 +227,7 @@ Every 3 hours:
 |----------|----------|--------------|
 | `[Growth] Competitor Research` | Monday 6:30 AM | Parses competitor samples, scrapes live sites, Claude generates 8 hypotheses → `goal_experiments` |
 | `[Growth] Goal Agent` | Daily 9 AM | 4-phase experiment loop: HYPOTHESIZE → EXPERIMENT → MEASURE → HARVEST |
-| `[Growth] Weekly Growth Agent` | Monday 7:30 AM | Measures experiments, designs new ones, emails growth report |
+| `[Growth] Weekly Growth Agent` | Monday 7:30 AM | Measures experiments (adaptive early cutoff at 30 events), designs new ones (agent picks `measure_days` 14–28 or invents new experiment types), emails HTML report |
 
 **Python:** `app/routers/competitor_agent.py`, `app/routers/goal_agent.py`, `app/routers/growth_agent.py`
 

@@ -8,7 +8,8 @@ Unlike the Intelligence Engine (which reacts to known signals) and the Claude Ag
      message angles, channel sequences that haven't been tried.
   2. SELECTS cohorts — picks an appropriately sized group of untouched contacts.
   3. DISPATCHES — creates opportunities the existing action queue will execute.
-  4. MEASURES — after 7 days, checks whether contacted contacts ordered.
+  4. MEASURES — after 14–28 days (depending on experiment type), checks whether contacted contacts ordered.
+               Adaptive early cutoff: scores sooner if 30+ conversion events already observed.
   5. LEARNS — Claude analyses results, updates the knowledge base, and informs
      the next round of hypotheses.
 
@@ -40,6 +41,18 @@ router = APIRouter()
 MODEL = "claude-sonnet-4-5-20250929"
 COHORT_MIN = 15
 COHORT_MAX = 60
+
+# Measurement window by experiment type.
+# Offer experiments need 3-4 ordering cycles; timing/angle need at least 2 weeks.
+MEASURE_DAYS = {
+    "offer":            28,  # 4 weeks — pricing/offer experiments need multiple ordering cycles
+    "channel_sequence": 21,  # 3 weeks — multi-step sequences need more time
+    "timing":           14,  # 2 weeks minimum
+    "message_angle":    14,  # 2 weeks minimum
+}
+# Adaptive early cutoff: score an experiment before its measure_at deadline if
+# the cohort has already generated this many conversion events (enough for significance).
+MIN_EVENTS_REQUIRED = 30
 
 
 # ---------------------------------------------------------------------------
@@ -164,13 +177,21 @@ Design ONE experiment that:
 2. Has a clear, falsifiable hypothesis (IF we do X, THEN Y will happen BECAUSE Z)
 3. Specifies the exact message/offer/sequence the cohort will receive
 4. Specifies who to target (which lifecycle_segment, order history characteristics, etc.)
-5. Explains what a "win" looks like (order within 7 days)
+5. Explains what a "win" looks like (an order placed within the measurement window)
 
 Experiment types to rotate through:
 - timing: unusual send time (Sunday morning, Friday 4pm, lunch hour burst)
 - offer: tangible incentive (free dessert, free roti add-on, $5 credit)
 - message_angle: psychological hook (scarcity, social proof, nostalgia, identity)
 - channel_sequence: multi-step (SMS → email 48h later, call → SMS follow-up)
+You may also invent new experiment types if they don't fit the above.
+
+Measurement window guidance — set measure_days based on the experiment:
+- offer / pricing experiments: 28 days (customers need multiple ordering cycles to respond)
+- channel_sequence: 21 days (multi-step sequences play out over weeks)
+- timing / message_angle: 14 days minimum
+- If your experiment targets deeply lapsed contacts (last order > 60 days ago): add at least 7 extra days
+- If you have strong reasons to deviate from these defaults, choose a different value and explain in rationale
 
 Avoid repeating experiments that already ran (check past_experiments).
 Be creative — think like a growth hacker, not a marketer."""
@@ -182,7 +203,10 @@ DESIGN_TOOL = {
         "type": "object",
         "properties": {
             "name": {"type": "string", "description": "Short experiment name (e.g., 'Sunday Morning Nostalgia SMS')"},
-            "experiment_type": {"type": "string", "enum": ["timing", "offer", "message_angle", "channel_sequence"]},
+            "experiment_type": {
+                "type": "string",
+                "description": "Type of experiment. Use one of: timing, offer, message_angle, channel_sequence — or invent a new type if needed."
+            },
             "hypothesis": {"type": "string", "description": "Full IF-THEN-BECAUSE hypothesis"},
             "target_segment": {
                 "type": "string",
@@ -200,16 +224,20 @@ DESIGN_TOOL = {
             },
             "win_condition": {
                 "type": "string",
-                "description": "What counts as a win (e.g., 'places any order within 7 days')"
+                "description": "What counts as a win (e.g., 'places any order within the measurement window')"
+            },
+            "measure_days": {
+                "type": "integer",
+                "description": "How many days to wait before measuring results (14–28). Refer to the measurement window guidance in the system prompt."
             },
             "rationale": {
                 "type": "string",
-                "description": "Why this hasn't been tried or why it's worth testing now given the current menu/season"
+                "description": "Why this hasn't been tried or why it's worth testing now. Include reasoning for the chosen measure_days if non-standard."
             },
         },
         "required": [
             "name", "experiment_type", "hypothesis", "target_segment",
-            "cohort_size", "channel", "message_template", "win_condition", "rationale"
+            "cohort_size", "channel", "message_template", "win_condition", "measure_days", "rationale"
         ],
     },
 }
@@ -313,7 +341,10 @@ def _measure_experiment(cur, experiment: dict) -> dict:
     """Check which cohort members ordered and compute conversion rate."""
     exp_id = experiment["id"]
 
-    # Check orders placed by cohort members since the experiment started
+    # Check orders placed by cohort members up to the experiment's measure_at deadline.
+    # Using the actual measure_at (not a fixed 7-day window) so the attribution window
+    # matches the experiment's configured length (14/21/28 days).
+    measure_at = experiment.get("measure_at")
     cur.execute(
         """UPDATE experiment_contacts ec
            SET ordered = true,
@@ -324,9 +355,9 @@ def _measure_experiment(cur, experiment: dict) -> dict:
            WHERE ec.experiment_id = %s
              AND o.contact_id = ec.contact_id
              AND o.created_at >= ec.sent_at
-             AND o.created_at <= ec.sent_at + interval '7 days'
+             AND o.created_at <= %s
              AND ec.ordered = false""",
-        (exp_id,),
+        (exp_id, measure_at),
     )
 
     # Totals
@@ -407,8 +438,15 @@ def run_growth_cycle():
                 "design": design,
             }
 
-        # Persist experiment
-        measure_at = datetime.now(tz=timezone.utc) + timedelta(days=7)
+        # Measurement window: use Claude's chosen measure_days if provided and sane,
+        # otherwise fall back to the per-type defaults in MEASURE_DAYS.
+        exp_type = design.get("experiment_type", "timing")
+        agent_days = design.get("measure_days")
+        if isinstance(agent_days, int) and 7 <= agent_days <= 56:
+            days = agent_days
+        else:
+            days = MEASURE_DAYS.get(exp_type, 14)
+        measure_at = datetime.now(tz=timezone.utc) + timedelta(days=days)
         cur.execute(
             """INSERT INTO experiments
                 (name, hypothesis, experiment_type, cohort_size, channel,
@@ -454,6 +492,7 @@ def run_growth_cycle():
         "channel": design.get("channel"),
         "cohort_size": dispatched,
         "measure_at": measure_at.isoformat(),
+        "measure_days": days,
         "hypothesis": design.get("hypothesis"),
     }
 
@@ -468,13 +507,29 @@ def measure_experiments():
 
     with get_cursor(commit=False) as cur:
         cur.execute(
-            """SELECT id, name, hypothesis, experiment_type, channel,
-                      message_template, offer_detail, cohort_size,
-                      started_at, measure_at
-               FROM experiments
-               WHERE status = 'running'
-                 AND measure_at <= now()
-               ORDER BY measure_at""",
+            """SELECT e.id, e.name, e.hypothesis, e.experiment_type, e.channel,
+                      e.message_template, e.offer_detail, e.cohort_size,
+                      e.started_at, e.measure_at
+               FROM experiments e
+               WHERE e.status = 'running'
+                 AND (
+                   -- Normal: measurement deadline has passed
+                   e.measure_at <= now()
+                   OR (
+                     -- Adaptive early cutoff: minimum 14-day window has passed
+                     -- AND the cohort has already generated enough conversion events
+                     now() >= e.started_at + interval '14 days'
+                     AND (
+                       SELECT COUNT(*)
+                       FROM experiment_contacts ec2
+                       JOIN orders o ON o.contact_id = ec2.contact_id
+                         AND o.created_at >= ec2.sent_at
+                       WHERE ec2.experiment_id = e.id
+                     ) >= %s
+                   )
+                 )
+               ORDER BY e.measure_at""",
+            (MIN_EVENTS_REQUIRED,),
         )
         due = [dict(r) for r in cur.fetchall()]
 

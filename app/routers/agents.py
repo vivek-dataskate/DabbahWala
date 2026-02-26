@@ -2422,7 +2422,7 @@ def get_outcome_data(report_date: Optional[str] = None):
 
 @router.post("/report/activity")
 def send_activity_report(req: ReportRequest):
-    """Generate the daily activity report and return content for n8n to email."""
+    """Generate the daily activity report and enqueue it as an HTML email via action_queue."""
     report_date = req.report_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     to_email = os.environ.get("REPORT_EMAIL_TO", "core@dabbahwala.com")
 
@@ -2432,19 +2432,24 @@ def send_activity_report(req: ReportRequest):
     csv_filename = f"dabbahwala_activity_{report_date}.csv"
     csv_content = _rows_to_csv(detail_rows)
 
-    email_payload = _build_email_payload(
-        to=to_email,
-        subject=f"DabbahWala Activity Report — {report_date}",
-        html_body=html_body,
-        csv_filename=csv_filename,
-        csv_content=csv_content,
-    )
-    return {"status": "ready", "report_date": report_date, "summary": summary, **email_payload}
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO action_queue (contact_id, action_type, payload)
+               VALUES (NULL, 'send_email_report', %s::jsonb)""",
+            (json.dumps({
+                "to": to_email,
+                "subject": f"DabbahWala Activity Report — {report_date}",
+                "html_body": html_body,
+                "csv_filename": csv_filename,
+                "csv_content": csv_content,
+            }),),
+        )
+    return {"status": "sent", "report_date": report_date, "summary": summary, "html_body": html_body}
 
 
 @router.post("/report/outcome")
 def send_outcome_report(req: ReportRequest):
-    """Generate the daily outcome report and return content for n8n to email."""
+    """Generate the daily outcome report and enqueue it as an HTML email via action_queue."""
     report_date = req.report_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     to_email = os.environ.get("REPORT_EMAIL_TO", "core@dabbahwala.com")
 
@@ -2454,14 +2459,19 @@ def send_outcome_report(req: ReportRequest):
     csv_filename = f"dabbahwala_outcomes_{report_date}.csv"
     csv_content = _rows_to_csv(detail_rows)
 
-    email_payload = _build_email_payload(
-        to=to_email,
-        subject=f"DabbahWala Results Report — {report_date}",
-        html_body=html_body,
-        csv_filename=csv_filename,
-        csv_content=csv_content,
-    )
-    return {"status": "ready", "report_date": report_date, "summary": summary, **email_payload}
+    with get_cursor(commit=True) as cur:
+        cur.execute(
+            """INSERT INTO action_queue (contact_id, action_type, payload)
+               VALUES (NULL, 'send_email_report', %s::jsonb)""",
+            (json.dumps({
+                "to": to_email,
+                "subject": f"DabbahWala Results Report — {report_date}",
+                "html_body": html_body,
+                "csv_filename": csv_filename,
+                "csv_content": csv_content,
+            }),),
+        )
+    return {"status": "sent", "report_date": report_date, "summary": summary, "html_body": html_body}
 
 
 # --- Action queue management ---
