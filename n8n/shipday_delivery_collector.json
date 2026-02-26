@@ -1,5 +1,5 @@
 {
-  "name": "[Shipday — Evidence] Delivery Collector",
+  "name": "[Order Intake] Order Collector",
   "nodes": [
     {
       "parameters": {

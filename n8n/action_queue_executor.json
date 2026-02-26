@@ -1,5 +1,5 @@
 {
-  "name": "[System — Action] Action Queue Executor",
+  "name": "[System] Action Queue",
   "nodes": [
     {
       "parameters": {

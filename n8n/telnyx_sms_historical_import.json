@@ -1,5 +1,5 @@
 {
-  "name": "[Telnyx — Evidence] SMS Historical Import",
+  "name": "[SMS] Historical Import",
   "nodes": [
     {
       "parameters": {},

@@ -1,5 +1,5 @@
 {
-  "name": "[Claude \u2014 Inference] Hourly Intelligence Cycle",
+  "name": "[Intelligence] Contact Sweep",
   "nodes": [
     {
       "parameters": {
@@ -296,7 +296,7 @@
     {
       "parameters": {},
       "id": "no-actions",
-      "name": "No Pending \u2014 Skip",
+      "name": "No Pending — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -307,7 +307,7 @@
     {
       "parameters": {},
       "id": "skip-other",
-      "name": "Other Actions \u2014 Skip",
+      "name": "Other Actions — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -394,7 +394,7 @@
         ],
         [
           {
-            "node": "No Pending \u2014 Skip",
+            "node": "No Pending — Skip",
             "type": "main",
             "index": 0
           }
@@ -430,7 +430,7 @@
         ],
         [
           {
-            "node": "Other Actions \u2014 Skip",
+            "node": "Other Actions — Skip",
             "type": "main",
             "index": 0
           }

@@ -1,5 +1,5 @@
 {
-  "name": "[Airtable \u2014 Evidence] Menu Catalog Sync",
+  "name": "[Menu] Catalog Sync",
   "nodes": [
     {
       "parameters": {
@@ -32,7 +32,7 @@
         }
       },
       "id": "http-sync",
-      "name": "Sync Airtable \u2192 Postgres",
+      "name": "Sync Airtable → Postgres",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
@@ -74,7 +74,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconsole.log(`[Menu Catalog Sync] OK \u2014 upserted=${data.upserted} discarded=${data.discarded} history_events=${data.history_events} errors=${data.errors} total=${data.total}`);\nreturn [{ json: data }];"
+        "jsCode": "const data = $input.first().json;\nconsole.log(`[Menu Catalog Sync] OK — upserted=${data.upserted} discarded=${data.discarded} history_events=${data.history_events} errors=${data.errors} total=${data.total}`);\nreturn [{ json: data }];"
       },
       "id": "log-success",
       "name": "Log Success",
@@ -87,7 +87,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $input.first().json;\nconsole.error(`[Menu Catalog Sync] Errors \u2014 upserted=${data.upserted} discarded=${data.discarded} history_events=${data.history_events} errors=${data.errors} total=${data.total}`);\nreturn [{ json: data }];"
+        "jsCode": "const data = $input.first().json;\nconsole.error(`[Menu Catalog Sync] Errors — upserted=${data.upserted} discarded=${data.discarded} history_events=${data.history_events} errors=${data.errors} total=${data.total}`);\nreturn [{ json: data }];"
       },
       "id": "log-errors",
       "name": "Log Errors",
@@ -104,14 +104,14 @@
       "main": [
         [
           {
-            "node": "Sync Airtable \u2192 Postgres",
+            "node": "Sync Airtable → Postgres",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Sync Airtable \u2192 Postgres": {
+    "Sync Airtable → Postgres": {
       "main": [
         [
           {

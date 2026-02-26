@@ -1,5 +1,5 @@
 {
-  "name": "[Airtable — Evidence] Playbook Sync",
+  "name": "[Agent Rules] Playbook Sync",
   "nodes": [
     {
       "parameters": {

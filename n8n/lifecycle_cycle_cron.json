@@ -1,5 +1,5 @@
 {
-  "name": "[Claude \u2014 Decision] Lifecycle Cycle Runner",
+  "name": "[Intelligence] Stage Runner",
   "nodes": [
     {
       "parameters": {
@@ -87,7 +87,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nif (!items || items.length === 0) return [];\n// n8n HTTP Request may either:\n//   (a) return ONE item whose .json is the full array  \u2014 split it\n//   (b) already split the array into N items          \u2014 pass through\nif (items.length === 1 && Array.isArray(items[0].json)) {\n  const arr = items[0].json;\n  return arr.map(c => ({ json: c }));\n}\nreturn items;"
+        "jsCode": "const items = $input.all();\nif (!items || items.length === 0) return [];\n// n8n HTTP Request may either:\n//   (a) return ONE item whose .json is the full array  — split it\n//   (b) already split the array into N items          — pass through\nif (items.length === 1 && Array.isArray(items[0].json)) {\n  const arr = items[0].json;\n  return arr.map(c => ({ json: c }));\n}\nreturn items;"
       },
       "id": "split-campaigns",
       "name": "Split Campaign Moves",
@@ -100,7 +100,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Map internal campaign names to Instantly campaign IDs\nconst INSTANTLY_IDS = {\n  'NURTURE_SLOW':            '76a88797-961a-47b6-af11-77e2211c4e73',\n  'PROMO_STANDARD':          'f3e2d621-9bf2-4130-bc1c-f8168fc44e1e',\n  'ACTIVE_CUSTOMER':         'c763e229-f633-468b-bfe4-7f9a4fd21036',\n  'PROMO_AGGRESSIVE':        '87d44ff1-8720-4c1d-92ff-b827970f323f',\n  'NEW_CUSTOMER_ONBOARDING': '8a5ccbfb-500d-4060-ad99-76aa0159bbf2',\n  'REACTIVATION':            '69c84455-d9b8-437f-b249-8325d23798e6'\n};\n\n// Campaigns with no Instantly email campaign (app-only users with placeholder emails)\nconst SKIP_CAMPAIGNS = new Set(['APP_TO_DIRECT']);\n\nconst item = $input.item.json;\n\nif (SKIP_CAMPAIGNS.has(item.to_campaign)) {\n  return {\n    json: {\n      queue_id: item.queue_id,\n      email:    item.contact_email,\n      skip:     true,\n      reason:   item.to_campaign + ' has no Instantly email campaign'\n    }\n  };\n}\n\nconst toCampaignId   = INSTANTLY_IDS[item.to_campaign];\nconst fromCampaignId = item.from_campaign ? INSTANTLY_IDS[item.from_campaign] : null;\n\nif (!toCampaignId) {\n  throw new Error('Unknown campaign name: ' + item.to_campaign);\n}\n\n// first_name is mandatory for Instantly personalisation \u2014 skip if missing\nconst firstName = (item.contact_first_name || '').trim();\nif (!firstName) {\n  return {\n    json: {\n      queue_id: item.queue_id,\n      email:    item.contact_email,\n      skip:     true,\n      reason:   'missing_first_name'\n    }\n  };\n}\n\nreturn {\n  json: {\n    queue_id:                   item.queue_id,\n    email:                      item.contact_email,\n    first_name:                 firstName,\n    last_name:                  (item.contact_last_name || '').trim(),\n    phone:                      item.contact_phone || null,\n    to_campaign:                item.to_campaign,\n    from_campaign:              item.from_campaign || null,\n    instantly_to_campaign_id:   toCampaignId,\n    instantly_from_campaign_id: fromCampaignId,\n    skip:                       false\n  }\n};",
+        "jsCode": "// Map internal campaign names to Instantly campaign IDs\nconst INSTANTLY_IDS = {\n  'NURTURE_SLOW':            '76a88797-961a-47b6-af11-77e2211c4e73',\n  'PROMO_STANDARD':          'f3e2d621-9bf2-4130-bc1c-f8168fc44e1e',\n  'ACTIVE_CUSTOMER':         'c763e229-f633-468b-bfe4-7f9a4fd21036',\n  'PROMO_AGGRESSIVE':        '87d44ff1-8720-4c1d-92ff-b827970f323f',\n  'NEW_CUSTOMER_ONBOARDING': '8a5ccbfb-500d-4060-ad99-76aa0159bbf2',\n  'REACTIVATION':            '69c84455-d9b8-437f-b249-8325d23798e6'\n};\n\n// Campaigns with no Instantly email campaign (app-only users with placeholder emails)\nconst SKIP_CAMPAIGNS = new Set(['APP_TO_DIRECT']);\n\nconst item = $input.item.json;\n\nif (SKIP_CAMPAIGNS.has(item.to_campaign)) {\n  return {\n    json: {\n      queue_id: item.queue_id,\n      email:    item.contact_email,\n      skip:     true,\n      reason:   item.to_campaign + ' has no Instantly email campaign'\n    }\n  };\n}\n\nconst toCampaignId   = INSTANTLY_IDS[item.to_campaign];\nconst fromCampaignId = item.from_campaign ? INSTANTLY_IDS[item.from_campaign] : null;\n\nif (!toCampaignId) {\n  throw new Error('Unknown campaign name: ' + item.to_campaign);\n}\n\n// first_name is mandatory for Instantly personalisation — skip if missing\nconst firstName = (item.contact_first_name || '').trim();\nif (!firstName) {\n  return {\n    json: {\n      queue_id: item.queue_id,\n      email:    item.contact_email,\n      skip:     true,\n      reason:   'missing_first_name'\n    }\n  };\n}\n\nreturn {\n  json: {\n    queue_id:                   item.queue_id,\n    email:                      item.contact_email,\n    first_name:                 firstName,\n    last_name:                  (item.contact_last_name || '').trim(),\n    phone:                      item.contact_phone || null,\n    to_campaign:                item.to_campaign,\n    from_campaign:              item.from_campaign || null,\n    instantly_to_campaign_id:   toCampaignId,\n    instantly_from_campaign_id: fromCampaignId,\n    skip:                       false\n  }\n};",
         "mode": "runOnceForEachItem"
       },
       "id": "prepare-instantly-payload",
@@ -254,7 +254,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Restore original payload after Remove from Old Campaign replaced $json.\n// For NO branch (direct from Has Old Campaign?): $input.item.json has queue_id.\n// For YES branch (via Remove HTTP): try paired item, fall back gracefully.\nconst item = $input.item.json;\nif (item.queue_id !== undefined && item.queue_id !== null) {\n  // NO branch \u2014 item already has original payload data\n  return { json: item };\n}\n// YES branch \u2014 Instantly DELETE response; try to recover via pairedItem\ntry {\n  return { json: $('Prepare Instantly Payload').item.json };\n} catch(e) {\n  // Pairing unavailable; pass through what we have (will be logged as error)\n  return { json: { queue_id: null, email: item.email || null, _restore_failed: true } };\n}",
+        "jsCode": "// Restore original payload after Remove from Old Campaign replaced $json.\n// For NO branch (direct from Has Old Campaign?): $input.item.json has queue_id.\n// For YES branch (via Remove HTTP): try paired item, fall back gracefully.\nconst item = $input.item.json;\nif (item.queue_id !== undefined && item.queue_id !== null) {\n  // NO branch — item already has original payload data\n  return { json: item };\n}\n// YES branch — Instantly DELETE response; try to recover via pairedItem\ntry {\n  return { json: $('Prepare Instantly Payload').item.json };\n} catch(e) {\n  // Pairing unavailable; pass through what we have (will be logged as error)\n  return { json: { queue_id: null, email: item.email || null, _restore_failed: true } };\n}",
         "mode": "runOnceForEachItem"
       },
       "id": "restore-payload",
@@ -380,7 +380,7 @@
     {
       "parameters": {},
       "id": "no-campaigns",
-      "name": "No Campaigns \u2014 Done",
+      "name": "No Campaigns — Done",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -517,7 +517,7 @@
         ],
         [
           {
-            "node": "No Campaigns \u2014 Done",
+            "node": "No Campaigns — Done",
             "type": "main",
             "index": 0
           }

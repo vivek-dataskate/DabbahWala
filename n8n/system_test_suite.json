@@ -1,5 +1,5 @@
 {
-  "name": "[System — Test] Daily E2E Test Suite",
+  "name": "[System] Daily Tests",
   "nodes": [
     {
       "parameters": {
@@ -16,7 +16,10 @@
       "name": "Daily at 5 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [200, 300]
+      "position": [
+        200,
+        300
+      ]
     },
     {
       "parameters": {},
@@ -24,7 +27,10 @@
       "name": "Manual Trigger",
       "type": "n8n-nodes-base.manualTrigger",
       "typeVersion": 1,
-      "position": [200, 480]
+      "position": [
+        200,
+        480
+      ]
     },
     {
       "parameters": {
@@ -34,7 +40,10 @@
       "name": "Set Context",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [420, 300]
+      "position": [
+        420,
+        300
+      ]
     },
     {
       "parameters": {
@@ -53,7 +62,10 @@
       "name": "Run Full E2E Test Suite",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     },
     {
       "parameters": {
@@ -63,7 +75,10 @@
       "name": "Parse Results & Build Email",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [880, 300]
+      "position": [
+        880,
+        300
+      ]
     },
     {
       "parameters": {
@@ -92,7 +107,10 @@
       "name": "Any Failures?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
-      "position": [1100, 300]
+      "position": [
+        1100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -107,7 +125,10 @@
       "name": "Send Failure Alert Email",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [1340, 220],
+      "position": [
+        1340,
+        220
+      ],
       "credentials": {
         "smtp": {
           "id": "Sk6XzPNPnJTXHEbr",
@@ -128,7 +149,10 @@
       "name": "Send Success Summary Email",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [1340, 400],
+      "position": [
+        1340,
+        400
+      ],
       "credentials": {
         "smtp": {
           "id": "Sk6XzPNPnJTXHEbr",
@@ -140,33 +164,75 @@
   "connections": {
     "Daily at 5 AM": {
       "main": [
-        [{ "node": "Set Context", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Set Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Manual Trigger": {
       "main": [
-        [{ "node": "Set Context", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Set Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Set Context": {
       "main": [
-        [{ "node": "Run Full E2E Test Suite", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Run Full E2E Test Suite",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Run Full E2E Test Suite": {
       "main": [
-        [{ "node": "Parse Results & Build Email", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Parse Results & Build Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Parse Results & Build Email": {
       "main": [
-        [{ "node": "Any Failures?", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Any Failures?",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Any Failures?": {
       "main": [
-        [{ "node": "Send Failure Alert Email", "type": "main", "index": 0 }],
-        [{ "node": "Send Success Summary Email", "type": "main", "index": 0 }]
+        [
+          {
+            "node": "Send Failure Alert Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Success Summary Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
@@ -176,9 +242,18 @@
   },
   "staticData": null,
   "tags": [
-    { "name": "DabbahWala", "id": "dabbahwala" },
-    { "name": "System", "id": "system" },
-    { "name": "Test", "id": "test" }
+    {
+      "name": "DabbahWala",
+      "id": "dabbahwala"
+    },
+    {
+      "name": "System",
+      "id": "system"
+    },
+    {
+      "name": "Test",
+      "id": "test"
+    }
   ],
   "pinData": {}
 }

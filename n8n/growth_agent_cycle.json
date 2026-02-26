@@ -1,5 +1,5 @@
 {
-  "name": "[Claude — Inference] Growth Agent Cycle",
+  "name": "[Growth] Weekly Growth Agent",
   "nodes": [
     {
       "parameters": {
@@ -8,7 +8,9 @@
             {
               "field": "weeks",
               "weeksInterval": 1,
-              "triggerAtDay": [1],
+              "triggerAtDay": [
+                1
+              ],
               "triggerAtHour": 7,
               "triggerAtMinute": 30
             }
@@ -19,7 +21,10 @@
       "name": "Every Monday 7:30 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [100, 300]
+      "position": [
+        100,
+        300
+      ]
     },
     {
       "parameters": {
@@ -33,7 +38,10 @@
       "name": "Refresh Baseline Conv Rate",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [320, 300]
+      "position": [
+        320,
+        300
+      ]
     },
     {
       "parameters": {
@@ -47,7 +55,10 @@
       "name": "Measure Previous Experiments",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [540, 300]
+      "position": [
+        540,
+        300
+      ]
     },
     {
       "parameters": {
@@ -61,7 +72,10 @@
       "name": "Design + Launch New Experiment",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [760, 300]
+      "position": [
+        760,
+        300
+      ]
     },
     {
       "parameters": {
@@ -75,7 +89,10 @@
       "name": "Get Growth Insights",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [980, 300]
+      "position": [
+        980,
+        300
+      ]
     },
     {
       "parameters": {
@@ -85,7 +102,10 @@
       "name": "Build Weekly Report",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1200, 300]
+      "position": [
+        1200,
+        300
+      ]
     },
     {
       "parameters": {
@@ -100,7 +120,10 @@
       "name": "Email Growth Report",
       "type": "n8n-nodes-base.emailSend",
       "typeVersion": 2.1,
-      "position": [1420, 300],
+      "position": [
+        1420,
+        300
+      ],
       "credentials": {
         "smtp": {
           "id": "Sk6XzPNPnJTXHEbr",

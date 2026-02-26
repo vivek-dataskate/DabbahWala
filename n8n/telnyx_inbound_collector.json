@@ -1,5 +1,5 @@
 {
-  "name": "[Telnyx — Evidence] Inbound SMS Collector",
+  "name": "[SMS] Inbound Collector",
   "nodes": [
     {
       "parameters": {

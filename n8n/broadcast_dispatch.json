@@ -1,5 +1,5 @@
 {
-  "name": "[Telnyx — Action] Broadcast Dispatch",
+  "name": "[Broadcast] Dispatch",
   "nodes": [
     {
       "parameters": {

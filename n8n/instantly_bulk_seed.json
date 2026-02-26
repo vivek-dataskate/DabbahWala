@@ -1,5 +1,5 @@
 {
-  "name": "[Instantly \u2014 Sync] Bulk Lead Seeder",
+  "name": "[Email Campaigns] Bulk Seed",
   "nodes": [
     {
       "parameters": {},
@@ -152,7 +152,7 @@
     {
       "parameters": {},
       "id": "skipped-no-op",
-      "name": "Skipped \u2014 No First Name",
+      "name": "Skipped — No First Name",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -217,7 +217,7 @@
         ],
         [
           {
-            "node": "Skipped \u2014 No First Name",
+            "node": "Skipped — No First Name",
             "type": "main",
             "index": 0
           }
