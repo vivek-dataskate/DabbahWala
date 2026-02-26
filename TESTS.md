@@ -7,18 +7,18 @@ Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
 
 | File | Router Covered | Tests |
 |------|----------------|-------|
-| `test_agents.py` | `agents.py` | 26 — cycle run, report data, action queue CRUD, goals, run-all-lapsed, run-all, activity/outcome reports, do-not-contact, _fetch_playbook_rules, _filter_playbook, _fetch_contact 404 |
+| `test_agents.py` | `agents.py` | 48 — cycle run, report data, action queue CRUD, goals, run-all-lapsed, run-all, activity/outcome reports, do-not-contact, _fetch_playbook_rules, _filter_playbook, _fetch_contact 404, _lookup_contact_id (phone/email/name), _get_or_create_contact (existing/no-phone/creates-new/exception), run-all/lapsed/daily-sweep/all-contacts no-contacts + with-contacts, _fetch_outcome_data, _rows_to_csv, cycle/run error handling |
 | `test_auth.py` | `auth.py` | 26 — session create/decode/tamper/expire, login, Google OAuth redirect, callback, auth/me, logout |
 | `test_broadcasts.py` | `broadcasts.py` | 19 — create, delay-alert, queue, list, pending-recipients, recipients sent/failed, get job, validation |
 | `test_campaigns.py` | `campaigns.py` | 35 — pending, log-push, push-log, bulk-executed, active-contacts, stats, analytics, templates CRUD, rewrite (Claude), bulk-push, repair-push, push_lead_to_instantly, _get_routing_rows/row, analytics error handling |
-| `test_chatbot.py` | `chatbot.py` | 24 — ask, empty question, no key, history, suggest, reindex, _split_chunks, _compute_docs_hash, _last_indexed_at, _relevant_chunks, _lookup_canned, _find_cached_answer |
+| `test_chatbot.py` | `chatbot.py` | 35 — ask, empty question, no key, history, suggest, reindex, _split_chunks, _compute_docs_hash, _last_indexed_at, _relevant_chunks, _lookup_canned, _find_cached_answer, _save_interaction, _save_canned, _clear_canned, _save_last_indexed_at, _save_docs_hash, _get_stored_docs_hash, _similar_history |
 | `test_competitor_agent.py` | `competitor_agent.py` | 5 — run no key, run mocked, list runs, list experiments |
 | `test_contacts.py` | `contacts.py` | 4 — priority high/do_not_contact, invalid priority, update notes |
 | `test_daily_orders.py` | `daily_orders.py` | 27 — process CSV, empty CSV, new contacts, phone match, skip dups, download CSV, summary, normalize_phone/name/dish, _parse_delivery_slot |
 | `test_delivery.py` | `delivery.py` | 8 — record by email/phone, neither, unknown phone, stored proc args, missing status, proc 404 |
 | `test_events.py` | `events.py` | 4 — ingest with email/phone, no contact, missing event_type |
 | `test_field_agent.py` | `field_agent.py` | 8 — analyze-call 404/success, daily-brief empty/success, reviews, scorecard, pending-calls |
-| `test_goal_agent.py` | `goal_agent.py` | 18 — hypothesize, experiment, measure, harvest, run (all phases), experiments, signals, runs |
+| `test_goal_agent.py` | `goal_agent.py` | 37 — hypothesize, experiment, measure, harvest, run (all phases), experiments, signals, runs, _tool_call exception, _execute_cohort_sql (unsafe SQL/exception/valid), _enqueue_experiment_actions (no-phone/exception), _count_experiment_conversions, _check_and_mark_conversions, _save_discovered_signal (unsafe/exception/success), _run_conclusion_agent, _conclude_experiment, _phase_measure with experiment, /run phase exception |
 | `test_growth_agent.py` | `growth_agent.py` | 14 — run-cycle launch/skip (small cohort/empty design), measure, experiments, insights, baseline |
 | `test_intelligence.py` | `intelligence.py` | 22 — run-cycle 5 phases, pending-actions, ingest-instantly-events, _phase_collect, _phase_profile, _phase_signal, _phase_dispatch |
 | `test_lifecycle.py` | `lifecycle.py` | 3 — run returns counts, zero contacts, DB error |
@@ -36,7 +36,7 @@ Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
 | `test_team_content.py` | `team_content.py` | 9 — sync new/existing/empty, submit, browse, search |
 | `test_webhooks.py` | `webhooks.py` | 25 — list campaigns, campaign-stats, Instantly event/unknown, Telnyx inbound, Shipday auth/delivered/failed/ping |
 
-**Total unit tests: 773 passing, 62 skipped (live API — activate with env vars), 62% code coverage**
+**Total unit tests: 825 passing, 62 skipped (live API — activate with env vars), 63% code coverage**
 
 To run with live API tests:
 ```bash
