@@ -16,8 +16,8 @@ if echo "$command" | grep -qE 'git push[^|]*\bmain\b'; then
   exit 2
 fi
 
-# Block: git push --force / -f to origin (except feature branches handled separately)
-if echo "$command" | grep -qE 'git push[^|]*(--force|-f)\b'; then
+# Block: git push --force / -f (but allow --force-with-lease for rebased feature branches)
+if echo "$command" | grep -qE 'git push[^|]*(--force[^-]|--force$|-f\b)'; then
   echo "BLOCKED: Force push is not allowed. Use --force-with-lease only when rebasing your own feature branch." >&2
   exit 2
 fi
