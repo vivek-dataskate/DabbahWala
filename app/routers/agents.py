@@ -1,6 +1,6 @@
 """
 DabbahWala — Claude Agent Stack
-Inference → Decision → Orchestrator → Action Queue
+Observer → Advisor → Orchestrator → Action Queue
 Plus daily Activity and Outcome reporting agents.
 """
 
@@ -38,8 +38,8 @@ _playbook_cache: dict = {"hash": "", "content": ""}
 # Each agent only receives rule categories it can act on, reducing prompt tokens
 # without needing a vector store. Exclusion + priority rules go to all agents.
 _PLAYBOOK_CATEGORIES: dict = {
-    "inference": ["exclusion", "priority", "inference"],
-    "decision":  ["exclusion", "priority", "decision", "messaging"],
+    "observer": ["exclusion", "priority", "observer"],
+    "advisor":  ["exclusion", "priority", "advisor", "messaging"],
     "menu":      ["exclusion", "messaging"],
     "orchestrator": ["exclusion", "priority"],
 }
@@ -281,8 +281,8 @@ def _fetch_playbook_rules() -> str:
                     CASE category
                         WHEN 'exclusion' THEN 1
                         WHEN 'priority'  THEN 2
-                        WHEN 'inference' THEN 3
-                        WHEN 'decision'  THEN 4
+                        WHEN 'observer' THEN 3
+                        WHEN 'advisor'  THEN 4
                         WHEN 'messaging' THEN 5
                         ELSE 6
                     END,
@@ -301,14 +301,14 @@ def _fetch_playbook_rules() -> str:
         label_map = {
             "exclusion": "EXCLUSION RULES (Must Follow — override everything)",
             "priority":  "PRIORITY RULES",
-            "inference": "INFERENCE RULES (What signals to look for)",
-            "decision":  "DECISION RULES (What actions to take)",
+            "observer": "OBSERVER RULES (What signals to look for)",
+            "advisor":  "ADVISOR RULES (What actions to take)",
             "messaging": "MESSAGING RULES (Tone & copy style)",
             "general":   "GENERAL RULES",
         }
         lines = ["\n\n## Your Active Playbook (User-Configured Rules)\n",
                  "These rules override your defaults. Follow them strictly.\n"]
-        for cat in ["exclusion", "priority", "inference", "decision", "messaging", "general"]:
+        for cat in ["exclusion", "priority", "observer", "advisor", "messaging", "general"]:
             if cat in categories:
                 lines.append(f"\n### {label_map.get(cat, cat.upper())}")
                 for r in categories[cat]:
@@ -334,7 +334,7 @@ def _filter_playbook(playbook: str, agent_layer: str) -> str:
     """Return only the playbook sections relevant to this agent layer.
 
     Reduces per-agent prompt tokens without needing a vector store.
-    agent_layer: 'inference' | 'decision' | 'menu' | 'orchestrator'
+    agent_layer: 'observer' | 'advisor' | 'menu' | 'orchestrator'
 
     If the playbook is empty or the layer has no matching sections, returns
     the full playbook so agents never lose context silently.
@@ -348,8 +348,8 @@ def _filter_playbook(playbook: str, agent_layer: str) -> str:
     label_map = {
         "EXCLUSION RULES": "exclusion",
         "PRIORITY RULES":  "priority",
-        "INFERENCE RULES": "inference",
-        "DECISION RULES":  "decision",
+        "OBSERVER RULES": "observer",
+        "ADVISOR RULES":  "advisor",
         "MESSAGING RULES": "messaging",
         "GENERAL RULES":   "general",
     }
@@ -536,12 +536,12 @@ def _run_menu_agent(
     return result
 
 
-def _fetch_latest_inference(contact_id: int) -> Optional[dict]:
-    logger.debug("Fetching latest inference for contact_id=%s", contact_id)
+def _fetch_observations(contact_id: int) -> Optional[dict]:
+    logger.debug("Fetching latest observations for contact_id=%s", contact_id)
     with get_cursor(commit=False) as cur:
         cur.execute(
             """
-            SELECT * FROM inference_results
+            SELECT * FROM contact_observations
             WHERE contact_id = %s
             ORDER BY run_at DESC LIMIT 1
             """,
@@ -551,23 +551,23 @@ def _fetch_latest_inference(contact_id: int) -> Optional[dict]:
         if row:
             inf = dict(row)
             logger.debug(
-                "Latest inference contact_id=%s: sentiment=%s intent=%s engagement=%.2f",
+                "Latest observations contact_id=%s: sentiment=%s intent=%s engagement=%.2f",
                 contact_id,
                 inf.get("sentiment"),
                 inf.get("intent"),
                 inf.get("engagement_score") or 0,
             )
             return inf
-        logger.debug("No previous inference found for contact_id=%s", contact_id)
+        logger.debug("No previous observations found for contact_id=%s", contact_id)
         return None
 
 
-def _fetch_latest_decision(contact_id: int) -> Optional[dict]:
+def _fetch_action_plan(contact_id: int) -> Optional[dict]:
     logger.debug("Fetching latest decision for contact_id=%s", contact_id)
     with get_cursor(commit=False) as cur:
         cur.execute(
             """
-            SELECT * FROM decision_recommendations
+            SELECT * FROM action_plans
             WHERE contact_id = %s
             ORDER BY run_at DESC LIMIT 1
             """,
@@ -898,9 +898,9 @@ def _run_engagement_agent(
     return result
 
 
-def _store_inference(contact_id: int, goal_id: Optional[int], sentiment: dict, intent: dict, engagement: dict) -> int:
+def _store_observations(contact_id: int, goal_id: Optional[int], sentiment: dict, intent: dict, engagement: dict) -> int:
     logger.debug(
-        "Storing inference for contact_id=%s sentiment=%s intent=%s engagement=%.2f",
+        "Storing observations for contact_id=%s sentiment=%s intent=%s engagement=%.2f",
         contact_id,
         sentiment.get("sentiment"),
         intent.get("intent"),
@@ -909,7 +909,7 @@ def _store_inference(contact_id: int, goal_id: Optional[int], sentiment: dict, i
     with get_cursor() as cur:
         cur.execute(
             """
-            INSERT INTO inference_results
+            INSERT INTO contact_observations
                 (contact_id, goal_id,
                  sentiment, sentiment_confidence, sentiment_summary,
                  intent, intent_signals, intent_confidence,
@@ -924,9 +924,9 @@ def _store_inference(contact_id: int, goal_id: Optional[int], sentiment: dict, i
                 engagement.get("engagement_score"), engagement.get("trend"), engagement.get("last_touch_hours_ago"),
             ),
         )
-        inference_id = cur.fetchone()["id"]
-        logger.info("Inference stored id=%s for contact_id=%s", inference_id, contact_id)
-        return inference_id
+        observation_id = cur.fetchone()["id"]
+        logger.info("Inference stored id=%s for contact_id=%s", observation_id, contact_id)
+        return observation_id
 
 
 # ---------------------------------------------------------------------------
@@ -937,7 +937,7 @@ def _store_inference(contact_id: int, goal_id: Optional[int], sentiment: dict, i
 def _run_stage_agent(
     client: anthropic.Anthropic,
     contact: dict,
-    inference: dict,
+    observations: dict,
     playbook: str,
 ) -> dict:
     """Recommend a lifecycle stage transition."""
@@ -945,18 +945,18 @@ def _run_stage_agent(
         "Running Stage Agent for contact_id=%s current_stage=%s intent=%s",
         contact.get("id"),
         contact.get("lifecycle_segment"),
-        inference.get("intent"),
+        observations.get("intent"),
     )
     system = (
         "You are the Stage Transition Decision Agent for DabbahWala. "
         "Valid lifecycle stages: cold, engaged, new_customer, active_customer, lapsed_customer, churned. "
-        "Recommend a lifecycle stage change only if the inference data clearly supports it. "
+        "Recommend a lifecycle stage change only if the observation data clearly supports it. "
         "If the current stage is appropriate, recommend the same stage."
         + playbook
     )
     user = (
         f"Current stage: {contact.get('lifecycle_segment', 'unknown')}\n"
-        f"Inference results:\n{json.dumps(inference, indent=2, default=str)}"
+        f"Observations:\n{json.dumps(observations, indent=2, default=str)}"
     )
     tool = {
         "name": "submit_stage",
@@ -992,7 +992,7 @@ def _run_stage_agent(
 def _run_channel_agent(
     client: anthropic.Anthropic,
     contact: dict,
-    inference: dict,
+    observations: dict,
     recent_actions: list,
     playbook: str,
 ) -> dict:
@@ -1000,8 +1000,8 @@ def _run_channel_agent(
     logger.info(
         "Running Channel Agent for contact_id=%s engagement=%.2f trend=%s",
         contact.get("id"),
-        inference.get("engagement_score", 0),
-        inference.get("engagement_trend", "flat"),
+        observations.get("engagement_score", 0),
+        observations.get("engagement_trend", "flat"),
     )
     system = (
         "You are the Channel Selection Decision Agent for DabbahWala. "
@@ -1027,8 +1027,8 @@ def _run_channel_agent(
         + playbook
     )
     user = (
-        f"Customer: {contact.get('first_name', '')} | Engagement: {inference.get('engagement_score', 0):.2f} "
-        f"| Trend: {inference.get('engagement_trend', 'flat')} | Intent: {inference.get('intent', 'unknown')} "
+        f"Customer: {contact.get('first_name', '')} | Engagement: {observations.get('engagement_score', 0):.2f} "
+        f"| Trend: {observations.get('engagement_trend', 'flat')} | Intent: {observations.get('intent', 'unknown')} "
         f"| Opens(30d): {contact.get('opens_30d', 0)} | Clicks(30d): {contact.get('clicks_30d', 0)}\n\n"
         f"Full channel history (last 7 days — use to determine rotation):\n"
         f"{json.dumps(recent_actions, indent=2, default=str)}"
@@ -1062,7 +1062,7 @@ def _run_channel_agent(
 def _run_offer_agent(
     client: anthropic.Anthropic,
     contact: dict,
-    inference: dict,
+    observations: dict,
     outcomes: list,
     playbook: str,
     recent_actions: Optional[list] = None,
@@ -1076,8 +1076,8 @@ def _run_offer_agent(
     logger.info(
         "Running Offer Agent for contact_id=%s sentiment=%s intent=%s outcomes=%d",
         contact.get("id"),
-        inference.get("sentiment"),
-        inference.get("intent"),
+        observations.get("sentiment"),
+        observations.get("intent"),
         len(outcomes),
     )
     # Count total outreach attempts from action history
@@ -1146,8 +1146,8 @@ def _run_offer_agent(
 
     user = (
         f"Customer: {contact.get('first_name', '')} | Orders: {contact.get('total_orders', 0)} | "
-        f"Sentiment: {inference.get('sentiment', 'neutral')} | Intent: {inference.get('intent', 'unknown')}\n"
-        f"Engagement score: {inference.get('engagement_score', 0):.2f} | Total outreach attempts: {attempt_count}\n"
+        f"Sentiment: {observations.get('sentiment', 'neutral')} | Intent: {observations.get('intent', 'unknown')}\n"
+        f"Engagement score: {observations.get('engagement_score', 0):.2f} | Total outreach attempts: {attempt_count}\n"
         f"{progression_note}"
         f"{outcome_insight}"
         f"{menu_copy_hint}\n\n"
@@ -1189,7 +1189,7 @@ def _run_offer_agent(
 def _run_escalation_agent(
     client: anthropic.Anthropic,
     contact: dict,
-    inference: dict,
+    observations: dict,
     goal: Optional[dict],
     outcomes: list,
     playbook: str,
@@ -1202,8 +1202,8 @@ def _run_escalation_agent(
     logger.info(
         "Running Escalation Agent for contact_id=%s sentiment=%s intent=%s goal=%s",
         contact.get("id"),
-        inference.get("sentiment"),
-        inference.get("intent"),
+        observations.get("sentiment"),
+        observations.get("intent"),
         goal.get("goal") if goal else "none",
     )
     failed_attempts = sum(1 for o in outcomes if o.get("outcome") in ("no_answer", "not_interested"))
@@ -1246,7 +1246,7 @@ def _run_escalation_agent(
         f"Total orders ever: {contact.get('total_orders', 0)} | "
         f"Last order: {contact.get('last_order_at', 'never')}\n"
         f"Sales notes from ground team: {contact.get('sales_notes') or 'none'}\n"
-        f"Inference: {json.dumps(inference, indent=2, default=str)}\n"
+        f"Inference: {json.dumps(observations, indent=2, default=str)}\n"
         f"Active goal: {json.dumps(goal, indent=2, default=str)}\n"
         f"Failed attempts (from feedback): {failed_attempts} | Total automated touches: {total_automated}"
         f"{escalation_context}"
@@ -1280,9 +1280,9 @@ def _run_escalation_agent(
     return result
 
 
-def _store_decision(
+def _store_action_plan(
     contact_id: int,
-    inference_id: int,
+    observation_id: int,
     stage: dict,
     channel: dict,
     offer: dict,
@@ -1298,8 +1298,8 @@ def _store_decision(
     with get_cursor() as cur:
         cur.execute(
             """
-            INSERT INTO decision_recommendations
-                (contact_id, inference_result_id,
+            INSERT INTO action_plans
+                (contact_id, observation_id,
                  recommended_stage, stage_confidence, stage_reason,
                  recommended_channel, channel_timing, channel_reason,
                  offer_type, suggested_copy, offer_reason,
@@ -1308,16 +1308,16 @@ def _store_decision(
             RETURNING id
             """,
             (
-                contact_id, inference_id,
+                contact_id, observation_id,
                 stage.get("recommended_stage"), stage.get("confidence"), stage.get("reason"),
                 channel.get("recommended_channel"), channel.get("channel_timing"), channel.get("reason"),
                 offer.get("offer_type"), offer.get("suggested_copy"), offer.get("reason"),
                 escalation.get("should_escalate", False), escalation.get("urgency", "none"), escalation.get("reason"),
             ),
         )
-        decision_id = cur.fetchone()["id"]
-        logger.info("Decision stored id=%s for contact_id=%s", decision_id, contact_id)
-        return decision_id
+        plan_id = cur.fetchone()["id"]
+        logger.info("Decision stored id=%s for contact_id=%s", plan_id, contact_id)
+        return plan_id
 
 
 # ---------------------------------------------------------------------------
@@ -1327,7 +1327,7 @@ def _store_decision(
 def _run_orchestrator(
     client: anthropic.Anthropic,
     contact: dict,
-    decision: dict,
+    plans: dict,
     goal: Optional[dict],
     recent_actions: list,
     playbook: str,
@@ -1337,7 +1337,7 @@ def _run_orchestrator(
         "Running Orchestrator for contact_id=%s delivery=%s escalate=%s",
         contact.get("id"),
         delivery_context.get("event_type") if delivery_context else "none",
-        decision.get("escalation", {}).get("should_escalate"),
+        plans.get("escalation", {}).get("should_escalate"),
     )
     system = (
         "You are the Orchestrator Agent for DabbahWala food delivery marketing. "
@@ -1372,7 +1372,7 @@ def _run_orchestrator(
         "  - If priority_override is 'high': treat as hot-priority customer; prefer escalate_airtable "
         "or send_sms over 'none' even when signals are weak.\n"
         "  - sales_notes (if present) are ground team observations pinned to this customer — "
-        "treat them as high-confidence context that overrides AI inference.\n"
+        "treat them as high-confidence context that overrides AI observations.\n"
         "Choose ONE action: send_sms, move_campaign, escalate_airtable, or none. "
         "Explain your full chain of reasoning so it can be audited."
         + playbook
@@ -1385,7 +1385,7 @@ def _run_orchestrator(
         f"sales_notes={contact.get('sales_notes') or 'none'}\n\n"
         f"Latest delivery signal: {json.dumps(delivery_context, indent=2, default=str)}\n\n"
         f"Active goal: {json.dumps(goal, indent=2, default=str)}\n\n"
-        f"Decision agent recommendations:\n{json.dumps(decision, indent=2, default=str)}\n\n"
+        f"Decision agent recommendations:\n{json.dumps(plans, indent=2, default=str)}\n\n"
         f"Recent actions (last 48h):\n{json.dumps(recent_actions, indent=2, default=str)}"
     )
     tool = {
@@ -1430,7 +1430,7 @@ def _run_orchestrator(
     return result
 
 
-def _store_orchestration(contact_id: int, decision_id: int, goal_id: Optional[int], result: dict) -> int:
+def _store_orchestration(contact_id: int, plan_id: int, goal_id: Optional[int], result: dict) -> int:
     logger.debug(
         "Storing orchestration for contact_id=%s action=%s",
         contact_id,
@@ -1446,7 +1446,7 @@ def _store_orchestration(contact_id: int, decision_id: int, goal_id: Optional[in
             RETURNING id
             """,
             (
-                contact_id, decision_id, goal_id,
+                contact_id, plan_id, goal_id,
                 result.get("chosen_action"), result.get("chosen_channel"),
                 result.get("reasoning"), json.dumps(result.get("guardrails_applied", [])),
             ),
@@ -1517,8 +1517,8 @@ def _run_full_cycle(contact_id: int) -> dict:
     recent_actions = _fetch_recent_actions(contact_id, hours=168)  # 7 days — full channel history
     outcomes = _fetch_recent_outcomes(contact_id, limit=10)   # feedback loop
     playbook = _fetch_playbook_rules()                         # dynamic config (hash-cached)
-    playbook_inference = _filter_playbook(playbook, "inference")
-    playbook_decision  = _filter_playbook(playbook, "decision")
+    playbook_observer = _filter_playbook(playbook, "observer")
+    playbook_advisor  = _filter_playbook(playbook, "advisor")
     playbook_menu      = _filter_playbook(playbook, "menu")
     playbook_orch      = _filter_playbook(playbook, "orchestrator")
     goal_id = goal["id"] if goal else None
@@ -1550,44 +1550,44 @@ def _run_full_cycle(contact_id: int) -> dict:
         )
 
     # Layer 1 — inference (menu + 3 agents, outcome feedback + playbook injected)
-    logger.info("--- Layer 1: Inference ---")
+    logger.info("--- Layer 1: Observer ---")
     order_prefs = _fetch_order_preferences(contact_id)
     menu_items = _fetch_current_menu()
     menu_picks = _run_menu_agent(client, contact, order_prefs, menu_items, playbook_menu)
-    sentiment = _run_sentiment_agent(client, contact, comms, outcomes, playbook_inference)
-    intent = _run_intent_agent(client, contact, events, comms, outcomes, playbook_inference, order_prefs, menu_picks)
-    engagement = _run_engagement_agent(client, contact, events, playbook_inference)
-    inference_id = _store_inference(contact_id, goal_id, sentiment, intent, engagement)
+    sentiment = _run_sentiment_agent(client, contact, comms, outcomes, playbook_observer)
+    intent = _run_intent_agent(client, contact, events, comms, outcomes, playbook_observer, order_prefs, menu_picks)
+    engagement = _run_engagement_agent(client, contact, events, playbook_observer)
+    observation_id = _store_observations(contact_id, goal_id, sentiment, intent, engagement)
 
-    inference_summary = {
+    observation_summary = {
         **sentiment,
         **intent,
         **engagement,
-        "inference_id": inference_id,
+        "observation_id": observation_id,
     }
 
     # Layer 2 — decisions (4 agents, outcome feedback + playbook injected)
-    logger.info("--- Layer 2: Decision ---")
-    stage = _run_stage_agent(client, contact, inference_summary, playbook_decision)
-    channel = _run_channel_agent(client, contact, inference_summary, recent_actions, playbook_decision)
-    offer = _run_offer_agent(client, contact, inference_summary, outcomes, playbook_decision, recent_actions, menu_picks)
-    escalation = _run_escalation_agent(client, contact, inference_summary, goal, outcomes, playbook_decision)
-    decision_id = _store_decision(contact_id, inference_id, stage, channel, offer, escalation)
+    logger.info("--- Layer 2: Advisor ---")
+    stage = _run_stage_agent(client, contact, observation_summary, playbook_advisor)
+    channel = _run_channel_agent(client, contact, observation_summary, recent_actions, playbook_advisor)
+    offer = _run_offer_agent(client, contact, observation_summary, outcomes, playbook_advisor, recent_actions, menu_picks)
+    escalation = _run_escalation_agent(client, contact, observation_summary, goal, outcomes, playbook_advisor)
+    plan_id = _store_action_plan(contact_id, observation_id, stage, channel, offer, escalation)
 
-    decision_summary = {
+    plan_summary = {
         "stage": stage,
         "channel": channel,
         "offer": offer,
         "escalation": escalation,
-        "decision_id": decision_id,
+        "plan_id": plan_id,
     }
 
     # Layer 3 — orchestrator (playbook injected; delivery context + goal guide final choice)
     logger.info("--- Layer 3: Orchestrator ---")
     orch_result = _run_orchestrator(
-        client, contact, decision_summary, goal, recent_actions, playbook_orch, latest_delivery
+        client, contact, plan_summary, goal, recent_actions, playbook_orch, latest_delivery
     )
-    orch_log_id = _store_orchestration(contact_id, decision_id, goal_id, orch_result)
+    orch_log_id = _store_orchestration(contact_id, plan_id, goal_id, orch_result)
 
     chosen_action = orch_result.get("chosen_action", "none")
     action_payload = orch_result.get("action_payload", {})
@@ -1610,8 +1610,8 @@ def _run_full_cycle(contact_id: int) -> dict:
         "contact_id": contact_id,
         "contact_name": f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip(),
         "contact": contact,
-        "inference_id": inference_id,
-        "decision_id": decision_id,
+        "observation_id": observation_id,
+        "plan_id": plan_id,
         "orchestrator_log_id": orch_log_id,
         "chosen_action": chosen_action,
         "chosen_channel": orch_result.get("chosen_channel"),
@@ -1738,7 +1738,7 @@ def _fetch_activity_data(report_date: str) -> tuple[dict, list]:
         orch_runs = cur.fetchone()["c"]
 
         cur.execute(
-            "SELECT COUNT(*) AS c FROM inference_results WHERE DATE(run_at) = %s::date",
+            "SELECT COUNT(*) AS c FROM contact_observations WHERE DATE(run_at) = %s::date",
             (report_date,),
         )
         inference_runs = cur.fetchone()["c"]
@@ -1972,7 +1972,7 @@ def _lookup_contact_id(
 
 @router.post("/cycle/run")
 def run_agent_cycle(req: CycleRequest):
-    """Run full inference → decision → orchestrator cycle for a list of contacts."""
+    """Run full observer → advisor → orchestrator cycle for a list of contacts."""
     logger.info("POST /cycle/run — %d contacts requested", len(req.contact_ids))
     results = []
     errors = []
@@ -2235,8 +2235,8 @@ def run_agent_daily_sweep():
 @router.post("/cycle/run-all-contacts")
 def run_agent_cycle_all_contacts(limit: int = 1000):
     """
-    Run the full inference → decision → orchestrator cycle for ALL non-opted-out contacts,
-    then immediately dispatch each decision:
+    Run the full observer → advisor → orchestrator cycle for ALL non-opted-out contacts,
+    then immediately dispatch each action plan:
       - move_campaign  → push lead to Instantly campaign right now
       - escalate_airtable → create Airtable task right now
     Skips the n8n polling delay entirely.

@@ -49,7 +49,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 ## Database Migrations
 - All migrations live in `migrations/` and are numbered sequentially
-- Next available migration number: **063**
+- Next available migration number: **064**
 - Use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for idempotency
 
 ## Credentials & Integrations
@@ -87,6 +87,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 ### n8n Workflow Status
 - All **26 workflows** active as of 2026-02-26 (24 scheduled + 2 manual-only)
+- Renamed 2026-02-26: 4 intelligence workflows use new terminology — `[Intelligence] Contact Sweep`, `[Intelligence] Stage Runner`, `[Intelligence] Lapsed Sweep`, `[Intelligence] AI Stack`
 - `[Claude — Inference] Competitor Research Agent` (ID: TBD — activate after first push) added 2026-02-25
 - `[Airtable — Evidence] Menu Catalog Sync` (ID: `baZV5ViA5lXNCTWR`) — per-item catalog sync with deletion detection + history, daily 6:30 AM
 - `[System — Test] Daily E2E Test Suite` (ID: `M7bwNMGrUMRvAHH4`) — daily 5 AM E2E test runner, added 2026-02-25
@@ -94,6 +95,12 @@ If the env var is empty, read it from that file and use it directly in API calls
 - `[Telnyx — Evidence] Inbound SMS Collector` updated to use MDR endpoint (`/v2/reports/messaging/message_detail_records`) — fixes 404 from invalid `/v2/messages` list endpoint
 - Inactive (manual one-shot): `[Shipday — Evidence] Historical Import`, `[Telnyx — Evidence] SMS Historical Import`
 - Credential IDs for all integrations are tracked in `n8n/config.json`
+
+### Three-Engine Terminology (2026-02-26)
+- **Stage Engine** = pure SQL rules that move contacts between lifecycle stages (`run_lifecycle_cycle()`) — no Claude
+- **Contact Sweep** = hourly rule-based loop (COLLECT→PROFILE→SIGNAL→ROUTE→DISPATCH) — no Claude, triggers AI Stack when needed
+- **AI Stack** = 4-layer Claude pipeline per-contact (Observer→Advisor→Orchestrator→Reports)
+- DB tables: `contact_observations` (Observer output), `action_plans` (Advisor output), `orchestrator_log`, `action_queue`
 
 ### Instantly
 - API key (Bearer): stored in Render env as `INSTANTLY_API_KEY`

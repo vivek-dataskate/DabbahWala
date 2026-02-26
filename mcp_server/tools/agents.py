@@ -1,6 +1,6 @@
 """
-MCP tools exposing agent intelligence tables to Claude agents.
-Covers: inference_results, decision_recommendations,
+MCP tools exposing AI Stack tables to Claude agents.
+Covers: contact_observations, action_plans,
         orchestrator_log, action_queue, customer_goals.
 """
 
@@ -10,10 +10,11 @@ from app.db import get_cursor
 def register_agent_tools(mcp):
 
     @mcp.tool()
-    def get_latest_inference(contact_id: int) -> dict:
+    def get_latest_observations(contact_id: int) -> dict:
         """
-        Return the most recent inference results (sentiment, intent, engagement)
-        for a contact. Used by decision agents to read upstream analysis.
+        Return the most recent Observer agent results (sentiment, intent, engagement)
+        for a contact. Used by Advisor agents to read upstream analysis.
+        (AI Stack Layer 1 output — table: contact_observations)
         """
         with get_cursor(commit=False) as cur:
             cur.execute(
@@ -22,7 +23,7 @@ def register_agent_tools(mcp):
                        sentiment, sentiment_confidence, sentiment_summary,
                        intent, intent_signals, intent_confidence,
                        engagement_score, engagement_trend, last_touch_hours_ago
-                FROM inference_results
+                FROM contact_observations
                 WHERE contact_id = %s
                 ORDER BY run_at DESC LIMIT 1
                 """,
@@ -30,25 +31,26 @@ def register_agent_tools(mcp):
             )
             row = cur.fetchone()
             if not row:
-                return {"error": f"No inference results found for contact {contact_id}"}
+                return {"error": f"No observations found for contact {contact_id}"}
             return dict(row)
 
     @mcp.tool()
-    def get_latest_decision(contact_id: int) -> dict:
+    def get_latest_action_plan(contact_id: int) -> dict:
         """
-        Return the most recent decision recommendations
+        Return the most recent Advisor agent action plan
         (stage, channel, offer, escalation) for a contact.
-        Used by the orchestrator agent.
+        Used by the Orchestrator agent.
+        (AI Stack Layer 2 output — table: action_plans)
         """
         with get_cursor(commit=False) as cur:
             cur.execute(
                 """
-                SELECT id, contact_id, inference_result_id, run_at,
+                SELECT id, contact_id, observation_id, run_at,
                        recommended_stage, stage_confidence, stage_reason,
                        recommended_channel, channel_timing, channel_reason,
                        offer_type, suggested_copy, offer_reason,
                        should_escalate, escalation_urgency, escalation_reason
-                FROM decision_recommendations
+                FROM action_plans
                 WHERE contact_id = %s
                 ORDER BY run_at DESC LIMIT 1
                 """,
@@ -56,7 +58,7 @@ def register_agent_tools(mcp):
             )
             row = cur.fetchone()
             if not row:
-                return {"error": f"No decision recommendations found for contact {contact_id}"}
+                return {"error": f"No action plan found for contact {contact_id}"}
             return dict(row)
 
     @mcp.tool()
@@ -82,7 +84,7 @@ def register_agent_tools(mcp):
     @mcp.tool()
     def get_orchestrator_history(contact_id: int, limit: int = 10) -> list:
         """
-        Return recent orchestrator decisions for a contact — what action was chosen,
+        Return recent Orchestrator decisions for a contact — what action was chosen,
         what channel, and the reasoning. Useful for auditing and for agents
         that need to know what was already attempted.
         """
@@ -103,7 +105,7 @@ def register_agent_tools(mcp):
     def get_pending_actions(limit: int = 50) -> list:
         """
         Return pending items in the action queue — actions approved by the
-        orchestrator that are waiting for n8n executors to process.
+        Orchestrator that are waiting for n8n executors to process.
         """
         with get_cursor(commit=False) as cur:
             cur.execute(
@@ -121,24 +123,24 @@ def register_agent_tools(mcp):
             return [dict(r) for r in cur.fetchall()]
 
     @mcp.tool()
-    def get_agent_cycle_summary(days: int = 7) -> dict:
+    def get_ai_stack_summary(days: int = 7) -> dict:
         """
-        Return a summary of agent cycle activity over the last N days:
-        how many inference runs, decisions made, actions queued,
-        goals achieved, and escalations triggered.
+        Return a summary of AI Stack activity over the last N days:
+        how many Observer runs, Advisor plans made, Orchestrator decisions,
+        actions queued, goals achieved, and escalations triggered.
         """
         with get_cursor(commit=False) as cur:
             cur.execute(
-                "SELECT COUNT(*) AS c FROM inference_results WHERE run_at >= NOW() - (%s || ' days')::INTERVAL",
+                "SELECT COUNT(*) AS c FROM contact_observations WHERE run_at >= NOW() - (%s || ' days')::INTERVAL",
                 (days,),
             )
-            inference_runs = cur.fetchone()["c"]
+            observer_runs = cur.fetchone()["c"]
 
             cur.execute(
-                "SELECT COUNT(*) AS c FROM decision_recommendations WHERE run_at >= NOW() - (%s || ' days')::INTERVAL",
+                "SELECT COUNT(*) AS c FROM action_plans WHERE run_at >= NOW() - (%s || ' days')::INTERVAL",
                 (days,),
             )
-            decision_runs = cur.fetchone()["c"]
+            advisor_runs = cur.fetchone()["c"]
 
             cur.execute(
                 "SELECT COUNT(*) AS c FROM orchestrator_log WHERE run_at >= NOW() - (%s || ' days')::INTERVAL",
@@ -154,7 +156,7 @@ def register_agent_tools(mcp):
 
             cur.execute(
                 """
-                SELECT COUNT(*) AS c FROM decision_recommendations
+                SELECT COUNT(*) AS c FROM action_plans
                 WHERE run_at >= NOW() - (%s || ' days')::INTERVAL AND should_escalate = TRUE
                 """,
                 (days,),
@@ -169,8 +171,8 @@ def register_agent_tools(mcp):
 
         return {
             "period_days": days,
-            "inference_runs": inference_runs,
-            "decision_runs": decision_runs,
+            "observer_runs": observer_runs,
+            "advisor_runs": advisor_runs,
             "orchestrator_runs": orch_runs,
             "actions_queued": actions_queued,
             "escalations_triggered": escalations,

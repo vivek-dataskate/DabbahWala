@@ -359,7 +359,7 @@ def _g2_schema(suite: TestSuite) -> None:
     _run(suite, "core_tables_exist", G, core_tables)
 
     AGENT_TABLES = [
-        "customer_goals", "inference_results", "decision_recommendations",
+        "customer_goals", "contact_observations", "action_plans",
         "orchestrator_log", "action_queue",
     ]
 
@@ -749,7 +749,7 @@ def _g6_agent_pipeline(suite: TestSuite) -> None:
 
     if not suite.test_contact_id:
         for name in ["agent_goal_create", "agent_cycle_run",
-                     "agent_inference_results", "agent_decision_results",
+                     "agent_observations", "agent_action_plans",
                      "agent_orchestrator_log", "agent_action_queued"]:
             _skip(suite, name, G, "test contact not created")
         return
@@ -766,8 +766,8 @@ def _g6_agent_pipeline(suite: TestSuite) -> None:
         return {"goal_id": row["id"]}
     r = _run(suite, "agent_goal_create", G, agent_goal_create)
     if r.status != "pass":
-        for name in ["agent_cycle_run", "agent_inference_results",
-                     "agent_decision_results", "agent_orchestrator_log", "agent_action_queued"]:
+        for name in ["agent_cycle_run", "agent_observations",
+                     "agent_action_plans", "agent_orchestrator_log", "agent_action_queued"]:
             _skip(suite, name, G, "agent_goal_create failed")
         return
 
@@ -788,32 +788,32 @@ def _g6_agent_pipeline(suite: TestSuite) -> None:
         }
     r = _run(suite, "agent_cycle_run", G, agent_cycle_run)
 
-    def agent_inference_results():
+    def agent_observations():
         with get_cursor(commit=False) as cur:
             cur.execute("""
                 SELECT sentiment, intent, engagement_score
-                FROM inference_results
+                FROM contact_observations
                 WHERE contact_id = %s
                 ORDER BY run_at DESC LIMIT 1
             """, (suite.test_contact_id,))
             row = cur.fetchone()
-        assert row, f"No inference_results for test contact {suite.test_contact_id}"
+        assert row, f"No contact_observations for test contact {suite.test_contact_id}"
         return {"sentiment": row["sentiment"], "intent": row["intent"], "engagement_score": row["engagement_score"]}
-    _run(suite, "agent_inference_results", G, agent_inference_results)
+    _run(suite, "agent_observations", G, agent_observations)
 
-    def agent_decision_results():
+    def agent_action_plans():
         with get_cursor(commit=False) as cur:
             cur.execute("""
                 SELECT COUNT(*) AS cnt, recommended_channel, offer_type
-                FROM decision_recommendations
+                FROM action_plans
                 WHERE contact_id = %s
                 GROUP BY recommended_channel, offer_type
                 LIMIT 1
             """, (suite.test_contact_id,))
             row = cur.fetchone()
-        assert row and row["cnt"] > 0, f"No decision_recommendations for test contact"
+        assert row and row["cnt"] > 0, f"No action_plans for test contact"
         return {"count": row["cnt"], "channel": row["recommended_channel"], "offer": row["offer_type"]}
-    _run(suite, "agent_decision_results", G, agent_decision_results)
+    _run(suite, "agent_action_plans", G, agent_action_plans)
 
     def agent_orchestrator_log():
         with get_cursor(commit=False) as cur:
@@ -1529,9 +1529,9 @@ def _cascade_delete(cur, contact_id: int) -> None:
         "campaign_queue",
         "action_queue",
         "orchestrator_log",
-        "decision_recommendations",
+        "action_plans",
         "decision_log",
-        "inference_results",
+        "contact_observations",
         "customer_goals",
         "delivery_status",
         "telnyx_messages",
