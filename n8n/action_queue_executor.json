@@ -79,7 +79,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const actions = $input.first().json;\nif (!Array.isArray(actions) || actions.length === 0) return [];\nreturn actions.map(action => ({ json: action }));"
+        "jsCode": "// n8n HTTP Request already splits the JSON array into individual items.\n// Each item arriving here is one action object — just pass them through.\nreturn $input.all().map(item => ({ json: item.json }));"
       },
       "id": "split-actions",
       "name": "Split Actions",
@@ -458,7 +458,7 @@
     {
       "parameters": {},
       "id": "no-actions",
-      "name": "No Actions \u2014 Skip",
+      "name": "No Actions — Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -774,7 +774,7 @@
         ],
         [
           {
-            "node": "No Actions \u2014 Skip",
+            "node": "No Actions — Skip",
             "type": "main",
             "index": 0
           }
