@@ -511,9 +511,8 @@ def _enqueue_experiment_actions(
                 # Insert into action_queue
                 cur.execute(
                     """
-                    INSERT INTO action_queue
-                        (contact_id, action_type, payload, status, source)
-                    VALUES (%s, 'send_sms', %s::jsonb, 'pending', 'goal_agent')
+                    INSERT INTO action_queue (contact_id, action_type, payload)
+                    VALUES (%s, 'send_sms', %s::jsonb)
                     RETURNING id
                     """,
                     (
@@ -522,6 +521,7 @@ def _enqueue_experiment_actions(
                             "phone": phone,
                             "message_body": message_body,
                             "experiment_id": experiment_id,
+                            "source": "goal_agent",
                         }),
                     ),
                 )

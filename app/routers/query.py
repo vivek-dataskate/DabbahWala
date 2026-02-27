@@ -1791,21 +1791,46 @@ def execute_opportunity(opportunity_id: int):
             raise HTTPException(status_code=404, detail="Opportunity not found or already actioned")
 
         opp = dict(opp)
-        payload = {
-            "message": opp.get("suggested_message") or "",
-            "phone": opp.get("phone"),
-            "email": opp.get("email"),
-            "first_name": opp.get("first_name"),
-            "priority": opp.get("priority"),
-            "source": "dashboard_manual",
-        }
+        raw_action = opp["action"]
+        message = opp.get("suggested_message") or ""
+
+        # Map opportunity action types → action_queue action_type + n8n-compatible payload
+        if raw_action == "send_sms":
+            action_type = "send_sms"
+            payload = {
+                "message_body": message,   # n8n reads $json.payload.message_body
+                "phone": opp.get("phone") or "",
+                "source": "dashboard_manual",
+            }
+        elif raw_action == "field_sales_call":
+            action_type = "sync_airtable_task"   # n8n routes to Create Airtable Field Sales Task
+            payload = {
+                "customer_name": f"{opp.get('first_name') or ''} {opp.get('last_name') or ''}".strip(),
+                "phone": opp.get("phone") or "",
+                "email": opp.get("email") or "",
+                "priority": "Hot" if opp.get("priority") == "hot" else "Warm",
+                "reason": message,
+                "suggested_action": message,
+                "action_type": "field_sales_call",
+                "source": "dashboard_manual",
+            }
+        else:
+            # send_email → send_email_report
+            action_type = "send_email_report"
+            payload = {
+                "to": opp.get("email") or "",
+                "subject": "A message from DabbahWala",
+                "html_body": f"<p>{message}</p>",
+                "source": "dashboard_manual",
+            }
+
         cur.execute(
             """
             INSERT INTO action_queue (contact_id, action_type, payload)
             VALUES (%s, %s, %s::jsonb)
             RETURNING id
             """,
-            (opp["contact_id"], opp["action"], json.dumps(payload)),
+            (opp["contact_id"], action_type, json.dumps(payload)),
         )
         action_id = cur.fetchone()["id"]
 
@@ -1815,4 +1840,4 @@ def execute_opportunity(opportunity_id: int):
         )
 
     name = f"{opp.get('first_name', '')} {opp.get('last_name', '')}".strip()
-    return {"status": "queued", "action_id": action_id, "contact": name, "action_type": opp["action"]}
+    return {"status": "queued", "action_id": action_id, "contact": name, "action_type": action_type}

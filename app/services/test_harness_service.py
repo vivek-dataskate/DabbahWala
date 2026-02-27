@@ -676,7 +676,7 @@ def _g5_telnyx_sms(suite: TestSuite) -> None:
                 suite.test_contact_id,
                 json.dumps({
                     "phone": TEST_PHONE,
-                    "body": "[TEST] SMS action queue validation",
+                    "message_body": "[TEST] SMS action queue validation",
                     "source": "test_harness",
                 }),
             ))

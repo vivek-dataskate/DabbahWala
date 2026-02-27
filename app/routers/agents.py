@@ -1466,6 +1466,23 @@ def _enqueue_action(contact_id: int, orch_log_id: int, action: str, payload: dic
         contact_id,
         orch_log_id,
     )
+    if action == "move_campaign":
+        # Convert to push_instantly_lead so the UUID lookup happens here,
+        # not in n8n where the routing table isn't accessible.
+        queued = push_lead_to_instantly(
+            email=payload.get("email", ""),
+            first_name=payload.get("first_name", ""),
+            last_name=payload.get("last_name", ""),
+            phone=payload.get("phone", ""),
+            campaign_name=payload.get("to_campaign", ""),
+            contact_id=contact_id,
+        )
+        if not queued:
+            logger.warning(
+                "push_lead_to_instantly failed for contact_id=%s campaign=%s",
+                contact_id, payload.get("to_campaign"),
+            )
+        return
     with get_cursor() as cur:
         cur.execute(
             """
@@ -1594,6 +1611,8 @@ def _run_full_cycle(contact_id: int) -> dict:
     action_payload["contact_id"] = contact_id
     action_payload["email"] = contact.get("email")
     action_payload["phone"] = contact.get("phone")
+    action_payload["first_name"] = contact.get("first_name", "")
+    action_payload["last_name"] = contact.get("last_name", "")
 
     _enqueue_action(contact_id, orch_log_id, chosen_action, action_payload)
 
@@ -2079,8 +2098,9 @@ def run_agent_cycle_all():
 
     Eligibility (any one condition, excluding churned/optout):
       - Has an active sales goal
-      - Opened or clicked an email in the last 30 days
-      - Had any event (delivery, order, SMS click) in the last 30 days
+      - Clicked an email in the last 30 days (opens excluded — unreliable)
+      - Clicked an SMS link in the last 7 days
+      - Had any event (inbound SMS/call/delivery) in the last 30 days
       - Placed an order in the last 60 days
     """
     logger.info("POST /cycle/run-all — querying eligible contacts")
@@ -2100,10 +2120,11 @@ def run_agent_cycle_all():
                   AND o.order_date > CURRENT_DATE - 60
             WHERE c.lifecycle_segment NOT IN ('churned', 'optout')
               AND (
-                  g.id IS NOT NULL      -- active sales goal
-                  OR er.opens_30d > 0  -- email engaged in last 30 days
-                  OR ev.id IS NOT NULL  -- any event in last 30 days (delivery, order, etc.)
-                  OR o.id IS NOT NULL   -- ordered in last 60 days
+                  g.id IS NOT NULL           -- active sales goal
+                  OR er.clicks_30d > 0       -- clicked email in last 30d (genuine intent)
+                  OR er.sms_clicks_7d > 0    -- clicked SMS link in last 7d
+                  OR ev.id IS NOT NULL        -- inbound SMS/call/delivery in last 30 days
+                  OR o.id IS NOT NULL         -- ordered in last 60 days
               )
             LIMIT 500
             """
@@ -2231,7 +2252,9 @@ def run_agent_daily_sweep():
       - Not churned / opted out
       - Has email or phone (reachable)
       - No agent cycle in the last 72 hours (avoids re-running recently triggered contacts)
-      - Any one of: opened email in last 30d, any event in last 30d, ordered in last 60d
+      - Any one of: clicked email in last 30d, clicked SMS link in last 7d,
+        any event (inbound SMS/call/delivery) in last 30d, ordered in last 60d
+        (opens excluded — unreliable, triggered by Apple MPP and spam filters)
     Capped at 200 contacts per run to bound cost (~$4.20 at mixed Haiku/Sonnet rates).
     """
     logger.info("POST /cycle/run-daily-sweep — querying dormant-eligible contacts")
@@ -2249,9 +2272,10 @@ def run_agent_daily_sweep():
             WHERE c.lifecycle_segment NOT IN ('churned', 'optout')
               AND (c.email IS NOT NULL OR c.phone IS NOT NULL)
               AND (
-                  er.opens_30d > 0
-                  OR ev.id IS NOT NULL
-                  OR o.id IS NOT NULL
+                  er.clicks_30d > 0       -- clicked email in last 30d (genuine intent)
+                  OR er.sms_clicks_7d > 0 -- clicked SMS link in last 7d
+                  OR ev.id IS NOT NULL     -- inbound SMS/call/delivery in last 30 days
+                  OR o.id IS NOT NULL      -- ordered in last 60 days
               )
               AND NOT EXISTS (
                   SELECT 1 FROM orchestrator_log ol
@@ -2331,56 +2355,24 @@ def run_agent_cycle_all_contacts(limit: int = 1000):
             payload = r.get("action_payload", {})
             contact = r.get("contact", {})
 
+            # _enqueue_action() inside _run_full_cycle already queued this action.
+            # Just track counts and build the outreach log — no re-queuing.
             if chosen_action == "move_campaign":
                 to_campaign = payload.get("to_campaign", "")
                 email = payload.get("email") or contact.get("email", "")
                 if email and to_campaign:
-                    try:
-                        pushed = push_lead_to_instantly(
-                            email=email,
-                            first_name=contact.get("first_name", ""),
-                            last_name=contact.get("last_name", ""),
-                            phone=payload.get("phone") or contact.get("phone", "") or "",
-                            campaign_name=to_campaign,
-                            contact_id=cid,
-                        )
-                        if pushed:
-                            campaigns_pushed += 1
-                            r["instantly_pushed"] = to_campaign
-                            email_outreach_log.append({
-                                "name": f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip(),
-                                "email": email,
-                                "campaign": to_campaign,
-                                "segment": contact.get("lifecycle_segment", ""),
-                            })
-                            logger.info(
-                                "Instantly push: contact_id=%s → campaign=%s", cid, to_campaign
-                            )
-                    except Exception as e:
-                        logger.warning("Instantly push failed contact_id=%s: %s", cid, e)
+                    campaigns_pushed += 1
+                    r["instantly_queued"] = to_campaign
+                    email_outreach_log.append({
+                        "name": f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip(),
+                        "email": email,
+                        "campaign": to_campaign,
+                        "segment": contact.get("lifecycle_segment", ""),
+                    })
 
             elif chosen_action == "escalate_airtable":
-                urgency = payload.get("urgency", "high")
-                notes = payload.get("notes", "") or r.get("reasoning_snippet", "")
-                try:
-                    create_field_sales_task({
-                        "first_name": contact.get("first_name", ""),
-                        "last_name": contact.get("last_name", ""),
-                        "phone": contact.get("phone", "") or "",
-                        "email": contact.get("email", "") or "",
-                        "priority": "Hot" if urgency == "high" else "Warm",
-                        "reason": notes,
-                        "suggested_message": notes,
-                        "action_type": "escalate_airtable",
-                        "lifecycle_segment": contact.get("lifecycle_segment", ""),
-                        "total_orders": contact.get("total_orders", 0),
-                        "last_order_at": contact.get("last_order_at"),
-                    })
-                    airtable_pushed += 1
-                    r["airtable_pushed"] = True
-                    logger.info("Airtable task created: contact_id=%s urgency=%s", cid, urgency)
-                except Exception as e:
-                    logger.warning("Airtable push failed contact_id=%s: %s", cid, e)
+                airtable_pushed += 1
+                r["airtable_queued"] = True
 
             # Strip the full contact dict from the result to keep response lean
             r.pop("contact", None)
@@ -2535,8 +2527,9 @@ def send_outcome_report(req: ReportRequest):
 # --- Action queue management ---
 
 @router.get("/action-queue/pending")
-def get_pending_actions():
-    """Return all pending actions for n8n executors to drain."""
+def get_pending_actions(limit: int = 1000):
+    """Return up to `limit` pending actions (max 1000) for n8n executors to drain."""
+    batch = max(1, min(limit, 1000))
     with get_cursor(commit=False) as cur:
         cur.execute(
             """
@@ -2546,8 +2539,9 @@ def get_pending_actions():
             LEFT JOIN contacts c ON c.id = aq.contact_id
             WHERE aq.status = 'pending'
             ORDER BY aq.created_at ASC
-            LIMIT 100
-            """
+            LIMIT %s
+            """,
+            (batch,),
         )
         return [dict(r) for r in cur.fetchall()]
 

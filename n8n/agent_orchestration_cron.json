@@ -15,7 +15,7 @@
         }
       },
       "id": "schedule-trigger",
-      "name": "Every 3 Hours",
+      "name": "Daily 9 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -109,7 +109,7 @@
     }
   ],
   "connections": {
-    "Every 3 Hours": {
+    "Daily 9 AM": {
       "main": [
         [
           {

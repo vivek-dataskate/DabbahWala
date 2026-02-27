@@ -25,6 +25,7 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.db import get_cursor
+from app.routers.campaigns import push_lead_to_instantly
 
 logger = logging.getLogger(__name__)
 
@@ -318,16 +319,15 @@ def _phase_route(cur, signals: dict) -> tuple:
             'priority': 'hot', 'reason': 'Reorder intent in transcript',
         })
 
-    # Route 5: App customers -> Campaign move to APP_TO_DIRECT + SMS
+    # Route 5: App customers -> push into their lifecycle campaign + SMS
     for contact in signals.get('app_customers_for_conversion', [])[:25]:
-        # Move to APP_TO_DIRECT Instantly campaign
-        cur.execute(
-            "INSERT INTO campaign_queue (contact_id, from_campaign, to_campaign) "
-            "VALUES (%s, (SELECT cr.default_campaign FROM campaign_routing cr "
-            "             JOIN contacts c ON cr.lifecycle_segment = c.lifecycle_segment "
-            "             WHERE c.id = %s), 'APP_TO_DIRECT') "
-            "ON CONFLICT DO NOTHING",
-            (contact['id'], contact['id'])
+        push_lead_to_instantly(
+            email=contact.get('email', ''),
+            first_name=contact.get('first_name', ''),
+            last_name=contact.get('last_name', ''),
+            phone=contact.get('phone', ''),
+            campaign_name=contact.get('default_campaign', ''),
+            contact_id=contact['id'],
         )
         campaign_moves += 1
 
@@ -402,14 +402,61 @@ def _phase_dispatch(cur) -> dict:
     stats['stage_contacts_updated'] = row.get('contacts_updated', 0)
     stats['stage_campaigns_queued'] = row.get('campaigns_queued', 0)
 
-    # Get pending actions for n8n
-    cur.execute("SELECT count(*) as cnt FROM campaign_queue WHERE status = 'pending'")
-    stats['pending_campaign_moves'] = cur.fetchone()['cnt']
-
     cur.execute("SELECT count(*) as cnt FROM opportunities WHERE status = 'pending'")
     stats['pending_opportunities'] = cur.fetchone()['cnt']
 
     return stats
+
+
+def _drain_campaign_queue() -> int:
+    """
+    Convert every pending campaign_queue row (written by the Stage Engine's
+    evaluate_rules()) into a push_instantly_lead action_queue entry via the
+    single centralized push_lead_to_instantly() function.
+
+    Marks the campaign_queue row 'executed' once enqueued so it is never
+    double-processed.  Skips placeholder emails and APP_TO_DIRECT (no Instantly
+    campaign exists for that label).
+    """
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT cq.id AS queue_id, cq.to_campaign,
+                   c.id AS contact_id, c.email, c.first_name, c.last_name, c.phone
+            FROM campaign_queue cq
+            JOIN contacts c ON c.id = cq.contact_id
+            WHERE cq.status = 'pending'
+              AND c.email IS NOT NULL
+              AND c.email NOT LIKE '%@app.placeholder.local'
+              AND cq.to_campaign != 'APP_TO_DIRECT'
+            ORDER BY cq.created_at
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+
+    drained = 0
+    for row in rows:
+        queued = push_lead_to_instantly(
+            email=row['email'],
+            first_name=row['first_name'] or '',
+            last_name=row['last_name'] or '',
+            phone=row['phone'] or '',
+            campaign_name=row['to_campaign'],
+            contact_id=row['contact_id'],
+        )
+        if queued:
+            with get_cursor() as cur:
+                cur.execute(
+                    "UPDATE campaign_queue SET status='executed', executed_at=now() WHERE id=%s",
+                    (row['queue_id'],),
+                )
+            drained += 1
+        else:
+            logger.warning(
+                "drain_campaign_queue: no Instantly campaign for %s (contact_id=%s)",
+                row['to_campaign'], row['contact_id'],
+            )
+    if drained:
+        logger.info("drain_campaign_queue: enqueued %d push_instantly_lead actions", drained)
+    return drained
 
 
 # ---------------------------------------------------------------------------
@@ -437,8 +484,13 @@ def run_intelligence_cycle():
         # Phase 4: Route
         route_stats, actions = _phase_route(cur, raw_signals)
 
-        # Phase 5: Dispatch
+        # Phase 5: Dispatch (runs Stage Engine which may write to campaign_queue)
         dispatch_stats = _phase_dispatch(cur)
+
+    # Drain anything the Stage Engine wrote to campaign_queue into action_queue.
+    # Runs after commit so push_lead_to_instantly() sees the committed rows.
+    drained = _drain_campaign_queue()
+    dispatch_stats['campaign_moves_enqueued'] = drained
 
     return CycleResult(
         timestamp=datetime.utcnow().isoformat(),

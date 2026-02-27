@@ -15,7 +15,7 @@
         }
       },
       "id": "schedule-trigger",
-      "name": "Every Hour",
+      "name": "Daily 7 AM",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -356,7 +356,7 @@
     }
   ],
   "connections": {
-    "Every Hour": {
+    "Daily 7 AM": {
       "main": [
         [
           {
