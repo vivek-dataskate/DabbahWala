@@ -271,8 +271,8 @@ def _g1_connectivity(suite: TestSuite) -> None:
     def instantly_api():
         key = _env("INSTANTLY_API_KEY")
         assert key, "INSTANTLY_API_KEY not set"
-        # Try Instantly v2 campaigns list
-        sc, body = _req("GET", f"{INSTANTLY_BASE}/campaign/list",
+        # v2: GET /campaigns (not the deprecated v1 /campaign/list)
+        sc, body = _req("GET", f"{INSTANTLY_BASE}/campaigns?limit=1",
                          headers=_instantly_headers())
         assert sc in (200, 201), f"Instantly API returned {sc}: {str(body)[:200]}"
         return {"status": sc}
@@ -913,95 +913,119 @@ def _g8_instantly(suite: TestSuite) -> None:
     G = "8_instantly_email"
 
     key = _env("INSTANTLY_API_KEY")
+    # Instantly-API-dependent tests only run when the key is available.
+    # Local app tests (routing list, push-log, pending, enqueue) always run.
     if not key:
         for name in ["instantly_campaigns_list", "instantly_all_5_campaigns",
                      "instantly_lead_add", "instantly_lead_verify",
-                     "instantly_analytics", "instantly_lead_remove",
-                     "instantly_campaign_routing_list"]:
+                     "instantly_analytics", "instantly_lead_remove"]:
             _skip(suite, name, G, "INSTANTLY_API_KEY not set")
-        return
-
-    def campaigns_list():
-        sc, body = _req("GET", f"{INSTANTLY_BASE}/campaign/list",
-                         headers=_instantly_headers())
-        assert sc in (200, 201), f"Instantly campaigns list returned {sc}: {str(body)[:300]}"
-        data = body if isinstance(body, dict) else {}
-        campaigns = data.get("data", data.get("campaigns", data if isinstance(data, list) else []))
-        return {"status": sc, "campaign_count": len(campaigns) if isinstance(campaigns, list) else "?"}
-    r = _run(suite, "instantly_campaigns_list", G, campaigns_list)
-
-    def all_5_campaigns():
-        sc, body = _req("GET", f"{INSTANTLY_BASE}/campaign/list?limit=100",
-                         headers=_instantly_headers())
-        assert sc in (200, 201), f"Instantly API error: {sc}"
-        data = body if isinstance(body, dict) else {}
-        campaigns = data.get("data", data.get("campaigns", []))
-        if isinstance(body, list):
-            campaigns = body
-        names = [c.get("name", "") for c in campaigns if isinstance(c, dict)]
-        cold_campaign = next((c for c in campaigns
-                              if isinstance(c, dict) and
-                              "NurtureSlow" in c.get("name", "")), None)
-        if cold_campaign:
-            suite.instantly_cold_campaign_id = cold_campaign.get("id")
-        missing = [n for n in INSTANTLY_CAMPAIGNS
-                   if not any(n in existing for existing in names)]
-        if missing:
-            return {"warning": f"Some campaigns not found: {missing}", "found": names}
-        return {"all_5_found": True, "cold_campaign_id": suite.instantly_cold_campaign_id}
-    _run(suite, "instantly_all_5_campaigns", G, all_5_campaigns)
-
-    def lead_add():
-        assert suite.instantly_cold_campaign_id, "Cold campaign ID not found"
-        sc, body = _req(
-            "POST",
-            f"{INSTANTLY_BASE}/leads",
-            headers=_instantly_headers(),
-            json_body={
-                "campaign_id": suite.instantly_cold_campaign_id,
-                "email": TEST_EMAIL,
-                "first_name": TEST_FIRST_NAME,
-                "last_name":  TEST_LAST_NAME,
-                "personalization": "Test harness validation email — please ignore",
-                "skip_if_in_workspace": False,
-            },
-        )
-        assert sc in (200, 201), f"Instantly add lead returned {sc}: {str(body)[:300]}"
-        return {"status": sc, "email": TEST_EMAIL}
-    if suite.instantly_cold_campaign_id:
-        _run(suite, "instantly_lead_add", G, lead_add)
     else:
-        _skip(suite, "instantly_lead_add", G, "cold campaign ID not resolved")
+        def campaigns_list():
+            # v2: GET /campaigns (not the deprecated v1 /campaign/list)
+            sc, body = _req("GET", f"{INSTANTLY_BASE}/campaigns?limit=5",
+                             headers=_instantly_headers())
+            assert sc in (200, 201), f"Instantly campaigns list returned {sc}: {str(body)[:300]}"
+            data = body if isinstance(body, dict) else {}
+            campaigns = data.get("items", data if isinstance(data, list) else [])
+            return {"status": sc, "campaign_count": len(campaigns) if isinstance(campaigns, list) else "?"}
+        _run(suite, "instantly_campaigns_list", G, campaigns_list)
 
-    def lead_verify():
-        assert suite.instantly_cold_campaign_id, "No cold campaign ID"
-        sc, body = _req(
-            "GET",
-            f"{INSTANTLY_BASE}/lead?campaign_id={suite.instantly_cold_campaign_id}&email={TEST_EMAIL}",
-            headers=_instantly_headers(),
-        )
-        assert sc in (200, 201, 404), f"Instantly lead verify returned {sc}: {str(body)[:300]}"
-        found = sc != 404
-        return {"lead_found": found, "status": sc}
-    if suite.instantly_cold_campaign_id:
-        _run(suite, "instantly_lead_verify", G, lead_verify)
-    else:
-        _skip(suite, "instantly_lead_verify", G, "cold campaign ID not resolved")
+        def all_5_campaigns():
+            # v2: GET /campaigns?limit=100  (items key in response)
+            sc, body = _req("GET", f"{INSTANTLY_BASE}/campaigns?limit=100",
+                             headers=_instantly_headers())
+            assert sc in (200, 201), f"Instantly API error: {sc}"
+            data = body if isinstance(body, dict) else {}
+            campaigns = data.get("items", body if isinstance(body, list) else [])
+            names = [c.get("name", "") for c in campaigns if isinstance(c, dict)]
+            cold_campaign = next((c for c in campaigns
+                                  if isinstance(c, dict) and
+                                  "NurtureSlow" in c.get("name", "")), None)
+            if cold_campaign:
+                suite.instantly_cold_campaign_id = cold_campaign.get("id")
+            missing = [n for n in INSTANTLY_CAMPAIGNS
+                       if not any(n in existing for existing in names)]
+            if missing:
+                return {"warning": f"Some campaigns not found: {missing}", "found": names}
+            return {"all_5_found": True, "cold_campaign_id": suite.instantly_cold_campaign_id}
+        _run(suite, "instantly_all_5_campaigns", G, all_5_campaigns)
 
-    def analytics():
-        cid = suite.instantly_cold_campaign_id
-        assert cid, "No cold campaign ID — cannot test analytics"
-        sc, body = _req(
-            "GET",
-            f"{INSTANTLY_BASE}/analytics/campaign/summary?campaign_id={cid}",
-            headers=_instantly_headers(),
-        )
-        assert sc in (200, 201), f"Instantly analytics returned {sc}: {str(body)[:300]}"
-        return {"status": sc, "campaign_id": cid}
-    _run(suite, "instantly_analytics", G, analytics)
+        def lead_add():
+            assert suite.instantly_cold_campaign_id, "Cold campaign ID not found"
+            sc, body = _req(
+                "POST",
+                f"{INSTANTLY_BASE}/leads",
+                headers=_instantly_headers(),
+                json_body={
+                    "campaign_id": suite.instantly_cold_campaign_id,
+                    "email": TEST_EMAIL,
+                    "first_name": TEST_FIRST_NAME,
+                    "last_name":  TEST_LAST_NAME,
+                    "personalization": "Test harness validation email — please ignore",
+                    "skip_if_in_workspace": False,
+                },
+            )
+            assert sc in (200, 201), f"Instantly add lead returned {sc}: {str(body)[:300]}"
+            return {"status": sc, "email": TEST_EMAIL}
+        if suite.instantly_cold_campaign_id:
+            _run(suite, "instantly_lead_add", G, lead_add)
+        else:
+            _skip(suite, "instantly_lead_add", G, "cold campaign ID not resolved")
+
+        def lead_verify():
+            assert suite.instantly_cold_campaign_id, "No cold campaign ID"
+            # v2: POST /leads/list with email filter
+            sc, body = _req(
+                "POST",
+                f"{INSTANTLY_BASE}/leads/list",
+                headers=_instantly_headers(),
+                json_body={"campaign_id": suite.instantly_cold_campaign_id, "email": TEST_EMAIL, "limit": 5},
+            )
+            assert sc in (200, 201), f"Instantly lead verify returned {sc}: {str(body)[:300]}"
+            items = (body or {}).get("items", []) if isinstance(body, dict) else []
+            found = any(x.get("email", "").lower() == TEST_EMAIL.lower() for x in items)
+            return {"lead_found": found, "status": sc, "total": len(items)}
+        if suite.instantly_cold_campaign_id:
+            _run(suite, "instantly_lead_verify", G, lead_verify)
+        else:
+            _skip(suite, "instantly_lead_verify", G, "cold campaign ID not resolved")
+
+        def analytics():
+            cid = suite.instantly_cold_campaign_id
+            assert cid, "No cold campaign ID — cannot test analytics"
+            # v2: GET /campaigns/analytics?id=<campaign_id>
+            sc, body = _req(
+                "GET",
+                f"{INSTANTLY_BASE}/campaigns/analytics?id={cid}",
+                headers=_instantly_headers(),
+            )
+            assert sc in (200, 201), f"Instantly analytics returned {sc}: {str(body)[:300]}"
+            return {"status": sc, "campaign_id": cid}
+        _run(suite, "instantly_analytics", G, analytics)
+
+        def lead_remove():
+            """Cleanup: remove test email from Instantly campaign."""
+            if not suite.instantly_cold_campaign_id:
+                return {"skipped": "no campaign id"}
+            # v2: DELETE /leads  (plural, not /lead)
+            sc, body = _req(
+                "DELETE",
+                f"{INSTANTLY_BASE}/leads",
+                headers=_instantly_headers(),
+                json_body={
+                    "campaign_id": suite.instantly_cold_campaign_id,
+                    "emails": [TEST_EMAIL],
+                },
+            )
+            assert sc in (200, 201, 204, 404), f"Instantly remove lead returned {sc}: {str(body)[:300]}"
+            return {"status": sc, "email": TEST_EMAIL}
+        _run(suite, "instantly_lead_remove", G, lead_remove)
+
+    # ── Local app tests — always run ──────────────────────────────────────────
 
     def campaign_routing_list():
-        """Verify /api/webhooks/campaigns returns campaigns from campaign_routing (single source of truth)."""
+        """Verify /api/webhooks/campaigns returns campaigns from campaign_routing."""
         sc, body = _local("GET", "/api/webhooks/campaigns")
         assert sc == 200, f"GET /api/webhooks/campaigns returned {sc}: {body}"
         campaigns = (body or {}).get("campaigns", [])
@@ -1014,7 +1038,7 @@ def _g8_instantly(suite: TestSuite) -> None:
         """Verify POST /api/webhooks/campaign-stats accepts stats and updates campaign_routing."""
         cid = suite.instantly_cold_campaign_id
         if not cid:
-            return {"skipped": "no cold campaign id"}
+            return {"skipped": "no cold campaign id — set INSTANTLY_API_KEY to enable"}
         sc, body = _local("POST", "/api/webhooks/campaign-stats", json_body={
             "campaign_id": cid,
             "leads_count": 1,
@@ -1033,25 +1057,8 @@ def _g8_instantly(suite: TestSuite) -> None:
         return {"status": sc, "updated": (body or {}).get("updated")}
     _run(suite, "instantly_campaign_stats_webhook", G, campaign_stats_webhook)
 
-    def lead_remove():
-        """Cleanup: remove test email from Instantly campaign."""
-        if not suite.instantly_cold_campaign_id:
-            return {"skipped": "no campaign id"}
-        sc, body = _req(
-            "DELETE",
-            f"{INSTANTLY_BASE}/lead",
-            headers=_instantly_headers(),
-            json_body={
-                "campaign_id": suite.instantly_cold_campaign_id,
-                "emails": [TEST_EMAIL],
-            },
-        )
-        assert sc in (200, 201, 204, 404), f"Instantly remove lead returned {sc}: {str(body)[:300]}"
-        return {"status": sc, "email": TEST_EMAIL}
-    _run(suite, "instantly_lead_remove", G, lead_remove)
-
     def push_log_endpoint():
-        """POST /api/campaigns/log-push records a push attempt and GET /api/campaigns/push-log returns it."""
+        """POST /api/campaigns/log-push records a push attempt; GET /api/campaigns/push-log returns it."""
         sc, body = _local("POST", "/api/campaigns/log-push", json_body={
             "queue_id": None,
             "email": "test@harness.local",
@@ -1059,7 +1066,7 @@ def _g8_instantly(suite: TestSuite) -> None:
             "success": True,
             "status_code": 200,
             "error_message": None,
-            "response_body": '{"test": true}'
+            "response_body": '{"test": true}',
         })
         assert sc in (200, 201), f"log-push returned {sc}: {body}"
         sc2, body2 = _local("GET", "/api/campaigns/push-log?limit=5&success=true")
@@ -1078,6 +1085,32 @@ def _g8_instantly(suite: TestSuite) -> None:
             assert "contact_first_name" in first, f"contact_first_name missing from pending row: {first.keys()}"
         return {"status": sc, "pending_count": len(rows)}
     _run(suite, "campaigns_pending_has_names", G, campaigns_pending_has_names)
+
+    def instantly_lead_enqueue():
+        """
+        E2E Postgres path: POST /api/campaigns/push-lead inserts a push_instantly_lead
+        row into action_queue. n8n's Action Queue Executor will process it within 30 min.
+        Verifies the row is visible in GET /api/campaigns/pending immediately after insert.
+        """
+        sc, body = _local("POST", "/api/campaigns/push-lead", json_body={
+            "email": TEST_EMAIL,
+            "first_name": TEST_FIRST_NAME,
+            "last_name": TEST_LAST_NAME,
+            "phone": TEST_PHONE,
+            "campaign_name": "NURTURE_SLOW",
+        })
+        assert sc == 200, f"push-lead returned {sc}: {body}"
+        queue_id = (body or {}).get("queue_id")
+        assert queue_id, f"push-lead did not return queue_id: {body}"
+
+        sc2, body2 = _local("GET", "/api/campaigns/pending")
+        assert sc2 == 200, f"GET /api/campaigns/pending returned {sc2}: {body2}"
+        rows = body2 if isinstance(body2, list) else []
+        match = next((r for r in rows if r.get("queue_id") == queue_id), None)
+        assert match, f"Enqueued action_queue id={queue_id} not found in /api/campaigns/pending"
+        assert match.get("email") == TEST_EMAIL, f"Email mismatch in pending row: {match}"
+        return {"queue_id": queue_id, "pending_found": True, "campaign": match.get("campaign_name")}
+    _run(suite, "instantly_lead_enqueue", G, instantly_lead_enqueue)
 
 
 # ─── GROUP 9: Airtable Integration ───────────────────────────────────────────
