@@ -2554,8 +2554,9 @@ def send_outcome_report(req: ReportRequest):
 # --- Action queue management ---
 
 @router.get("/action-queue/pending")
-def get_pending_actions():
-    """Return all pending actions for n8n executors to drain."""
+def get_pending_actions(limit: int = 1000):
+    """Return up to `limit` pending actions (max 1000) for n8n executors to drain."""
+    batch = max(1, min(limit, 1000))
     with get_cursor(commit=False) as cur:
         cur.execute(
             """
@@ -2565,8 +2566,9 @@ def get_pending_actions():
             LEFT JOIN contacts c ON c.id = aq.contact_id
             WHERE aq.status = 'pending'
             ORDER BY aq.created_at ASC
-            LIMIT 100
-            """
+            LIMIT %s
+            """,
+            (batch,),
         )
         return [dict(r) for r in cur.fetchall()]
 

@@ -25,6 +25,15 @@
       "parameters": {
         "method": "GET",
         "url": "https://dabbahwala-latest.onrender.com/api/agents/action-queue/pending",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "limit",
+              "value": "1000"
+            }
+          ]
+        },
         "options": {}
       },
       "id": "fetch-pending-actions",
