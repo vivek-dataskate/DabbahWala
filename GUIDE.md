@@ -968,6 +968,7 @@ Returns common questions the chatbot is well-positioned to answer based on the c
 | Daily reports not arriving | SMTP failure or action_queue stuck | Check `action_queue` for pending `send_email_report`; verify SMTP creds |
 | Lifecycle segments not updating | Stage Engine not running | `POST /api/lifecycle/run` manually; check `[Intelligence] Stage Runner` in n8n |
 | No orders appearing in system | Shipday sync failed | `POST /api/shipday/ingest-orders`; verify `SHIPDAY_API_KEY` |
+| `column "emails_sent" does not exist` in logs | Stats columns missing from `campaign_routing` (table predates columns) | Deploy migration `007_campaign_routing_stats_columns.sql`; all columns added with `ADD COLUMN IF NOT EXISTS` |
 | Growth experiments all showing 0% conversion | Measure phase hasn't run yet | Growth experiments need 72 hours minimum or 30 conversion events |
 | Contact receiving messages after opt-out | `optout` segment not set | `PATCH /api/contacts/{id}/priority` with `priority_override: "do_not_contact"` immediately; check Telnyx STOP handling |
 
