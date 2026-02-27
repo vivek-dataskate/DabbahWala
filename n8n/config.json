@@ -360,7 +360,7 @@
         "Intelligence",
         "Action"
       ],
-      "schedule": "Every hour",
+      "schedule": "Daily 7 AM",
       "active": true,
       "file": "hourly_intelligence_cycle.json",
       "note": "Calls POST /api/intelligence/run-cycle \u2014 hourly rule-based loop: COLLECT\u2192PROFILE\u2192SIGNAL\u2192ROUTE\u2192DISPATCH. No Claude calls. Stage Engine runs inside DISPATCH phase."
@@ -398,7 +398,7 @@
         "Intelligence",
         "Inference"
       ],
-      "schedule": "Every 3 hours",
+      "schedule": "Daily 9 AM",
       "file": "agent_orchestration_cron.json",
       "note": "Calls POST /api/agents/cycle \u2192 4-layer Claude AI Stack (observer\u2192advisor\u2192orchestrator\u2192reports)"
     },

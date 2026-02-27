@@ -130,10 +130,10 @@ Only create a new numbered file (e.g. `006_*.sql`) for changes that **cannot be 
 | [Email Campaigns] Performance Tracker | `ctCLyHDQc1VckMqL` | Every hour |
 | [Email Campaigns] Campaign Sync | `nCcBt9USIYxlOaJT` | Every 6 hours |
 | [Email Campaigns] Campaign Setup | `NbnkM3nTFKSgtcfb` | Daily midnight |
-| [Intelligence] Contact Sweep | `FcbBt0AIlkYoa01X` | Every hour |
+| [Intelligence] Contact Sweep | `FcbBt0AIlkYoa01X` | Daily 7 AM |
 | [Intelligence] Stage Runner | `h80nX24myWwsbxuB` | Every hour |
 | [Intelligence] Lapsed Re-engagement | `S3jSnWb3UTv9HmJL` | Daily (random offset) |
-| [Intelligence] AI Stack | `VreWonSUTk4VCXPF` | Every 3 hours |
+| [Intelligence] AI Stack | `VreWonSUTk4VCXPF` | Daily 9 AM |
 | [Field Agent] Outcome Sync | `chfGgYIjyTw6QP5m` | Every 4 hours |
 | [Field Agent] Daily Brief | `kOI33cFH4bM8OCaf` | Daily 7:30 AM |
 | [Agent Rules] Playbook Sync | `FXuYcwQeBQ72Xxyu` | Daily 6 AM |
