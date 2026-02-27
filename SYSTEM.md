@@ -2,9 +2,7 @@
 
 Complete technical reference for the DabbahWala automated marketing platform.
 
-> **Navigation:** [README](README.md) · [Features](FEATURES.md) · [Claude Instructions](CLAUDE.md)
->
-> **Deep-dive reading:** [LIFECYCLE.md](LIFECYCLE.md) — plain-language explanation of how the Stage Engine, Contact Sweep, and AI Stack work together to convert customers, including why all three are necessary and not redundant.
+> **Navigation:** [README](README.md) · [Guide](GUIDE.md) · [Tests](TESTS.md) · [Claude Instructions](CLAUDE.md)
 
 ---
 
@@ -89,6 +87,18 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. This backend syst
 ---
 
 ## 3. System Architecture
+
+### The Three Engines
+
+DabbahWala uses three cooperating engines — all sharing the same PostgreSQL database, running independently on different schedules.
+
+| Engine | What it does | Runs | Claude? |
+|--------|-------------|------|---------|
+| **Stage Engine** | Pure SQL rules — classifies every contact into a lifecycle segment and routes them to the correct Instantly email campaign | Hourly | No |
+| **Contact Sweep** | Signal scanner — 5-phase SQL loop (COLLECT→PROFILE→SIGNAL→ROUTE→DISPATCH) that finds contacts ready to act and creates `opportunities` | Hourly | No |
+| **AI Stack** | Per-contact Claude pipeline — 8 calls per contact (Observer→Advisor→Orchestrator) producing one concrete outreach action | Every 3 h + real-time on inbound SMS | Yes (8 calls) |
+
+They are not redundant — Stage Engine keeps everyone in the right campaign, Contact Sweep spots who needs urgent action, AI Stack figures out exactly what to say to that specific person.
 
 ### High-Level Data Flow
 
@@ -593,3 +603,24 @@ On every merge to `main`:
 | Lifecycle segments | 8 |
 | Email campaigns | 5 |
 | E2E test cases | 55+ |
+
+---
+
+## 13. Feature Cross-Reference
+
+Quick map of each feature group to its n8n workflows, Python routers, key DB tables, and test group.
+
+| Feature | n8n Workflows | Python Routers | Key DB Tables | Test Group |
+|---------|--------------|----------------|---------------|------------|
+| **[Order Intake]** | Order Collector, Feedback Sync, Daily CSV Upload | `orders.py`, `daily_orders.py` | `contacts`, `orders`, `order_items` | G11 |
+| **[SMS]** | Inbound Collector, Dispatch Queue | `sms.py`, `webhooks.py` | `telnyx_messages` | G5 |
+| **[Broadcast]** | Dispatch | `broadcasts.py` | `broadcasts`, `broadcast_recipients` | G10 |
+| **[Email Campaigns]** | Performance Tracker, Campaign Sync, Campaign Setup | `campaigns.py`, `prospects.py` | `campaign_routing`, `instantly_analytics` | G8 |
+| **[Intelligence]** | Stage Runner, Contact Sweep, AI Stack, Lapsed Re-engagement | `lifecycle.py`, `intelligence.py`, `agents.py` | `rules`, `opportunities`, `contact_observations`, `action_plans`, `orchestrator_log`, `action_queue` | G6, G7 |
+| **[Field Agent]** | Outcome Sync, Daily Brief | `field_agent.py` | `opportunities` (field_sales_call) | G9 |
+| **[Agent Rules]** | Playbook Sync | `playbook.py` | `agent_playbook` | G9 |
+| **[Menu]** | Catalog Sync | `menu.py` | `menu_catalog`, `menu_catalog_history` | G9 |
+| **[Growth]** | Competitor Research, Goal Agent, Weekly Growth Agent | `competitor_agent.py`, `goal_agent.py`, `growth_agent.py` | `goal_experiments`, `experiments`, `competitor_analyses`, `discovered_signals` | G15 |
+| **[Reports]** | Daily Activity Report, Daily Outcome Report | `reports.py` | `daily_reports` | G12 |
+| **[Chatbot]** | Docs Sync, Docs Reindex | `chatbot.py`, `query.py`, `team_content.py` | `team_content` | G13 |
+| **[System]** | Action Queue, Feature Tests, Connectivity Check | `test_harness.py`, `schedules.py` | `action_queue`, `test_runs` | G1, G2, G10 |
