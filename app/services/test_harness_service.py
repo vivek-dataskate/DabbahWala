@@ -1419,6 +1419,13 @@ def _g11_orders(suite: TestSuite) -> None:
         return {"pending_campaign_moves": pending_count, "bulk_push_endpoint_ok": True}
     _run(suite, "campaigns_bulk_push_to_instantly_endpoint", G, campaigns_bulk_push_to_instantly_endpoint)
 
+    def campaigns_bulk_push_now_endpoint_exists():
+        """Verify POST /api/campaigns/bulk-push-now returns 200 or 503 (not 404/405)."""
+        sc, body = _req("POST", f"{LOCAL_BASE}/api/campaigns/bulk-push-now")
+        assert sc in (200, 503), f"bulk-push-now returned unexpected {sc}: {body}"
+        return {"bulk_push_now_reachable": True, "status": sc}
+    _run(suite, "campaigns_bulk_push_now_endpoint_exists", G, campaigns_bulk_push_now_endpoint_exists)
+
 # ─── GROUP 12: Reports ────────────────────────────────────────────────────────
 
 def _g12_reports(suite: TestSuite) -> None:

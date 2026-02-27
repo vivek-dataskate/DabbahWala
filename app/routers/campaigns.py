@@ -965,3 +965,123 @@ def setup_instantly_campaigns():
         "created_campaigns": created_campaigns,
         "configure_results": configure_results,
     }
+
+
+@router.post("/bulk-push-now")
+def bulk_push_now():
+    """
+    Immediately push all eligible contacts to their Instantly campaigns.
+
+    Eligible contacts:
+      - Have a real email (not null, not placeholder)
+      - lifecycle_segment is not 'optout' or 'cooling'
+      - Has a campaign_routing entry
+      - last_order_at is NULL or more than 2 days ago (recently active customers excluded)
+
+    Pushes directly to Instantly API (does NOT use action_queue — bypasses the queue
+    so delivery is immediate regardless of the n8n 30-min polling window).
+    Uses skip_if_in_workspace=true so re-running is safe and idempotent.
+    Also activates all 6 DW campaigns if they are inactive.
+    """
+    if not INSTANTLY_API_KEY:
+        raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
+
+    headers = {
+        "Authorization": f"Bearer {INSTANTLY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    # 1. Activate any inactive DW campaigns
+    routing_rows = _get_routing_rows()
+    activation_results: dict = {}
+    for row in routing_rows:
+        cid = row.get("instantly_campaign_id")
+        cname = row.get("default_campaign", "")
+        if not cid:
+            continue
+        try:
+            resp = httpx.post(
+                f"https://api.instantly.ai/api/v2/campaigns/{cid}/activate",
+                headers=headers,
+                timeout=10,
+            )
+            activation_results[cname] = "activated" if resp.status_code < 300 else f"http_{resp.status_code}"
+        except Exception as e:
+            activation_results[cname] = f"error:{str(e)[:80]}"
+
+    # 2. Load all eligible contacts with their campaign routing
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT
+                c.id            AS contact_id,
+                c.email,
+                c.first_name,
+                c.last_name,
+                c.phone,
+                cr.instantly_campaign_id,
+                cr.default_campaign AS campaign_name
+            FROM contacts c
+            JOIN campaign_routing cr ON cr.lifecycle_segment = c.lifecycle_segment
+            WHERE c.email IS NOT NULL
+              AND c.email NOT LIKE '%%@app.placeholder.local'
+              AND c.lifecycle_segment NOT IN ('optout', 'cooling')
+              AND cr.instantly_campaign_id IS NOT NULL
+              AND (
+                  c.last_order_at IS NULL
+                  OR c.last_order_at < NOW() - INTERVAL '2 days'
+              )
+            ORDER BY c.id
+        """)
+        contacts = cur.fetchall()
+
+    logger.info("bulk-push-now: %d eligible contacts to push to Instantly", len(contacts))
+
+    pushed = 0
+    skipped = 0
+    failed = 0
+    errors: list[str] = []
+
+    for row in contacts:
+        email = row["email"]
+        campaign_id = row["instantly_campaign_id"]
+        try:
+            resp = httpx.post(
+                "https://api.instantly.ai/api/v2/leads",
+                headers=headers,
+                json={
+                    "email": email,
+                    "first_name": row["first_name"] or "",
+                    "last_name": row["last_name"] or "",
+                    "campaign_id": campaign_id,
+                    "skip_if_in_workspace": True,
+                },
+                timeout=15,
+            )
+            if resp.status_code in (200, 201):
+                pushed += 1
+            elif resp.status_code == 422:
+                # Already in workspace — that's fine
+                skipped += 1
+            else:
+                failed += 1
+                if len(errors) < 5:
+                    errors.append(f"{email}: http {resp.status_code} {resp.text[:120]}")
+        except Exception as e:
+            failed += 1
+            if len(errors) < 5:
+                errors.append(f"{email}: {str(e)[:120]}")
+
+    logger.info(
+        "bulk-push-now: done — pushed=%d skipped=%d failed=%d",
+        pushed, skipped, failed,
+    )
+
+    return {
+        "status": "ok",
+        "total_eligible": len(contacts),
+        "pushed": pushed,
+        "already_in_workspace": skipped,
+        "failed": failed,
+        "sample_errors": errors,
+        "campaign_activations": activation_results,
+    }
