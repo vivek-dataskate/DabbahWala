@@ -1010,6 +1010,29 @@ def _g8_instantly(suite: TestSuite) -> None:
         return {"status": sc, "campaign_count": len(campaigns)}
     _run(suite, "instantly_campaign_routing_list", G, campaign_routing_list)
 
+    def campaign_stats_webhook():
+        """Verify POST /api/webhooks/campaign-stats accepts stats and updates campaign_routing."""
+        cid = suite.instantly_cold_campaign_id
+        if not cid:
+            return {"skipped": "no cold campaign id"}
+        sc, body = _local("POST", "/api/webhooks/campaign-stats", json_body={
+            "campaign_id": cid,
+            "leads_count": 1,
+            "emails_sent": 1,
+            "unique_opens": 0,
+            "opens": 0,
+            "replies": 0,
+            "clicks": 0,
+            "bounces": 0,
+            "unsubscribes": 0,
+            "open_rate": 0.0,
+            "reply_rate": 0.0,
+        })
+        assert sc == 200, f"POST /api/webhooks/campaign-stats returned {sc}: {body}"
+        assert (body or {}).get("status") == "ok", f"Expected status=ok, got: {body}"
+        return {"status": sc, "updated": (body or {}).get("updated")}
+    _run(suite, "instantly_campaign_stats_webhook", G, campaign_stats_webhook)
+
     def lead_remove():
         """Cleanup: remove test email from Instantly campaign."""
         if not suite.instantly_cold_campaign_id:
