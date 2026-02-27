@@ -200,3 +200,173 @@ class TestListExperiments:
         data = resp.json()
         assert data["experiments"] == []
         assert data["count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _tool_call exception handler (lines 104-107)
+# ---------------------------------------------------------------------------
+
+class TestToolCallException:
+    def test_tool_call_exception_returns_empty_dict(self, monkeypatch):
+        """_tool_call returns {} when Claude raises (lines 104-107)."""
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+        from app.routers.competitor_agent import _tool_call
+
+        client_instance = MagicMock()
+        client_instance.messages.create.side_effect = Exception("API error")
+
+        tool = {"name": "test_tool", "input_schema": {"type": "object", "properties": {}}}
+        result = _tool_call(client_instance, "system", "user", tool)
+        assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# _parse_email_samples edge cases (lines 133-137, 160-166, 177-178)
+# ---------------------------------------------------------------------------
+
+class TestParseEmailSamples:
+    def test_sample_dir_not_found_returns_empty(self, tmp_path):
+        """_parse_email_samples returns [] when sample dir doesn't exist."""
+        import app.routers.competitor_agent as ca_module
+        from app.routers.competitor_agent import _parse_email_samples
+
+        original = ca_module.SAMPLE_DIR
+        ca_module.SAMPLE_DIR = str(tmp_path / "nonexistent")
+        try:
+            result = _parse_email_samples()
+        finally:
+            ca_module.SAMPLE_DIR = original
+        assert result == []
+
+    def test_parse_multipart_html_fallback(self, tmp_path):
+        """_parse_email_samples extracts html when no plain text part (lines 133-137)."""
+        import email as _email_module
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from app.routers.competitor_agent import _parse_email_samples
+        import app.routers.competitor_agent as ca_module
+
+        # Build a multipart email with only HTML body
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Test HTML"
+        msg["From"] = "test@cookunity.com"
+        msg["Date"] = "Mon, 26 Feb 2026 10:00:00 +0000"
+        html_part = MIMEText("<html><body><p>Hello World</p></body></html>", "html")
+        msg.attach(html_part)
+
+        eml_path = tmp_path / "test.eml"
+        eml_path.write_bytes(msg.as_bytes())
+
+        original = ca_module.SAMPLE_DIR
+        ca_module.SAMPLE_DIR = str(tmp_path)
+        try:
+            result = _parse_email_samples()
+        finally:
+            ca_module.SAMPLE_DIR = original
+
+        assert len(result) == 1
+        assert result[0]["subject"] == "Test HTML"
+
+    def test_parse_non_multipart_email(self, tmp_path):
+        """_parse_email_samples parses non-multipart plain text (lines 160-166)."""
+        from email.mime.text import MIMEText
+        from app.routers.competitor_agent import _parse_email_samples
+        import app.routers.competitor_agent as ca_module
+
+        msg = MIMEText("Hello, subscribe now!", "plain")
+        msg["Subject"] = "Plain Text"
+        msg["From"] = "test@cookunity.com"
+        msg["Date"] = "Mon, 26 Feb 2026 10:00:00 +0000"
+
+        eml_path = tmp_path / "plain.eml"
+        eml_path.write_bytes(msg.as_bytes())
+
+        original = ca_module.SAMPLE_DIR
+        ca_module.SAMPLE_DIR = str(tmp_path)
+        try:
+            result = _parse_email_samples()
+        finally:
+            ca_module.SAMPLE_DIR = original
+
+        assert len(result) == 1
+        assert "Plain Text" in result[0]["subject"]
+
+    def test_parse_email_exception_skipped(self, tmp_path):
+        """_parse_email_samples skips files that fail to parse (lines 177-178)."""
+        from app.routers.competitor_agent import _parse_email_samples
+        import app.routers.competitor_agent as ca_module
+
+        # Write a corrupted .eml file
+        bad_path = tmp_path / "corrupted.eml"
+        bad_path.write_bytes(b"THIS IS NOT A VALID EMAIL FILE\x00\x01\xff")
+
+        original = ca_module.SAMPLE_DIR
+        ca_module.SAMPLE_DIR = str(tmp_path)
+        try:
+            with patch("email.message_from_bytes", side_effect=Exception("parse error")):
+                result = _parse_email_samples()
+        finally:
+            ca_module.SAMPLE_DIR = original
+
+        # Should return empty (file skipped)
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _scrape_competitor_websites non-200 status (lines 226-227)
+# ---------------------------------------------------------------------------
+
+class TestScrapeCompetitorWebsites:
+    def test_non_200_response_logged_skipped(self):
+        """Non-200 HTTP status from competitor site is logged and skipped (lines 226-227)."""
+        from app.routers.competitor_agent import _scrape_competitor_websites
+
+        mock_response = MagicMock()
+        mock_response.status_code = 403  # non-200
+        mock_response.text = ""
+
+        with patch("httpx.get", return_value=mock_response):
+            result = _scrape_competitor_websites()
+
+        # All sites returned 403 — nothing scraped
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _inject_hypotheses exception per hypothesis (lines 473-474)
+# ---------------------------------------------------------------------------
+
+class TestInjectHypothesesException:
+    def test_inject_exception_logged_skipped(self):
+        """Individual hypothesis injection failure is logged and skipped (lines 473-474)."""
+        from app.routers.competitor_agent import _inject_hypotheses
+
+        hypothesis = {
+            "hypothesis": "Test hypothesis",
+            "experiment_type": "cohort_message",
+            "cohort_description": "Test segment",
+            "cohort_filter": {},
+            "message_template": "Hi {first_name}!",
+            "success_threshold": 0.10,
+        }
+
+        with patch("app.routers.competitor_agent.get_cursor",
+                   side_effect=Exception("DB write failed")):
+            count = _inject_hypotheses([hypothesis])
+
+        assert count == 0  # nothing injected, exception swallowed
+
+
+# ---------------------------------------------------------------------------
+# _log_run exception handler (lines 510-511)
+# ---------------------------------------------------------------------------
+
+class TestLogRunException:
+    def test_log_run_exception_silenced(self):
+        """_log_run swallows DB exceptions (lines 510-511)."""
+        from app.routers.competitor_agent import _log_run
+
+        with patch("app.routers.competitor_agent.get_cursor",
+                   side_effect=Exception("audit log failed")):
+            # Should not raise
+            _log_run(3, 2, 5, "completed", summary="ok")

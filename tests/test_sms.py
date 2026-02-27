@@ -474,3 +474,188 @@ class TestStoreMessageErrors:
             })
 
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# _fire_agent_cycle and _fire_agent_cycle_by_id direct tests (lines 16-21, 36-40)
+# ---------------------------------------------------------------------------
+
+class TestFireAgentCycleDirect:
+    def test_fire_agent_cycle_by_id_exception_silenced(self):
+        """_fire_agent_cycle_by_id swallows exception from _run_full_cycle (lines 16-21)."""
+        from app.routers.sms import _fire_agent_cycle_by_id
+        with patch("app.routers.agents._run_full_cycle", side_effect=RuntimeError("crash")):
+            # Should not raise
+            _fire_agent_cycle_by_id(1, "test")
+
+    def test_fire_agent_cycle_no_contact_returns_early(self):
+        """_fire_agent_cycle with unknown email → no contact → returns early (lines 36-37)."""
+        from app.routers.sms import _fire_agent_cycle
+        cur = MagicMock()
+        cur.fetchone.return_value = None  # no contact
+
+        @contextmanager
+        def _ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.sms.get_cursor", side_effect=_ctx):
+            _fire_agent_cycle("unknown@x.com", "test")
+        # No exception and no _run_full_cycle call since contact not found
+
+    def test_fire_agent_cycle_with_contact(self):
+        """_fire_agent_cycle with known email → calls _run_full_cycle (lines 39-40)."""
+        from app.routers.sms import _fire_agent_cycle
+        cur = MagicMock()
+        cur.fetchone.return_value = {"id": 42}
+
+        @contextmanager
+        def _ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.sms.get_cursor", side_effect=_ctx), \
+             patch("app.routers.agents._run_full_cycle") as mock_run:
+            _fire_agent_cycle("alice@example.com", "sms_inbound")
+        mock_run.assert_called_once_with(42)
+
+    def test_fire_agent_cycle_exception_silenced(self):
+        """_fire_agent_cycle swallows _run_full_cycle exceptions."""
+        from app.routers.sms import _fire_agent_cycle
+        cur = MagicMock()
+        cur.fetchone.return_value = {"id": 5}
+
+        @contextmanager
+        def _ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.sms.get_cursor", side_effect=_ctx), \
+             patch("app.routers.agents._run_full_cycle", side_effect=RuntimeError("boom")):
+            # Should not raise
+            _fire_agent_cycle("x@example.com", "trigger")
+
+
+# ---------------------------------------------------------------------------
+# store_message: resolve_email raises 404 for non-inbound → re-raise (line 136)
+# ---------------------------------------------------------------------------
+
+class TestStoreMessageReraise:
+    def test_outbound_resolve_email_404_reraises(self, client):
+        """For outbound direction, _resolve_email raising 404 propagates (line 136)."""
+        from fastapi import HTTPException
+
+        with patch(
+            "app.routers.sms._resolve_email",
+            side_effect=HTTPException(status_code=404, detail="Contact not found"),
+        ):
+            resp = client.post("/api/telnyx/message", json={
+                "direction": "outbound",
+                "from_number": "+18444322224",
+                "to_number": "+14041111111",
+                "body": "Hello!",
+            })
+
+        assert resp.status_code == 404
+
+    def test_store_message_unexpected_error_reraises(self):
+        """Unexpected exception in store_telnyx_message logs and reraises (lines 165-166)."""
+        import pytest
+        from app.models import TelnyxMessageIn
+        from app.routers.sms import store_message
+
+        payload = TelnyxMessageIn(
+            direction="outbound",
+            from_number="+18444322224",
+            to_number="+14041111111",
+            body="Hello!",
+            contact_email="test@example.com",
+        )
+
+        cur = MagicMock()
+        cur.fetchone.side_effect = Exception("unexpected db failure xyz")
+
+        @contextmanager
+        def _ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.sms._resolve_email", return_value="test@example.com"), \
+             patch("app.routers.sms.get_cursor", side_effect=_ctx):
+            with pytest.raises(Exception, match="unexpected db failure xyz"):
+                store_message(payload)
+
+    def test_auto_create_contact_insert_fails_reraises(self):
+        """Auto-create path: contact INSERT followed by SELECT returning None → reraises (lines 104-105)."""
+        import pytest
+        from fastapi import HTTPException
+        from app.models import TelnyxMessageIn
+        from app.routers.sms import store_message
+
+        payload = TelnyxMessageIn(
+            direction="inbound",
+            from_number="+19995550123",
+            to_number="+18444322224",
+            body="Who dis?",
+        )
+
+        cur = MagicMock()
+        cur.fetchone.return_value = None  # SELECT after INSERT returns None → re-raise
+
+        @contextmanager
+        def _ctx(commit=False):
+            yield cur
+
+        with patch(
+            "app.routers.sms._resolve_email",
+            side_effect=HTTPException(status_code=404, detail="Contact not found"),
+        ), patch("app.routers.sms.get_cursor", side_effect=_ctx):
+            with pytest.raises(HTTPException) as exc_info:
+                store_message(payload)
+        assert exc_info.value.status_code == 404
+
+    def test_store_call_unexpected_error_reraises(self):
+        """Unexpected exception in store_telnyx_call reraises (lines ~216-217)."""
+        import pytest
+        from app.models import TelnyxCallIn
+        from app.routers.sms import store_call
+
+        payload = TelnyxCallIn(
+            direction="outbound",
+            from_number="+18444322224",
+            to_number="+14041111111",
+            duration_sec=60,
+            contact_email="a@b.com",
+        )
+
+        cur = MagicMock()
+        cur.fetchone.side_effect = Exception("unexpected db failure xyz")
+
+        @contextmanager
+        def _ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.sms._resolve_email", return_value="a@b.com"), \
+             patch("app.routers.sms.get_cursor", side_effect=_ctx):
+            with pytest.raises(Exception, match="unexpected db failure xyz"):
+                store_call(payload)
+
+    def test_field_agent_message_unexpected_error_reraises(self):
+        """Unexpected exception in field-agent-message reraises (line 254)."""
+        import pytest
+        from app.models import FieldAgentSmsIn
+        from app.routers.sms import log_field_agent_sms
+
+        payload = FieldAgentSmsIn(
+            contact_phone="+14041111111",
+            agent_name="Driver Sam",
+            body="On my way!",
+        )
+
+        cur = MagicMock()
+        cur.fetchone.side_effect = Exception("unexpected failure xyz")
+
+        @contextmanager
+        def _ctx(commit=False):
+            yield cur
+
+        with patch("app.routers.sms._resolve_email", return_value="b@b.com"), \
+             patch("app.routers.sms.get_cursor", side_effect=_ctx):
+            with pytest.raises(Exception, match="unexpected failure xyz"):
+                log_field_agent_sms(payload)

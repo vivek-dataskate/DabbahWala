@@ -404,3 +404,172 @@ class TestMenuItemHistory:
         data = resp.json()
         assert data["count"] == 0
         assert data["history"] == []
+
+
+# ---------------------------------------------------------------------------
+# _airtable_list_all pagination (lines 106-122)
+# ---------------------------------------------------------------------------
+
+class TestAirtableListAllPagination:
+    def test_list_all_with_pagination(self):
+        """_airtable_list_all follows offset pagination to fetch all pages."""
+        from app.routers.menu import _airtable_list_all
+
+        page1 = {"records": [{"id": "rec1", "fields": {"Item Name": "Dal Tadka"}}], "offset": "page2"}
+        page2 = {"records": [{"id": "rec2", "fields": {"Item Name": "Biryani"}}]}  # no offset
+
+        call_count = [0]
+
+        def _mock_get(*args, **kwargs):
+            call_count[0] += 1
+            m = MagicMock()
+            m.status_code = 200
+            m.json.return_value = page1 if call_count[0] == 1 else page2
+            m.raise_for_status = MagicMock()
+            return m
+
+        with patch("httpx.get", side_effect=_mock_get):
+            records = _airtable_list_all()
+
+        assert len(records) == 2
+        assert call_count[0] == 2  # two pages fetched
+
+    def test_list_all_single_page(self):
+        """_airtable_list_all returns all records from a single page."""
+        from app.routers.menu import _airtable_list_all
+
+        page = {"records": [{"id": "rec1", "fields": {"Item Name": "Naan"}}]}
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = page
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("httpx.get", return_value=mock_resp):
+            records = _airtable_list_all()
+
+        assert len(records) == 1
+
+
+# ---------------------------------------------------------------------------
+# sync field changes (lines 285-289) and error paths (313-315, 342-344)
+# ---------------------------------------------------------------------------
+
+class TestMenuSyncEdgeCases:
+    def test_sync_detects_field_changes(self, client):
+        """Sync records category/is_veg field changes and logs history (lines 285-289)."""
+        at_record = {
+            "id": "rec_002",
+            "fields": {
+                "Item Name": "Dal Makhani",
+                "Category": "Mains",      # changed from "Lentils"
+                "Is Veg": True,
+                "Price": 9.99,
+            },
+        }
+        existing_row = {
+            "id": 5, "item_name": "Dal Makhani",
+            "price": 9.99,               # price unchanged
+            "category": "Lentils",       # different → field_update
+            "is_veg": True,
+            "description": None,
+            "image_url": None,
+        }
+
+        call_count = [0]
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            call_count[0] += 1
+            cur = MagicMock()
+            if call_count[0] == 1:
+                cur.fetchone.return_value = existing_row  # existing item
+            else:
+                cur.fetchall.return_value = []  # no active rows for deletion
+            yield cur
+
+        with patch("app.routers.menu._airtable_list_all", return_value=[at_record]), \
+             patch("app.routers.menu.get_cursor", side_effect=_cursor_ctx):
+            resp = client.post("/api/menu/sync")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["upserted"] == 1
+        assert data["history_events"] >= 1  # at least one field_update recorded
+
+    def test_sync_upsert_db_error_increments_errors(self, client):
+        """DB exception during upsert is caught and errors counter incremented (lines 313-315)."""
+        at_record = {
+            "id": "rec_err",
+            "fields": {"Item Name": "ErrorItem", "Price": 5.00},
+        }
+
+        call_count = [0]
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise Exception("DB write failed")  # upsert fails
+            cur = MagicMock()
+            cur.fetchall.return_value = []  # deletion phase
+            yield cur
+
+        with patch("app.routers.menu._airtable_list_all", return_value=[at_record]), \
+             patch("app.routers.menu.get_cursor", side_effect=_cursor_ctx):
+            resp = client.post("/api/menu/sync")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["errors"] >= 1
+        assert data["upserted"] == 0
+
+    def test_sync_deletion_detection_db_error_increments_errors(self, client):
+        """DB exception in deletion detection is caught (lines 342-344)."""
+
+        call_count = [0]
+
+        @contextmanager
+        def _cursor_ctx(commit=False):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                # Deletion detection fails
+                raise Exception("deletion phase DB error")
+            cur = MagicMock()
+            yield cur
+
+        with patch("app.routers.menu._airtable_list_all", return_value=[]), \
+             patch("app.routers.menu.get_cursor", side_effect=_cursor_ctx):
+            resp = client.post("/api/menu/sync")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["errors"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# Sync logging (line 232) and all-items mode (line 148)
+# ---------------------------------------------------------------------------
+
+class TestMenuItemsAllMode:
+    def test_get_all_items_including_inactive(self, client):
+        """GET /api/menu/items?active_only=false returns all items (no WHERE clause)."""
+        rows = [
+            {"id": 1, "item_name": "ActiveItem", "category": "Mains", "is_veg": True,
+             "price": 10.0, "active": True, "added_date": None, "description": None,
+             "image_url": None, "discarded_date": None, "airtable_record_id": None,
+             "updated_at": None, "created_at": None},
+            {"id": 2, "item_name": "InactiveItem", "category": "Mains", "is_veg": True,
+             "price": 5.0, "active": False, "added_date": None, "description": None,
+             "image_url": None, "discarded_date": None, "airtable_record_id": None,
+             "updated_at": None, "created_at": None},
+        ]
+        cur = _make_cursor(rows=rows)
+
+        with patch("app.routers.menu.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = client.get("/api/menu/items?active_only=false")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["count"] == 2

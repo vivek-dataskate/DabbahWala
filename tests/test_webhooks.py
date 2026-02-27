@@ -601,3 +601,173 @@ class TestShipdayWebhook:
         assert data["agent_cycle"] == "skipped"
         mock_thread.assert_not_called()
         mock_timer.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 6. _fire_agent_cycle direct tests (lines 36-44)
+# ---------------------------------------------------------------------------
+
+class TestFireAgentCycle:
+    def test_fire_agent_cycle_calls_run_full_cycle(self):
+        """_fire_agent_cycle calls _run_full_cycle with the given contact_id."""
+        from app.routers.webhooks import _fire_agent_cycle
+        with patch("app.routers.agents._run_full_cycle") as mock_run:
+            _fire_agent_cycle(42, "test_trigger")
+        mock_run.assert_called_once_with(42)
+
+    def test_fire_agent_cycle_exception_silenced(self):
+        """_fire_agent_cycle swallows exceptions from _run_full_cycle."""
+        from app.routers.webhooks import _fire_agent_cycle
+        with patch("app.routers.agents._run_full_cycle", side_effect=RuntimeError("crash")):
+            # Should not raise
+            _fire_agent_cycle(1, "test_trigger")
+
+
+# ---------------------------------------------------------------------------
+# 7. _dabbahwala_campaign_ids exception (lines 57-59)
+# ---------------------------------------------------------------------------
+
+class TestDabbahwalaCampaignIds:
+    def test_db_exception_returns_empty_set(self):
+        """_dabbahwala_campaign_ids returns empty set when DB raises."""
+        from app.routers.webhooks import _dabbahwala_campaign_ids
+        with patch("app.routers.webhooks.get_cursor", side_effect=Exception("DB down")):
+            result = _dabbahwala_campaign_ids()
+        assert result == set()
+
+
+# ---------------------------------------------------------------------------
+# 8. instantly_webhook edge cases (lines 170-171, 199, 235-240)
+# ---------------------------------------------------------------------------
+
+class TestInstantlyWebhookEdgeCases:
+    def test_non_json_body_ignored(self, client):
+        """Non-JSON body → {status: ignored, reason: non-JSON body}."""
+        resp = client.post(
+            "/api/webhooks/instantly",
+            content=b"not-valid-json",
+            headers={"Content-Type": "text/plain"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ignored"
+        assert data["reason"] == "non-JSON body"
+
+    def test_no_campaign_id_processes_anyway(self, client):
+        """No campaign_id → logs warning, processes event if actionable."""
+        cur = MagicMock()
+        cur.execute.side_effect = Exception("ingest_event failed")  # non-fatal
+
+        with patch("app.routers.webhooks.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)), \
+             patch("app.routers.webhooks._upsert_contact", return_value=(1, False)):
+            resp = client.post("/api/webhooks/instantly", json={
+                "event_type": "email_open",
+                "lead": {"email": "test@example.com"},
+                # no campaign_id → covers line 199
+            })
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+
+    def test_ingest_event_exception_swallowed(self, client):
+        """ingest_event exception in instantly_webhook is non-fatal (lines 235-240)."""
+        call_count = [0]
+        cur = MagicMock()
+
+        def _execute(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise Exception("ingest failed")
+
+        cur.execute.side_effect = _execute
+
+        # _dabbahwala_campaign_ids uses get_cursor, then the upsert block uses it too
+        campaign_cur = MagicMock()
+        campaign_cur.fetchall.return_value = [{"instantly_campaign_id": "c-x"}]
+
+        n = [0]
+
+        @contextmanager
+        def _multi_cur(commit=False):
+            n[0] += 1
+            if n[0] == 1:
+                yield campaign_cur
+            else:
+                yield cur
+
+        with patch("app.routers.webhooks.get_cursor", side_effect=_multi_cur), \
+             patch("app.routers.webhooks._upsert_contact", return_value=(7, False)):
+            resp = client.post("/api/webhooks/instantly", json={
+                "event_type": "email_open",
+                "campaign_id": "c-x",
+                "lead": {"email": "alpha@example.com"},
+            })
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+
+# ---------------------------------------------------------------------------
+# 9. telnyx_webhook non-JSON body (lines 268-270)
+# ---------------------------------------------------------------------------
+
+class TestTelnyxWebhookEdgeCases:
+    def test_non_json_body_ignored(self, client):
+        """Non-JSON body → {status: ignored, reason: non-JSON body}."""
+        resp = client.post(
+            "/api/webhooks/telnyx",
+            content=b"not-valid-json",
+            headers={"Content-Type": "text/plain"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ignored"
+        assert data["reason"] == "non-JSON body"
+
+
+# ---------------------------------------------------------------------------
+# 10. shipday_webhook edge cases (lines 404-406, 487-488)
+# ---------------------------------------------------------------------------
+
+class TestShipdayWebhookEdgeCases:
+    def test_non_json_body_returns_ok(self, client):
+        """Non-JSON but non-empty body → 200 ok (graceful, no auth token set)."""
+        resp = client.post(
+            "/api/webhooks/shipday",
+            content=b"not-valid-json-but-not-empty",
+            headers={"Content-Type": "text/plain"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+    def test_ingest_event_exception_swallowed(self, client):
+        """ingest_event exception in shipday_webhook is non-fatal (lines 487-488)."""
+        call_count = [0]
+        cur = MagicMock()
+
+        def _execute(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 4:
+                raise Exception("ingest_event failed")
+
+        cur.execute.side_effect = _execute
+        cur.fetchone.return_value = {
+            "contact_id": 5,
+            "customer_phone": "+1234567890",
+            "customer_email": "d@d.com",
+            "order_number": "ORD-777",
+        }
+
+        with patch("app.routers.webhooks.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)), \
+             patch("threading.Thread"), \
+             patch("threading.Timer"):
+            resp = client.post("/api/webhooks/shipday", json={
+                "orderId": "SD-777",
+                "orderStatus": "IN_TRANSIT",
+            })
+
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
