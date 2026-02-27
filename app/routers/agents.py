@@ -1466,6 +1466,23 @@ def _enqueue_action(contact_id: int, orch_log_id: int, action: str, payload: dic
         contact_id,
         orch_log_id,
     )
+    if action == "move_campaign":
+        # Convert to push_instantly_lead so the UUID lookup happens here,
+        # not in n8n where the routing table isn't accessible.
+        queued = push_lead_to_instantly(
+            email=payload.get("email", ""),
+            first_name=payload.get("first_name", ""),
+            last_name=payload.get("last_name", ""),
+            phone=payload.get("phone", ""),
+            campaign_name=payload.get("to_campaign", ""),
+            contact_id=contact_id,
+        )
+        if not queued:
+            logger.warning(
+                "push_lead_to_instantly failed for contact_id=%s campaign=%s",
+                contact_id, payload.get("to_campaign"),
+            )
+        return
     with get_cursor() as cur:
         cur.execute(
             """
@@ -1594,6 +1611,8 @@ def _run_full_cycle(contact_id: int) -> dict:
     action_payload["contact_id"] = contact_id
     action_payload["email"] = contact.get("email")
     action_payload["phone"] = contact.get("phone")
+    action_payload["first_name"] = contact.get("first_name", "")
+    action_payload["last_name"] = contact.get("last_name", "")
 
     _enqueue_action(contact_id, orch_log_id, chosen_action, action_payload)
 

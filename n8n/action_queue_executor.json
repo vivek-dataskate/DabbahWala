@@ -47,7 +47,7 @@
           "conditions": [
             {
               "id": "has-actions",
-              "leftValue": "={{ Array.isArray($json) ? $json.length : 0 }}",
+              "leftValue": "={{ Array.isArray($json) ? $json.length : (Array.isArray($input.all()[0]?.json) ? $input.all()[0].json.length : $input.all().length) }}",
               "rightValue": 0,
               "operator": {
                 "type": "number",
@@ -507,11 +507,11 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://api.instantly.ai/api/v2/campaigns/{{ $json.payload.instantly_campaign_id }}/leads",
+        "url": "https://api.instantly.ai/api/v2/leads",
         "authentication": "none",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"leads\": [{\"email\": \"{{ $json.payload.email }}\", \"first_name\": \"{{ $json.payload.first_name }}\", \"last_name\": \"{{ $json.payload.last_name }}\", \"phone\": \"{{ $json.payload.phone }}\"}]}",
+        "jsonBody": "={\"email\": \"{{ $json.payload.email }}\", \"first_name\": \"{{ $json.payload.first_name }}\", \"last_name\": \"{{ $json.payload.last_name }}\", \"campaign_id\": \"{{ $json.payload.instantly_campaign_id }}\"}",
         "options": {},
         "sendHeaders": true,
         "headerParameters": {
@@ -736,7 +736,7 @@
       "main": [
         [
           {
-            "node": "Fetch Pending Actions",
+            "node": "Get Credentials",
             "type": "main",
             "index": 0
           }
