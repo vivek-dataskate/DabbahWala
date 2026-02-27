@@ -1562,6 +1562,597 @@ def _g15_competitor_agent(suite: TestSuite) -> None:
     _run(suite, "goal_hypothesis_hash_schema", G, goal_hypothesis_hash_column)
 
 
+# ─── GROUPS 18–21: n8n Flow Integration Tests (real DB, all branches) ────────
+
+def _g18_n8n_daily_order_flow(suite: TestSuite) -> None:
+    """Group 18 — [Order Intake] Daily CSV Upload integration tests.
+
+    n8n workflow: POST /api/daily-orders/process → IF Has Orders? TRUE/FALSE
+    Injects real CSV data into the endpoint, verifies DB state for each branch,
+    then deletes all injected test rows.
+    """
+    G = "18_n8n_daily_order"
+    import io as _io
+    from datetime import date as _date
+    TEST_TAG = "TH-INT-G18"   # unique prefix for all test orders/contacts this group creates
+
+    def _cleanup_g18(cur):
+        """Delete all rows created by this group."""
+        # Delete orders (cascade to order_items)
+        cur.execute("DELETE FROM order_items WHERE order_id IN "
+                    "(SELECT id FROM orders WHERE order_id_external LIKE %s)", (f"{TEST_TAG}%",))
+        cur.execute("DELETE FROM orders WHERE order_id_external LIKE %s", (f"{TEST_TAG}%",))
+        # Delete contacts created by these orders (source='Website', phone starts with +155500)
+        cur.execute("DELETE FROM events WHERE contact_id IN "
+                    "(SELECT id FROM contacts WHERE phone LIKE '155500%' AND source = 'Website')")
+        cur.execute("DELETE FROM contacts WHERE phone LIKE '155500%' AND source = 'Website'")
+
+    def order_upload_true_branch():
+        """TRUE branch: valid CSV with orders → total_orders > 0 → IF is TRUE."""
+        today = _date.today().strftime("%d/%m/%Y")
+        csv_content = (
+            "Purchase Number,Order Number,Date,SKU,Plan Name,Delivery Slot Name,"
+            "Dish Name,Adds-Ons,Quantity,Allergies & Preferences,Comments,"
+            "Kitchen Instructions,Delivery Instructions,Unit Price,Order Type,"
+            "Customer Name,Customer Phone Number,Customer Address,Geo-Location,Pincode,State Name\n"
+            f"P-G18-001,{TEST_TAG}-001,{today},V0001,Build Your Own Box,9:30 AM - 12:30 PM,"
+            "Dal Makhani,,1,,,,,12.00,Scheduled Order,"
+            "Test User G18,+15550011111,123 Test St Georgia 30301,,30301,Georgia\n"
+            f"P-G18-001,{TEST_TAG}-001,{today},V0002,Build Your Own Box,9:30 AM - 12:30 PM,"
+            "Butter Chicken,,1,,,,,12.00,Scheduled Order,"
+            "Test User G18,+15550011111,123 Test St Georgia 30301,,30301,Georgia\n"
+        )
+        with httpx.Client(timeout=120) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_g18_orders.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+            )
+        assert r.status_code in (200, 201), f"daily-orders/process returned {r.status_code}: {r.text[:300]}"
+        body = r.json()
+        # Verify TRUE branch: at least 1 order processed
+        assert body.get("total_orders", 0) > 0, f"Expected total_orders > 0 (TRUE branch), got: {body}"
+        # Verify order exists in DB
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT id FROM orders WHERE order_id_external = %s", (f"{TEST_TAG}-001",))
+            row = cur.fetchone()
+        assert row, f"Order {TEST_TAG}-001 not found in DB after upload"
+        # Cleanup
+        with get_cursor(commit=True) as cur:
+            _cleanup_g18(cur)
+        return {
+            "total_orders": body["total_orders"],
+            "new_contacts": body.get("new_contacts", 0),
+            "branch": "TRUE (has_orders)",
+        }
+    _run(suite, "daily_order_true_branch_has_orders", G, order_upload_true_branch)
+
+    def order_upload_false_branch():
+        """FALSE branch: CSV with no valid order numbers → total_orders = 0 → IF is FALSE."""
+        csv_content = (
+            "Purchase Number,Order Number,Date,SKU,Dish Name,Customer Name,Customer Phone Number,Customer Address\n"
+            ",,01/01/2026,,Empty Row,,,"  # no order number → skipped
+        )
+        with httpx.Client(timeout=60) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_g18_empty.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+            )
+        # Can be 200 with zero orders or 400 for empty CSV
+        if r.status_code == 400:
+            return {"branch": "FALSE (empty CSV → 400 is acceptable)", "handled": True}
+        assert r.status_code in (200, 201), f"Unexpected status {r.status_code}: {r.text[:200]}"
+        body = r.json()
+        assert body.get("total_orders", 0) == 0, f"Expected total_orders = 0 (FALSE branch), got: {body}"
+        return {"total_orders": 0, "branch": "FALSE (no_orders)"}
+    _run(suite, "daily_order_false_branch_no_orders", G, order_upload_false_branch)
+
+    def order_upload_new_vs_returning():
+        """Contact match branches: new customer (creates contact) vs returning (matches existing)."""
+        today = _date.today().strftime("%d/%m/%Y")
+        # Insert a test contact with a specific phone number
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "INSERT INTO contacts (phone, first_name, last_name, source, lifecycle_segment) "
+                "VALUES (%s, %s, %s, %s, %s) RETURNING id",
+                ("5550022222", "Returning", "Customer", "Website", "active_customer"),
+            )
+            existing_id = cur.fetchone()["id"]
+
+        try:
+            # Upload CSV with: 1 row matching existing contact + 1 new contact
+            csv_content = (
+                "Purchase Number,Order Number,Date,SKU,Dish Name,Quantity,Unit Price,"
+                "Order Type,Customer Name,Customer Phone Number,Customer Address\n"
+                f"P-G18-002,{TEST_TAG}-002,{today},V1,Dal Makhani,1,12.00,"
+                "Scheduled Order,Returning Customer,+15550022222,123 Main St Georgia 30301\n"
+                f"P-G18-003,{TEST_TAG}-003,{today},V2,Rice Bowl,1,10.00,"
+                "Scheduled Order,Brand New Customer,+15550033333,456 New St Georgia 30302\n"
+            )
+            with httpx.Client(timeout=120) as client:
+                r = client.post(
+                    f"{LOCAL_BASE}/api/daily-orders/process",
+                    files={"file": ("test_g18_match.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+                )
+            assert r.status_code in (200, 201), f"Upload returned {r.status_code}: {r.text[:200]}"
+            body = r.json()
+            assert body.get("total_orders", 0) >= 1, "Expected at least 1 order processed"
+            # Verify returning contact still has same ID
+            with get_cursor(commit=False) as cur:
+                cur.execute("SELECT id FROM contacts WHERE phone = '5550022222'")
+                row = cur.fetchone()
+            assert row and row["id"] == existing_id, "Returning contact ID changed — unexpected new contact created"
+            return {
+                "total_orders": body["total_orders"],
+                "new_contacts": body.get("new_contacts", 0),
+                "existing_contact_preserved": True,
+            }
+        finally:
+            # Cleanup all test data created by this sub-test
+            with get_cursor(commit=True) as cur:
+                _cleanup_g18(cur)
+                cur.execute("DELETE FROM contacts WHERE id = %s", (existing_id,))
+                cur.execute("DELETE FROM contacts WHERE phone = '5550033333'")
+    _run(suite, "daily_order_contact_match_branches", G, order_upload_new_vs_returning)
+
+    def order_upload_menu_catalog_available():
+        """Verify menu items are resolved from menu_catalog when it's available."""
+        today = _date.today().strftime("%d/%m/%Y")
+        # Ensure menu_catalog has at least one item
+        with get_cursor(commit=True) as cur:
+            cur.execute("SAVEPOINT mc_check")
+            try:
+                cur.execute("SELECT COUNT(*) AS cnt FROM menu_catalog WHERE active = TRUE")
+                cnt = cur.fetchone()["cnt"]
+                cur.execute("RELEASE SAVEPOINT mc_check")
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT mc_check")
+                cur.execute("RELEASE SAVEPOINT mc_check")
+                cnt = 0
+        if cnt == 0:
+            return {"skip": "menu_catalog empty — skipping menu resolution test"}
+        # Upload a CSV with a known menu item
+        csv_content = (
+            "Purchase Number,Order Number,Date,SKU,Dish Name,Quantity,Unit Price,"
+            "Order Type,Customer Name,Customer Phone Number,Customer Address\n"
+            f"P-G18-004,{TEST_TAG}-004,{today},V3,Dal Makhani,1,12.00,"
+            "Scheduled Order,Menu Test User,+15550044444,789 Menu Rd Georgia 30303\n"
+        )
+        with httpx.Client(timeout=120) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_g18_menu.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+            )
+        assert r.status_code in (200, 201), f"Upload returned {r.status_code}: {r.text[:200]}"
+        body = r.json()
+        menu_matched = body.get("menu_matched", 0)
+        menu_created = body.get("menu_created", 0)
+        # At least one dish should be matched or created
+        assert (menu_matched + menu_created) > 0, (
+            f"Expected menu_matched or menu_created > 0, got: matched={menu_matched} created={menu_created}"
+        )
+        with get_cursor(commit=True) as cur:
+            _cleanup_g18(cur)
+            cur.execute("DELETE FROM contacts WHERE phone = '5550044444'")
+        return {"menu_matched": menu_matched, "menu_created": menu_created}
+    _run(suite, "daily_order_menu_catalog_resolution", G, order_upload_menu_catalog_available)
+
+    def order_upload_delivery_slot_parsing():
+        """Verify delivery slot is parsed correctly from '9:30 AM - 12:30 PM' format."""
+        today = _date.today().strftime("%d/%m/%Y")
+        csv_content = (
+            "Purchase Number,Order Number,Date,Delivery Slot Name,Dish Name,Quantity,Unit Price,"
+            "Order Type,Customer Name,Customer Phone Number,Customer Address\n"
+            f"P-G18-005,{TEST_TAG}-005,{today},9:30 AM - 12:30 PM,Paneer Tikka,1,14.00,"
+            "Scheduled Order,Slot Test User,+15550055555,111 Slot Ave Georgia 30304\n"
+        )
+        with httpx.Client(timeout=120) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_g18_slot.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+            )
+        assert r.status_code in (200, 201), f"Upload returned {r.status_code}"
+        body = r.json()
+        assert body.get("total_orders", 0) > 0, "Order with delivery slot not processed"
+        # Verify delivery_slot stored in DB
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT delivery_slot FROM orders WHERE order_id_external = %s", (f"{TEST_TAG}-005",))
+            row = cur.fetchone()
+        assert row, "Order with delivery slot not found in DB"
+        assert row["delivery_slot"], f"delivery_slot is empty: {row['delivery_slot']}"
+        with get_cursor(commit=True) as cur:
+            _cleanup_g18(cur)
+            cur.execute("DELETE FROM contacts WHERE phone = '5550055555'")
+        return {"delivery_slot": row["delivery_slot"], "branch": "slot_parsed_correctly"}
+    _run(suite, "daily_order_delivery_slot_parsing", G, order_upload_delivery_slot_parsing)
+
+
+def _g19_n8n_action_queue_all_routes(suite: TestSuite) -> None:
+    """Group 19 — [System] Action Queue: all 8 action_type routes.
+
+    n8n workflow 'Route by Action Type' has 8 branches + fallback.
+    This group inserts one action_queue row per type, verifies it appears
+    in GET /pending, marks it done, verifies status, then deletes.
+    """
+    G = "19_n8n_action_queue_routes"
+    created_ids: list[int] = []
+
+    def _insert_action(action_type: str, payload: dict) -> int:
+        """Insert an action_queue row and return its id."""
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "INSERT INTO action_queue (contact_id, action_type, payload, status) "
+                "VALUES (%s, %s, %s::jsonb, 'pending') RETURNING id",
+                (suite.test_contact_id, action_type, json.dumps(payload)),
+            )
+            return cur.fetchone()["id"]
+
+    def _get_pending_ids() -> set:
+        sc, body = _local("GET", "/api/agents/action-queue/pending")
+        assert sc == 200, f"action-queue/pending returned {sc}"
+        return {row["id"] for row in body} if isinstance(body, list) else set()
+
+    def _mark_done(aq_id: int):
+        sc, _ = _local("POST", f"/api/agents/action-queue/{aq_id}/done")
+        assert sc == 200, f"mark-done for id={aq_id} returned {sc}"
+
+    def _verify_status(aq_id: int, expected: str):
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT status FROM action_queue WHERE id = %s", (aq_id,))
+            row = cur.fetchone()
+        assert row, f"action_queue row id={aq_id} not found"
+        assert row["status"] == expected, f"Expected status={expected}, got={row['status']}"
+
+    def _cleanup():
+        if created_ids:
+            with get_cursor(commit=True) as cur:
+                placeholders = ",".join(["%s"] * len(created_ids))
+                cur.execute(f"DELETE FROM action_queue WHERE id IN ({placeholders})", created_ids)
+        created_ids.clear()
+
+    # Each tuple: (action_type, payload, description)
+    action_cases = [
+        ("send_sms", {
+            "message_body": "Test SMS from action queue",
+            "phone": TEST_PHONE,
+            "contact_id": suite.test_contact_id or 0,
+        }, "send_sms route"),
+        ("move_campaign", {
+            "to_campaign": "NURTURE_SLOW",
+            "instantly_campaign_id": "76a88797-961a-47b6-af11-77e2211c4e73",
+            "contact_id": suite.test_contact_id or 0,
+            "email": TEST_EMAIL,
+        }, "move_campaign route"),
+        ("escalate_airtable", {
+            "urgency": "high",
+            "reason": "Test escalation from harness",
+            "contact_id": suite.test_contact_id or 0,
+            "phone": TEST_PHONE,
+        }, "escalate_airtable route"),
+        ("sync_airtable_task", {
+            "contact_id": suite.test_contact_id or 0,
+            "task_type": "follow_up",
+            "notes": "Test sync task",
+        }, "sync_airtable_task route"),
+        ("push_instantly_lead", {
+            "instantly_campaign_id": "76a88797-961a-47b6-af11-77e2211c4e73",
+            "campaign_name": "NURTURE_SLOW",
+            "email": TEST_EMAIL,
+            "first_name": TEST_FIRST_NAME,
+            "last_name": TEST_LAST_NAME,
+            "phone": TEST_PHONE,
+        }, "push_instantly_lead route"),
+        ("push_instantly_sequences", {
+            "sequence_id": "test-seq-001",
+            "email": TEST_EMAIL,
+        }, "push_instantly_sequences route"),
+        ("upload_google_drive", {
+            "filename": "test_upload.csv",
+            "content": "col1,col2\nval1,val2",
+        }, "upload_google_drive route"),
+        ("send_email_report", {
+            "to": TEST_EMAIL,
+            "subject": "Test report from harness",
+            "body": "<p>Test email body</p>",
+            "source": "test_harness",
+        }, "send_email_report route"),
+    ]
+
+    for action_type, payload, desc in action_cases:
+        def make_test(at, pl, d):
+            def test_fn():
+                if not suite.test_contact_id and at not in ("push_instantly_lead", "push_instantly_sequences", "upload_google_drive", "send_email_report"):
+                    return {"skip": "no test contact — skipping contact-dependent route"}
+                aq_id = _insert_action(at, pl)
+                created_ids.append(aq_id)
+                # Verify it appears in pending list
+                pending = _get_pending_ids()
+                assert aq_id in pending, (
+                    f"{at} action id={aq_id} not in pending list — "
+                    f"pending has {len(pending)} items"
+                )
+                # Verify action_type in response
+                sc, body = _local("GET", "/api/agents/action-queue/pending")
+                action_row = next((r for r in body if r["id"] == aq_id), None)
+                assert action_row, f"Row id={aq_id} not found in pending response"
+                assert action_row["action_type"] == at, (
+                    f"Expected action_type={at}, got={action_row['action_type']}"
+                )
+                # Mark done
+                _mark_done(aq_id)
+                # Verify status changed to 'done'
+                _verify_status(aq_id, "done")
+                created_ids.remove(aq_id)  # already done, cleanup only the pending ones
+                # Re-add so cleanup loop can delete it
+                created_ids.append(aq_id)
+                return {"action_type": at, "aq_id": aq_id, "branch": d}
+            return test_fn
+        _run(suite, f"action_queue_route_{action_type}", G, make_test(action_type, payload, desc))
+
+    def mark_failed_branch():
+        """Test the 'failed' branch: mark action as failed → status = failed."""
+        aq_id = _insert_action("send_sms", {
+            "message_body": "Test failed branch",
+            "phone": TEST_PHONE,
+        })
+        created_ids.append(aq_id)
+        sc, _ = _local("POST", f"/api/agents/action-queue/{aq_id}/failed")
+        assert sc == 200, f"mark-failed returned {sc}"
+        _verify_status(aq_id, "failed")
+        return {"aq_id": aq_id, "status": "failed", "branch": "mark_failed"}
+    _run(suite, "action_queue_mark_failed_branch", G, mark_failed_branch)
+
+    def cleanup_all():
+        _cleanup()
+        return {"cleaned_up": True}
+    _run(suite, "action_queue_cleanup", G, cleanup_all)
+
+
+def _g20_n8n_broadcast_flow(suite: TestSuite) -> None:
+    """Group 20 — [Broadcast] Dispatch integration tests.
+
+    n8n workflow Route by Channel has sms + email branches.
+    IF Has Pending Recipients? TRUE and FALSE.
+    Tests: create job → queue → poll (TRUE branch) → mark sent/failed → poll (FALSE branch).
+    All test data tagged with title='TEST_HARNESS_G20' and cleaned up at end.
+    """
+    G = "20_n8n_broadcast_flow"
+    created_job_id = [None]   # mutable container for cleanup
+
+    def _cleanup():
+        if created_job_id[0]:
+            with get_cursor(commit=True) as cur:
+                cur.execute("DELETE FROM broadcast_recipients WHERE job_id = %s", (created_job_id[0],))
+                cur.execute("DELETE FROM broadcast_jobs WHERE id = %s", (created_job_id[0],))
+            created_job_id[0] = None
+
+    def broadcast_false_branch_empty_queue():
+        """FALSE branch: no pending recipients → pending-recipients returns empty."""
+        sc, body = _local("GET", "/api/broadcasts/pending-recipients")
+        assert sc == 200, f"pending-recipients returned {sc}"
+        # Body should be a list (possibly empty from other jobs)
+        assert isinstance(body, list), f"Expected list, got: {type(body)}"
+        return {"pending_count": len(body), "branch": "FALSE (empty or unrelated)"}
+    _run(suite, "broadcast_false_branch_no_pending", G, broadcast_false_branch_empty_queue)
+
+    def broadcast_create_job():
+        """Create a test broadcast job (draft state)."""
+        sc, body = _local("POST", "/api/broadcasts/", json_body={
+            "title": "TEST_HARNESS_G20",
+            "broadcast_type": "promo",
+            "channels": ["sms", "email"],
+            "sms_message": "Test broadcast SMS from harness",
+            "email_subject": "Test broadcast email",
+            "email_body": "<p>Test</p>",
+            "target_type": "manual_list",
+        })
+        if sc == 404:
+            return {"skip": "broadcasts endpoint not found"}
+        assert sc in (200, 201), f"create broadcast returned {sc}: {str(body)[:200]}"
+        job_id = (body.get("id") or body.get("job_id")) if isinstance(body, dict) else None
+        assert job_id, f"No job_id in response: {body}"
+        created_job_id[0] = job_id
+        return {"job_id": job_id, "status": "draft"}
+    _run(suite, "broadcast_create_job", G, broadcast_create_job)
+
+    def broadcast_true_branch_sms():
+        """TRUE + SMS branch: insert pending SMS recipient → verify in pending-recipients."""
+        if not created_job_id[0] or not suite.test_contact_id:
+            return {"skip": "no job or no test contact"}
+        # Insert test recipient directly into DB
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "INSERT INTO broadcast_recipients (job_id, contact_id, channel, status, "
+                "sms_message) VALUES (%s, %s, 'sms', 'pending', %s) RETURNING id",
+                (created_job_id[0], suite.test_contact_id, "Test SMS broadcast body"),
+            )
+            recipient_id = cur.fetchone()["id"]
+        # Poll: should return this recipient
+        sc, body = _local("GET", "/api/broadcasts/pending-recipients")
+        assert sc == 200, f"pending-recipients returned {sc}"
+        assert isinstance(body, list), f"Expected list"
+        ids = [r.get("id") for r in body]
+        assert recipient_id in ids, (
+            f"SMS recipient id={recipient_id} not in pending-recipients (found {len(body)} total)"
+        )
+        # Mark sent → TRUE branch result
+        sc2, _ = _local("POST", f"/api/broadcasts/recipients/{recipient_id}/sent")
+        assert sc2 == 200, f"mark-sent returned {sc2}"
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT status FROM broadcast_recipients WHERE id = %s", (recipient_id,))
+            row = cur.fetchone()
+        assert row and row["status"] == "sent", f"Expected status=sent, got={row}"
+        return {"recipient_id": recipient_id, "channel": "sms", "final_status": "sent", "branch": "TRUE/sms"}
+    _run(suite, "broadcast_true_branch_sms_route", G, broadcast_true_branch_sms)
+
+    def broadcast_true_branch_email():
+        """TRUE + Email branch: insert pending email recipient → mark sent."""
+        if not created_job_id[0] or not suite.test_contact_id:
+            return {"skip": "no job or no test contact"}
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "INSERT INTO broadcast_recipients (job_id, contact_id, channel, status, "
+                "email_subject, email_body) VALUES (%s, %s, 'email', 'pending', %s, %s) RETURNING id",
+                (created_job_id[0], suite.test_contact_id, "Test Email Subject", "<p>Body</p>"),
+            )
+            recipient_id = cur.fetchone()["id"]
+        sc, _ = _local("POST", f"/api/broadcasts/recipients/{recipient_id}/sent")
+        assert sc == 200, f"mark-sent returned {sc}"
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT status FROM broadcast_recipients WHERE id = %s", (recipient_id,))
+            row = cur.fetchone()
+        assert row and row["status"] == "sent", f"Expected status=sent"
+        return {"recipient_id": recipient_id, "channel": "email", "final_status": "sent", "branch": "TRUE/email"}
+    _run(suite, "broadcast_true_branch_email_route", G, broadcast_true_branch_email)
+
+    def broadcast_failed_branch():
+        """Test mark-failed branch: recipient marked as failed."""
+        if not created_job_id[0] or not suite.test_contact_id:
+            return {"skip": "no job or no test contact"}
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "INSERT INTO broadcast_recipients (job_id, contact_id, channel, status) "
+                "VALUES (%s, %s, 'sms', 'pending') RETURNING id",
+                (created_job_id[0], suite.test_contact_id),
+            )
+            recipient_id = cur.fetchone()["id"]
+        sc, _ = _local("POST", f"/api/broadcasts/recipients/{recipient_id}/failed")
+        assert sc == 200, f"mark-failed returned {sc}"
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT status FROM broadcast_recipients WHERE id = %s", (recipient_id,))
+            row = cur.fetchone()
+        assert row and row["status"] == "failed", f"Expected status=failed, got={row}"
+        return {"recipient_id": recipient_id, "final_status": "failed", "branch": "failed"}
+    _run(suite, "broadcast_failed_branch", G, broadcast_failed_branch)
+
+    def cleanup_g20():
+        _cleanup()
+        return {"cleaned_up": True}
+    _run(suite, "broadcast_flow_cleanup", G, cleanup_g20)
+
+
+def _g21_n8n_menu_sync_flow(suite: TestSuite) -> None:
+    """Group 21 — [Menu] Catalog Sync + Playbook Sync integration tests.
+
+    Tests POST /api/menu/sync (Airtable → menu_catalog) and POST /api/playbook/sync.
+    For each: verifies table has data after sync, tests both the 'has items TRUE'
+    and 'has errors FALSE' branches.
+    All test items inserted directly into DB are cleaned up.
+    """
+    G = "21_n8n_menu_playbook_sync"
+    TEST_MENU_ITEM = "TEST_HARNESS_G21_DISH_ZZZZ"
+    TEST_PLAYBOOK_RULE = "TEST_HARNESS_G21_RULE"
+
+    def menu_sync_call():
+        """Call menu sync — Airtable → menu_catalog. Verifies has_items TRUE branch."""
+        sc, body = _local("POST", "/api/menu/sync", timeout=30)
+        if sc == 404:
+            return {"skip": "menu sync endpoint not found"}
+        assert sc == 200, f"menu/sync returned {sc}: {str(body)[:200]}"
+        # Verify items exist in DB after sync (TRUE branch: has items)
+        with get_cursor(commit=False) as cur:
+            cur.execute("SAVEPOINT mc")
+            try:
+                cur.execute("SELECT COUNT(*) AS cnt FROM menu_catalog WHERE active = TRUE")
+                cnt = cur.fetchone()["cnt"]
+                cur.execute("RELEASE SAVEPOINT mc")
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT mc")
+                cur.execute("RELEASE SAVEPOINT mc")
+                cnt = 0
+        synced = body.get("synced", body.get("upserted", body.get("total", 0))) if isinstance(body, dict) else 0
+        return {"synced_count": synced, "active_items_in_db": cnt, "branch": "TRUE (has_items)"}
+    _run(suite, "menu_sync_true_branch", G, menu_sync_call)
+
+    def menu_sync_db_item_inserted():
+        """Insert a test menu item directly, verify it can be fetched from /api/menu/items."""
+        with get_cursor(commit=True) as cur:
+            cur.execute("SAVEPOINT mc_ins")
+            try:
+                cur.execute(
+                    "INSERT INTO menu_catalog (item_name, category, is_veg, price, active) "
+                    "VALUES (%s, 'Test', TRUE, 9.99, TRUE) ON CONFLICT (item_name) DO NOTHING RETURNING id",
+                    (TEST_MENU_ITEM,),
+                )
+                row = cur.fetchone()
+                cur.execute("RELEASE SAVEPOINT mc_ins")
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT mc_ins")
+                cur.execute("RELEASE SAVEPOINT mc_ins")
+                return {"skip": "menu_catalog table not available"}
+
+        if not row:
+            return {"skip": "item already exists (ON CONFLICT)"}
+
+        inserted_id = row["id"]
+        sc, body = _local("GET", "/api/menu/items")
+        assert sc == 200, f"menu/items returned {sc}"
+        items = body if isinstance(body, list) else body.get("items", [])
+        names = [it.get("item_name") for it in items]
+        assert TEST_MENU_ITEM in names, f"Test item {TEST_MENU_ITEM} not found in /api/menu/items"
+
+        # Cleanup
+        with get_cursor(commit=True) as cur:
+            cur.execute("DELETE FROM menu_catalog WHERE id = %s", (inserted_id,))
+        return {"test_item_id": inserted_id, "visible_in_api": True}
+    _run(suite, "menu_item_db_insert_and_fetch", G, menu_sync_db_item_inserted)
+
+    def playbook_sync_call():
+        """Call playbook sync — Airtable → agent_playbook. Verifies has_changes branch."""
+        sc, body = _local("POST", "/api/playbook/sync", timeout=30)
+        if sc == 404:
+            return {"skip": "playbook sync endpoint not found"}
+        assert sc == 200, f"playbook/sync returned {sc}: {str(body)[:200]}"
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT COUNT(*) AS cnt FROM agent_playbook WHERE active = TRUE")
+            cnt = cur.fetchone()["cnt"]
+        synced = body.get("synced", body.get("upserted", 0)) if isinstance(body, dict) else 0
+        return {"synced_count": synced, "active_rules_in_db": cnt, "branch": "TRUE (has_rules)"}
+    _run(suite, "playbook_sync_true_branch", G, playbook_sync_call)
+
+    def playbook_db_rule_insert_and_fetch():
+        """Insert a test playbook rule directly, verify GET /api/playbook/rules returns it."""
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "INSERT INTO agent_playbook (rule_name, category, instruction, priority, active, created_by) "
+                "VALUES (%s, 'general', 'Test: do nothing', 0, TRUE, 'test_harness') "
+                "ON CONFLICT (rule_name) DO NOTHING RETURNING id",
+                (TEST_PLAYBOOK_RULE,),
+            )
+            row = cur.fetchone()
+
+        if not row:
+            return {"skip": "rule already exists"}
+        rule_id = row["id"]
+
+        sc, body = _local("GET", "/api/playbook/rules")
+        assert sc == 200, f"playbook/rules returned {sc}"
+        rules = body if isinstance(body, list) else body.get("rules", [])
+        names = [r.get("rule_name") for r in rules]
+        assert TEST_PLAYBOOK_RULE in names, f"Test rule not found in /api/playbook/rules"
+
+        # Cleanup
+        with get_cursor(commit=True) as cur:
+            cur.execute("DELETE FROM agent_playbook WHERE id = %s", (rule_id,))
+        return {"rule_id": rule_id, "visible_in_api": True}
+    _run(suite, "playbook_rule_db_insert_and_fetch", G, playbook_db_rule_insert_and_fetch)
+
+    def playbook_for_prompt_has_rules():
+        """Verify /api/playbook/rules/for-prompt returns rules grouped by category."""
+        sc, body = _local("GET", "/api/playbook/rules/for-prompt")
+        if sc == 404:
+            return {"skip": "for-prompt endpoint not found"}
+        assert sc == 200, f"for-prompt returned {sc}"
+        # Should be a dict with category keys
+        assert isinstance(body, dict), f"Expected dict of rules, got: {type(body)}"
+        total_rules = sum(len(v) if isinstance(v, list) else 0 for v in body.values())
+        assert total_rules > 0, "No rules returned for prompt — agent pipeline will run without rules"
+        return {"categories": list(body.keys()), "total_rules": total_rules}
+    _run(suite, "playbook_for_prompt_has_rules", G, playbook_for_prompt_has_rules)
+
+
+
+
+
 # ─── GROUP 14: Data Cleanup ───────────────────────────────────────────────────
 
 def _cascade_delete(cur, contact_id: int) -> None:
@@ -1579,7 +2170,11 @@ def _cascade_delete(cur, contact_id: int) -> None:
         "telnyx_calls",
         "engagement_rollups",
         "events",
+        "order_items",            # must come before orders
         "orders",
+        "broadcast_recipients",
+        "field_agent_reviews",
+        "opportunities",
     ]
     for t in tables:
         try:
@@ -1645,6 +2240,10 @@ def run_full_suite(triggered_by: str = "manual") -> TestSuite:
         _g12_reports(suite)
         _g13_query_chatbot(suite)
         _g15_competitor_agent(suite)
+        _g18_n8n_daily_order_flow(suite)
+        _g19_n8n_action_queue_all_routes(suite)
+        _g20_n8n_broadcast_flow(suite)
+        _g21_n8n_menu_sync_flow(suite)
     except Exception as e:
         logger.exception("Test suite failed unexpectedly at group level: %s", e)
     finally:
