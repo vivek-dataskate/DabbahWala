@@ -2098,8 +2098,9 @@ def run_agent_cycle_all():
 
     Eligibility (any one condition, excluding churned/optout):
       - Has an active sales goal
-      - Opened or clicked an email in the last 30 days
-      - Had any event (delivery, order, SMS click) in the last 30 days
+      - Clicked an email in the last 30 days (opens excluded — unreliable)
+      - Clicked an SMS link in the last 7 days
+      - Had any event (inbound SMS/call/delivery) in the last 30 days
       - Placed an order in the last 60 days
     """
     logger.info("POST /cycle/run-all — querying eligible contacts")
@@ -2119,10 +2120,11 @@ def run_agent_cycle_all():
                   AND o.order_date > CURRENT_DATE - 60
             WHERE c.lifecycle_segment NOT IN ('churned', 'optout')
               AND (
-                  g.id IS NOT NULL      -- active sales goal
-                  OR er.opens_30d > 0  -- email engaged in last 30 days
-                  OR ev.id IS NOT NULL  -- any event in last 30 days (delivery, order, etc.)
-                  OR o.id IS NOT NULL   -- ordered in last 60 days
+                  g.id IS NOT NULL           -- active sales goal
+                  OR er.clicks_30d > 0       -- clicked email in last 30d (genuine intent)
+                  OR er.sms_clicks_7d > 0    -- clicked SMS link in last 7d
+                  OR ev.id IS NOT NULL        -- inbound SMS/call/delivery in last 30 days
+                  OR o.id IS NOT NULL         -- ordered in last 60 days
               )
             LIMIT 500
             """
@@ -2250,7 +2252,9 @@ def run_agent_daily_sweep():
       - Not churned / opted out
       - Has email or phone (reachable)
       - No agent cycle in the last 72 hours (avoids re-running recently triggered contacts)
-      - Any one of: opened email in last 30d, any event in last 30d, ordered in last 60d
+      - Any one of: clicked email in last 30d, clicked SMS link in last 7d,
+        any event (inbound SMS/call/delivery) in last 30d, ordered in last 60d
+        (opens excluded — unreliable, triggered by Apple MPP and spam filters)
     Capped at 200 contacts per run to bound cost (~$4.20 at mixed Haiku/Sonnet rates).
     """
     logger.info("POST /cycle/run-daily-sweep — querying dormant-eligible contacts")
@@ -2268,9 +2272,10 @@ def run_agent_daily_sweep():
             WHERE c.lifecycle_segment NOT IN ('churned', 'optout')
               AND (c.email IS NOT NULL OR c.phone IS NOT NULL)
               AND (
-                  er.opens_30d > 0
-                  OR ev.id IS NOT NULL
-                  OR o.id IS NOT NULL
+                  er.clicks_30d > 0       -- clicked email in last 30d (genuine intent)
+                  OR er.sms_clicks_7d > 0 -- clicked SMS link in last 7d
+                  OR ev.id IS NOT NULL     -- inbound SMS/call/delivery in last 30 days
+                  OR o.id IS NOT NULL      -- ordered in last 60 days
               )
               AND NOT EXISTS (
                   SELECT 1 FROM orchestrator_log ol
