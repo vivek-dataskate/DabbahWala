@@ -1,0 +1,18 @@
+{
+  "name": "dabbahwala-n8n-tests",
+  "version": "1.0.0",
+  "description": "Jest unit tests for all n8n Code/IF/Switch nodes",
+  "scripts": {
+    "test": "jest",
+    "test:coverage": "jest --coverage"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/workflows/**/*.test.js"],
+    "coverageDirectory": "tests/n8n/coverage",
+    "verbose": true
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}
