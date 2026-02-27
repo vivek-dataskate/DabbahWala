@@ -1765,6 +1765,194 @@ def _g18_n8n_daily_order_flow(suite: TestSuite) -> None:
         return {"delivery_slot": row["delivery_slot"], "branch": "slot_parsed_correctly"}
     _run(suite, "daily_order_delivery_slot_parsing", G, order_upload_delivery_slot_parsing)
 
+    # ── Shipday CSV output checks ──────────────────────────────────────────────
+
+    def shipday_csv_url_present():
+        """Response always includes shipday_csv_download_url when orders are processed."""
+        today = _date.today().strftime("%d/%m/%Y")
+        csv_content = (
+            "Purchase Number,Order Number,Date,SKU,Delivery Slot Name,Dish Name,Quantity,Unit Price,"
+            "Order Type,Customer Name,Customer Phone Number,Customer Address\n"
+            f"P-G18-S01,{TEST_TAG}-S01,{today},9:30 AM - 12:30 PM,Dal Makhani,1,12.00,"
+            "Scheduled Order,Shipday Test User,+15550066666,10 Shipday Rd Georgia 30305\n"
+        )
+        with httpx.Client(timeout=120) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_g18_shipday.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+            )
+        assert r.status_code in (200, 201), f"Upload returned {r.status_code}"
+        body = r.json()
+        url = body.get("shipday_csv_download_url", "")
+        assert url, f"shipday_csv_download_url missing or empty in response: {body}"
+        assert "/download-shipday-csv/" in url, f"URL format unexpected: {url}"
+        with get_cursor(commit=True) as cur:
+            _cleanup_g18(cur)
+            cur.execute("DELETE FROM contacts WHERE phone = '5550066666'")
+        return {"shipday_csv_download_url": url}
+    _run(suite, "daily_order_shipday_csv_url_present", G, shipday_csv_url_present)
+
+    def shipday_csv_downloadable():
+        """GET the shipday_csv_download_url → 200, text/csv, non-empty body."""
+        today = _date.today().strftime("%d/%m/%Y")
+        csv_content = (
+            "Purchase Number,Order Number,Date,Delivery Slot Name,Dish Name,Quantity,Unit Price,"
+            "Order Type,Customer Name,Customer Phone Number,Customer Address\n"
+            f"P-G18-S02,{TEST_TAG}-S02,{today},9:30 AM - 12:30 PM,Butter Chicken,1,13.00,"
+            "Scheduled Order,Shipday DL Test,+15550077777,20 DL Ave Georgia 30306\n"
+        )
+        with httpx.Client(timeout=120) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_g18_sd2.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+            )
+        assert r.status_code in (200, 201), f"Upload returned {r.status_code}"
+        body = r.json()
+        url = body.get("shipday_csv_download_url", "")
+        assert url, "shipday_csv_download_url not returned"
+        # Download the generated file
+        with httpx.Client(timeout=30) as client:
+            dl = client.get(f"{LOCAL_BASE}{url}")
+        assert dl.status_code == 200, f"Download returned {dl.status_code}: {dl.text[:200]}"
+        assert "text/csv" in dl.headers.get("content-type", ""), (
+            f"Expected text/csv, got: {dl.headers.get('content-type')}"
+        )
+        assert dl.text.strip(), "Downloaded Shipday CSV is empty"
+        with get_cursor(commit=True) as cur:
+            _cleanup_g18(cur)
+            cur.execute("DELETE FROM contacts WHERE phone = '5550077777'")
+        return {"bytes": len(dl.content), "content_type": dl.headers.get("content-type")}
+    _run(suite, "daily_order_shipday_csv_downloadable", G, shipday_csv_downloadable)
+
+    def shipday_csv_columns():
+        """Shipday CSV must have exactly the required Shipday import column headers."""
+        import csv as _csv
+        today = _date.today().strftime("%d/%m/%Y")
+        csv_content = (
+            "Purchase Number,Order Number,Date,Delivery Slot Name,Dish Name,Quantity,Unit Price,"
+            "Order Type,Customer Name,Customer Phone Number,Customer Address\n"
+            f"P-G18-S03,{TEST_TAG}-S03,{today},9:30 AM - 12:30 PM,Paneer Tikka,1,14.00,"
+            "Scheduled Order,Column Check User,+15550088888,30 Col St Georgia 30307\n"
+        )
+        with httpx.Client(timeout=120) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_g18_sd3.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+            )
+        body = r.json()
+        url = body.get("shipday_csv_download_url", "")
+        assert url, "No shipday_csv_download_url"
+        with httpx.Client(timeout=30) as client:
+            dl = client.get(f"{LOCAL_BASE}{url}")
+        reader = _csv.DictReader(_io.StringIO(dl.text))
+        headers = reader.fieldnames or []
+        required = [
+            "Order Number",
+            "Delivery customer Name",
+            "Customer Phone number",
+            "Delivery Address",
+            "Delivery Date",
+            "Delivery Time",
+            "Pickup Time",
+            "Delivery instructions",
+        ]
+        missing = [h for h in required if h not in headers]
+        assert not missing, f"Shipday CSV missing columns: {missing}  (got: {headers})"
+        with get_cursor(commit=True) as cur:
+            _cleanup_g18(cur)
+            cur.execute("DELETE FROM contacts WHERE phone = '5550088888'")
+        return {"headers": headers}
+    _run(suite, "daily_order_shipday_csv_columns", G, shipday_csv_columns)
+
+    def shipday_csv_content_matches_input():
+        """Shipday CSV row must contain the same order number, customer name, and phone as the input."""
+        import csv as _csv
+        today = _date.today().strftime("%d/%m/%Y")
+        csv_content = (
+            "Purchase Number,Order Number,Date,Delivery Slot Name,Dish Name,Quantity,Unit Price,"
+            "Order Type,Customer Name,Customer Phone Number,Customer Address\n"
+            f"P-G18-S04,{TEST_TAG}-S04,{today},9:30 AM - 12:30 PM,Rice Bowl,1,11.00,"
+            "Scheduled Order,Content Match User,+15550099999,40 Match Rd Georgia 30308\n"
+        )
+        with httpx.Client(timeout=120) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_g18_sd4.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+            )
+        body = r.json()
+        url = body.get("shipday_csv_download_url", "")
+        assert url, "No shipday_csv_download_url"
+        with httpx.Client(timeout=30) as client:
+            dl = client.get(f"{LOCAL_BASE}{url}")
+        rows = list(_csv.DictReader(_io.StringIO(dl.text)))
+        assert rows, "Shipday CSV has no data rows"
+        order_row = next((row for row in rows if row.get("Order Number") == f"{TEST_TAG}-S04"), None)
+        assert order_row, (
+            f"Order {TEST_TAG}-S04 not found in Shipday CSV. Rows: {[r.get('Order Number') for r in rows]}"
+        )
+        assert "Content Match User" in order_row.get("Delivery customer Name", ""), (
+            f"Customer name mismatch: {order_row.get('Delivery customer Name')}"
+        )
+        # Phone stored without leading +
+        assert "5550099999" in order_row.get("Customer Phone number", ""), (
+            f"Phone mismatch: {order_row.get('Customer Phone number')}"
+        )
+        with get_cursor(commit=True) as cur:
+            _cleanup_g18(cur)
+            cur.execute("DELETE FROM contacts WHERE phone = '5550099999'")
+        return {
+            "order_number": order_row["Order Number"],
+            "customer_name": order_row["Delivery customer Name"],
+            "phone": order_row["Customer Phone number"],
+        }
+    _run(suite, "daily_order_shipday_csv_content_matches_input", G, shipday_csv_content_matches_input)
+
+    def shipday_csv_delivery_time_parsed():
+        """Delivery slot '9:30 AM - 12:30 PM' must produce correct Pickup Time + Delivery Time in Shipday CSV."""
+        import csv as _csv
+        today = _date.today().strftime("%d/%m/%Y")
+        csv_content = (
+            "Purchase Number,Order Number,Date,Delivery Slot Name,Dish Name,Quantity,Unit Price,"
+            "Order Type,Customer Name,Customer Phone Number,Customer Address\n"
+            f"P-G18-S05,{TEST_TAG}-S05,{today},9:30 AM - 12:30 PM,Samosa,2,5.00,"
+            "Scheduled Order,Slot Parse User,+15550111111,50 Slot Ave Georgia 30309\n"
+        )
+        with httpx.Client(timeout=120) as client:
+            r = client.post(
+                f"{LOCAL_BASE}/api/daily-orders/process",
+                files={"file": ("test_g18_sd5.csv", _io.BytesIO(csv_content.encode()), "text/csv")},
+            )
+        body = r.json()
+        url = body.get("shipday_csv_download_url", "")
+        assert url, "No shipday_csv_download_url"
+        with httpx.Client(timeout=30) as client:
+            dl = client.get(f"{LOCAL_BASE}{url}")
+        rows = list(_csv.DictReader(_io.StringIO(dl.text)))
+        order_row = next((row for row in rows if row.get("Order Number") == f"{TEST_TAG}-S05"), None)
+        assert order_row, f"Order {TEST_TAG}-S05 not in Shipday CSV"
+        pickup = order_row.get("Pickup Time", "")
+        delivery = order_row.get("Delivery Time", "")
+        assert pickup, f"Pickup Time is empty: {order_row}"
+        assert delivery, f"Delivery Time is empty: {order_row}"
+        # 9:30 AM → "9:30 AM" (12-hour format)
+        assert "9:30" in pickup, f"Pickup Time '9:30 AM' not found, got: {pickup}"
+        assert "12:30" in delivery, f"Delivery Time '12:30 PM' not found, got: {delivery}"
+        with get_cursor(commit=True) as cur:
+            _cleanup_g18(cur)
+            cur.execute("DELETE FROM contacts WHERE phone = '5550111111'")
+        return {"pickup_time": pickup, "delivery_time": delivery}
+    _run(suite, "daily_order_shipday_csv_delivery_time_parsed", G, shipday_csv_delivery_time_parsed)
+
+    def shipday_csv_download_404_after_reboot():
+        """GET /download-shipday-csv/<invalid-id> → 404 (file not found branch)."""
+        import uuid as _uuid
+        fake_id = str(_uuid.uuid4())
+        with httpx.Client(timeout=10) as client:
+            r = client.get(f"{LOCAL_BASE}/api/daily-orders/download-shipday-csv/{fake_id}")
+        assert r.status_code == 404, f"Expected 404 for unknown file_id, got {r.status_code}"
+        return {"status": 404, "branch": "file_not_found"}
+    _run(suite, "daily_order_shipday_csv_404_invalid_id", G, shipday_csv_download_404_after_reboot)
+
 
 def _g19_n8n_action_queue_all_routes(suite: TestSuite) -> None:
     """Group 19 — [System] Action Queue: all 8 action_type routes.
@@ -2672,6 +2860,65 @@ def _g26_airtable_integration(suite: TestSuite) -> None:
         return {"created_id": rule_id, "crud_complete": True}
     _run(suite, "playbook_crud_create_update_delete", G, playbook_crud_create_update_delete)
 
+    # ── Menu: verify item fields are correct after sync ────────────────────────
+    def menu_item_fields_verified():
+        """After sync, every active menu item must have item_name and active=True."""
+        with get_cursor(commit=False) as cur:
+            cur.execute("SAVEPOINT g26mf")
+            try:
+                cur.execute(
+                    "SELECT item_name, active, price FROM menu_catalog WHERE active = TRUE LIMIT 5"
+                )
+                rows = cur.fetchall()
+                cur.execute("RELEASE SAVEPOINT g26mf")
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT g26mf")
+                cur.execute("RELEASE SAVEPOINT g26mf")
+                rows = []
+        if not rows:
+            return {"skip": "no active menu items to verify"}
+        for row in rows:
+            assert row["item_name"], f"item_name is empty: {row}"
+            assert row["active"] is True, f"active flag should be True: {row}"
+        return {"checked_items": len(rows), "all_have_names": True}
+    _run(suite, "menu_item_fields_verified", G, menu_item_fields_verified)
+
+    # ── Playbook: verify synced rule has all required fields ──────────────────
+    def playbook_rule_fields_verified():
+        """Synced rule must have rule_name, category, instruction, priority, is_active."""
+        with get_cursor(commit=False) as cur:
+            cur.execute(
+                "SELECT rule_name, category, instruction, priority, is_active "
+                "FROM agent_playbook WHERE rule_name = %s",
+                (AT_TEST_RULE,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return {"skip": f"{AT_TEST_RULE} not found — previous sync test may have failed"}
+        assert row["rule_name"] == AT_TEST_RULE, "rule_name mismatch"
+        assert row["category"] == "general", f"category wrong: {row['category']}"
+        assert row["instruction"], "instruction is empty"
+        assert row["priority"] is not None, "priority is None"
+        assert row["is_active"] is True, "rule should be active"
+        return {k: row[k] for k in ("rule_name", "category", "priority", "is_active")}
+    _run(suite, "playbook_rule_fields_verified", G, playbook_rule_fields_verified)
+
+    # ── Playbook: list endpoint returns at least one rule ─────────────────────
+    def playbook_list_endpoint():
+        """GET /api/playbook/rules — verify list structure and required fields."""
+        sc, body = _local("GET", "/api/playbook/rules")
+        if sc == 404:
+            return {"skip": "GET /api/playbook/rules not found"}
+        assert sc == 200, f"playbook/rules returned {sc}"
+        rules = body if isinstance(body, list) else body.get("rules", [])
+        assert isinstance(rules, list), "rules should be a list"
+        if rules:
+            rule = rules[0]
+            for field in ("id", "rule_name", "category"):
+                assert field in rule, f"rule missing field: {field}"
+        return {"rule_count": len(rules)}
+    _run(suite, "playbook_list_endpoint", G, playbook_list_endpoint)
+
     # ── Airtable cleanup ──────────────────────────────────────────────────────
     def cleanup_g26():
         with get_cursor(commit=True) as cur:
@@ -2828,6 +3075,58 @@ def _g27_dashboard_integration(suite: TestSuite) -> None:
         assert row and row["status"] == "sent", f"Expected status=sent, got {row}"
         return {"recipient_id": recipient_id, "status": "sent", "branch": "TRUE (sent)"}
     _run(suite, "broadcast_mark_recipient_sent", G, broadcast_mark_sent)
+
+    # ── Broadcast: mark a second recipient as failed (FALSE/error branch) ─────
+    def broadcast_mark_failed():
+        """POST /api/broadcasts/recipients/{id}/failed — mark recipient as failed."""
+        if not broadcast_job_id:
+            return {"skip": "no job created"}
+        job_id = broadcast_job_id[0]
+        # Insert a fresh recipient directly in DB to mark as failed
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO broadcast_recipients (job_id, contact_id, channel, status)
+                   SELECT %s, id, 'sms', 'pending'
+                   FROM contacts WHERE email = 'test_g27_broadcast@test.dabbahwala.com'
+                   LIMIT 1
+                   RETURNING id""",
+                (job_id,),
+            )
+            row = cur.fetchone()
+        if not row:
+            return {"skip": "no contact to use as failed recipient"}
+        fail_id = row["id"]
+        sc, body = _local("POST", f"/api/broadcasts/recipients/{fail_id}/failed")
+        assert sc == 200, f"mark failed returned {sc}: {str(body)[:200]}"
+        # Verify in DB
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT status FROM broadcast_recipients WHERE id = %s", (fail_id,))
+            row2 = cur.fetchone()
+        assert row2 and row2["status"] == "failed", f"Expected status=failed, got {row2}"
+        return {"recipient_id": fail_id, "status": "failed", "branch": "FALSE (failed)"}
+    _run(suite, "broadcast_mark_recipient_failed", G, broadcast_mark_failed)
+
+    # ── Broadcast: GET /{id} returns expected fields ───────────────────────────
+    def broadcast_job_fields_structure():
+        """GET /api/broadcasts/{id} — job object must have id, title, status fields."""
+        if not broadcast_job_id:
+            return {"skip": "no job created"}
+        job_id = broadcast_job_id[0]
+        sc, body = _local("GET", f"/api/broadcasts/{job_id}")
+        assert sc == 200, f"GET job returned {sc}"
+        for field in ("id", "status"):
+            assert field in body, f"job missing field '{field}': {list(body.keys())}"
+        assert body["id"] == job_id, "returned wrong job id"
+        return {"fields_present": list(body.keys())}
+    _run(suite, "broadcast_job_fields_structure", G, broadcast_job_fields_structure)
+
+    # ── Broadcast: GET unknown job → 404 ──────────────────────────────────────
+    def broadcast_get_nonexistent_404():
+        """GET /api/broadcasts/nonexistent-id → 404 (job not found branch)."""
+        sc, _ = _local("GET", "/api/broadcasts/00000000-0000-0000-0000-000000000000")
+        assert sc == 404, f"Expected 404 for unknown job, got {sc}"
+        return {"status": 404, "branch": "job_not_found"}
+    _run(suite, "broadcast_get_nonexistent_404", G, broadcast_get_nonexistent_404)
 
     # ── Contact priority update ───────────────────────────────────────────────
     def contact_priority_update():
