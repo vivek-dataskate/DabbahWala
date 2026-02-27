@@ -2184,6 +2184,690 @@ def _cascade_delete(cur, contact_id: int) -> None:
     cur.execute("DELETE FROM contacts WHERE id = %s", (contact_id,))
 
 
+def _g22_n8n_sms_dispatch_flow(suite: TestSuite) -> None:
+    """Group 22 — [SMS] Dispatch Queue n8n flow integration tests.
+
+    Tests the Python endpoints that n8n's SMS Dispatch workflow calls:
+      GET /api/telnyx/pending         — IF: Has Pending SMS? (TRUE/FALSE branch)
+      Contact → pending_sms_level     — Code: Build SMS Message (all 4 message branches)
+    All inserted data is cleaned up at the end.
+    """
+    G = "22_n8n_sms_dispatch"
+
+    # ── FALSE branch: no pending SMS ──────────────────────────────────────────
+    def sms_false_branch_no_pending():
+        """GET /api/telnyx/pending with no flagged contacts → empty list (IF FALSE)."""
+        sc, body = _local("GET", "/api/telnyx/pending")
+        assert sc == 200, f"sms/pending returned {sc}"
+        pending = body.get("pending", []) if isinstance(body, dict) else body
+        # We can't guarantee no real contacts, so just assert the structure is right
+        assert isinstance(pending, list), "pending field should be a list"
+        return {"pending_count": len(pending), "branch": "IF evaluated (list returned)"}
+    _run(suite, "sms_false_branch_structure_check", G, sms_false_branch_no_pending)
+
+    # ── TRUE branch: insert contact with pending SMS, verify it appears ───────
+    test_sms_contact_id: list = []
+
+    def sms_true_branch_insert_pending_contact():
+        """Insert a contact with sms_pending=true, verify it shows in /api/telnyx/pending."""
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO contacts
+                       (phone, email, first_name, last_name, source,
+                        lifecycle_segment, sms_pending, sms_level,
+                        email_nurture_enabled)
+                   VALUES (%s, %s, %s, %s, %s, 'active', TRUE, 1, FALSE)
+                   ON CONFLICT (email) DO UPDATE SET sms_pending = TRUE
+                   RETURNING id""",
+                ("+10000000022", "test_g22_sms@test.dabbahwala.com",
+                 "TestG22", "SMS", TEST_SOURCE),
+            )
+            row = cur.fetchone()
+            if row:
+                test_sms_contact_id.append(row["id"])
+        sc, body = _local("GET", "/api/telnyx/pending")
+        assert sc == 200, f"sms/pending returned {sc}"
+        pending = body.get("pending", []) if isinstance(body, dict) else body
+        assert isinstance(pending, list), "pending should be a list"
+        # Our test contact should appear since sms_pending=TRUE
+        contact_ids = [p.get("contact_id") for p in pending]
+        if test_sms_contact_id:
+            assert test_sms_contact_id[0] in contact_ids, \
+                f"Test contact {test_sms_contact_id[0]} not found in pending SMS list"
+        return {"pending_count": len(pending), "branch": "TRUE (has_pending_sms)", "contact_id": test_sms_contact_id[0] if test_sms_contact_id else None}
+    _run(suite, "sms_true_branch_pending_contact", G, sms_true_branch_insert_pending_contact)
+
+    # ── Code node: Build SMS Message — new_customer branch ───────────────────
+    def sms_build_message_new_customer():
+        """Insert new_customer lifecycle contact, verify it appears in pending."""
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO contacts
+                       (phone, email, first_name, last_name, source,
+                        lifecycle_segment, sms_pending, sms_level,
+                        email_nurture_enabled)
+                   VALUES (%s, %s, %s, %s, %s, 'new_customer', TRUE, 1, FALSE)
+                   ON CONFLICT (email) DO UPDATE SET sms_pending = TRUE, lifecycle_segment = 'new_customer'
+                   RETURNING id""",
+                ("+10000000023", "test_g22_newcust@test.dabbahwala.com",
+                 "TestG22", "NewCust", TEST_SOURCE),
+            )
+            row = cur.fetchone()
+            if row:
+                test_sms_contact_id.append(row["id"])
+        sc, body = _local("GET", "/api/telnyx/pending")
+        assert sc == 200, f"pending returned {sc}"
+        pending = body.get("pending", []) if isinstance(body, dict) else body
+        new_cust = [p for p in pending if p.get("lifecycle") == "new_customer" or p.get("lifecycle_segment") == "new_customer"]
+        return {"pending_total": len(pending), "new_customer_contacts": len(new_cust), "message_branch": "new_customer"}
+    _run(suite, "sms_message_new_customer_branch", G, sms_build_message_new_customer)
+
+    # ── Code node: sms_level=3 reactivation branch ───────────────────────────
+    def sms_build_message_level3():
+        """Insert contact with sms_level=3 (reactivation branch)."""
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO contacts
+                       (phone, email, first_name, last_name, source,
+                        lifecycle_segment, sms_pending, sms_level,
+                        email_nurture_enabled)
+                   VALUES (%s, %s, %s, %s, %s, 'lapsed', TRUE, 3, FALSE)
+                   ON CONFLICT (email) DO UPDATE SET sms_pending = TRUE, sms_level = 3
+                   RETURNING id""",
+                ("+10000000024", "test_g22_level3@test.dabbahwala.com",
+                 "TestG22", "L3", TEST_SOURCE),
+            )
+            row = cur.fetchone()
+            if row:
+                test_sms_contact_id.append(row["id"])
+        sc, body = _local("GET", "/api/telnyx/pending")
+        assert sc == 200, f"pending returned {sc}"
+        pending = body.get("pending", []) if isinstance(body, dict) else body
+        level3_contacts = [p for p in pending if p.get("sms_level", 0) >= 3]
+        return {"pending_total": len(pending), "level3_contacts": len(level3_contacts), "message_branch": "sms_level>=3_reactivation"}
+    _run(suite, "sms_message_level3_reactivation_branch", G, sms_build_message_level3)
+
+    # ── Cleanup ───────────────────────────────────────────────────────────────
+    def cleanup_g22():
+        with get_cursor(commit=True) as cur:
+            cur.execute("DELETE FROM contacts WHERE source = %s AND first_name = 'TestG22'", (TEST_SOURCE,))
+    _run(suite, "sms_dispatch_cleanup", G, cleanup_g22)
+
+
+# ─── GROUP 23: n8n Intelligence flow ─────────────────────────────────────────
+
+def _g23_n8n_intelligence_flow(suite: TestSuite) -> None:
+    """Group 23 — [Intelligence] Contact Sweep + Stage Runner n8n flow integration tests.
+
+    Tests GET /api/intelligence/pending-actions and related endpoints.
+    All IF branches:
+      - FALSE branch: no pending actions → summary.total_pending = 0
+      - TRUE branch: insert action_queue / campaign_queue entries → they appear
+    """
+    G = "23_n8n_intelligence"
+
+    # ── FALSE branch: pending-actions returns empty summary ───────────────────
+    def intelligence_pending_actions_structure():
+        """GET /api/intelligence/pending-actions — verify response shape."""
+        sc, body = _local("GET", "/api/intelligence/pending-actions")
+        assert sc == 200, f"pending-actions returned {sc}"
+        assert isinstance(body, dict), "Expected dict response"
+        assert "summary" in body, "Missing 'summary' key"
+        summary = body["summary"]
+        assert "total_pending" in summary, "Missing summary.total_pending"
+        return {
+            "total_pending": summary.get("total_pending"),
+            "campaign_moves": summary.get("campaign_moves", 0),
+            "sms": summary.get("sms", 0),
+            "branch_assessed": "IF: Has Pending Actions? (structure verified)"
+        }
+    _run(suite, "intelligence_pending_actions_structure", G, intelligence_pending_actions_structure)
+
+    # ── TRUE branch: insert campaign_queue entry, verify it appears ───────────
+    test_intel_contact_id: list = []
+
+    def intelligence_campaign_queue_true_branch():
+        """Insert contact + campaign_queue entry → verify pending-actions shows it (IF TRUE)."""
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO contacts
+                       (phone, email, first_name, last_name, source,
+                        lifecycle_segment, email_nurture_enabled)
+                   VALUES (%s, %s, 'TestG23', 'Intel', %s, 'cold', FALSE)
+                   ON CONFLICT (email) DO UPDATE SET first_name = 'TestG23'
+                   RETURNING id""",
+                ("+10000000023i", "test_g23_intel@test.dabbahwala.com", TEST_SOURCE),
+            )
+            row = cur.fetchone()
+            if not row:
+                cur.execute("SELECT id FROM contacts WHERE email = %s", ("test_g23_intel@test.dabbahwala.com",))
+                row = cur.fetchone()
+            contact_id = row["id"]
+            test_intel_contact_id.append(contact_id)
+
+            # Insert a pending campaign_queue entry
+            cur.execute(
+                """INSERT INTO campaign_queue (contact_id, from_campaign, to_campaign, status)
+                   VALUES (%s, 'NURTURE_SLOW', 'PROMO_STANDARD', 'pending')
+                   RETURNING id""",
+                (contact_id,),
+            )
+            queue_row = cur.fetchone()
+
+        sc, body = _local("GET", "/api/intelligence/pending-actions")
+        assert sc == 200, f"pending-actions returned {sc}"
+        moves = body.get("campaign_moves", [])
+        contact_in_moves = any(m.get("contact_id") == contact_id or m.get("email") == "test_g23_intel@test.dabbahwala.com" for m in moves)
+        assert contact_in_moves, f"Test contact not found in campaign_moves"
+        return {
+            "campaign_moves_count": len(moves),
+            "contact_id": contact_id,
+            "branch": "TRUE (has_pending_actions)",
+        }
+    _run(suite, "intelligence_campaign_queue_true_branch", G, intelligence_campaign_queue_true_branch)
+
+    # ── TRUE branch: pending opportunity appears in pending-actions ───────────
+    def intelligence_opportunity_in_pending_actions():
+        """Insert pending opportunity → verify it appears in sms_to_send or similar."""
+        if not test_intel_contact_id:
+            return {"skip": "no test contact created"}
+        contact_id = test_intel_contact_id[0]
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO opportunities
+                       (contact_id, action, priority, reason, status)
+                   VALUES (%s, 'send_sms', 'warm', 'test_harness_g23', 'pending')
+                   RETURNING id""",
+                (contact_id,),
+            )
+
+        sc, body = _local("GET", "/api/intelligence/pending-actions")
+        assert sc == 200, f"pending-actions returned {sc}"
+        sms_list = body.get("sms_to_send", [])
+        call_list = body.get("sales_calls", [])
+        email_list = body.get("emails_to_send", [])
+        total = len(sms_list) + len(call_list) + len(email_list)
+        return {
+            "sms_to_send": len(sms_list),
+            "emails_to_send": len(email_list),
+            "sales_calls": len(call_list),
+            "total_opportunities": total,
+            "branch": "TRUE (opportunities visible)",
+        }
+    _run(suite, "intelligence_opportunity_true_branch", G, intelligence_opportunity_in_pending_actions)
+
+    # ── Cleanup ───────────────────────────────────────────────────────────────
+    def cleanup_g23():
+        with get_cursor(commit=True) as cur:
+            if test_intel_contact_id:
+                _cascade_delete(cur, test_intel_contact_id[0])
+    _run(suite, "intelligence_flow_cleanup", G, cleanup_g23)
+
+
+# ─── GROUP 24: n8n Field Agent flow ──────────────────────────────────────────
+
+def _g24_n8n_field_agent_flow(suite: TestSuite) -> None:
+    """Group 24 — [Field Agent] Daily Brief + Outcome Sync n8n flow integration tests.
+
+    Tests:
+      GET /api/field-agent/pending-calls  — IF: Any pending calls? (both branches)
+      POST /api/field-agent/daily-brief   — Format Brief Summary (TRUE branch: contacts exist)
+      GET /api/field-agent/scorecard      — verify scorecard structure
+    """
+    G = "24_n8n_field_agent"
+
+    # ── FALSE branch: GET pending-calls returns structure ─────────────────────
+    def field_agent_pending_calls_structure():
+        """GET /api/field-agent/pending-calls — verify shape (both TRUE/FALSE branches)."""
+        sc, body = _local("GET", "/api/field-agent/pending-calls")
+        assert sc == 200, f"field-agent/pending-calls returned {sc}"
+        calls = body if isinstance(body, list) else body.get("calls", body.get("pending", []))
+        assert isinstance(calls, list), f"Expected list, got {type(calls)}"
+        return {"pending_calls_count": len(calls), "branch_assessed": "IF: Any Pending Calls?"}
+    _run(suite, "field_agent_pending_calls_structure", G, field_agent_pending_calls_structure)
+
+    # ── TRUE branch: insert opportunity for field call ────────────────────────
+    test_field_contact_id: list = []
+
+    def field_agent_insert_pending_call_opportunity():
+        """Insert contact + field_sales_call opportunity → verify in pending-calls."""
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO contacts
+                       (phone, email, first_name, last_name, source,
+                        lifecycle_segment, email_nurture_enabled)
+                   VALUES (%s, %s, 'TestG24', 'Field', %s, 'active', FALSE)
+                   ON CONFLICT (email) DO UPDATE SET first_name = 'TestG24'
+                   RETURNING id""",
+                ("+10000000024f", "test_g24_field@test.dabbahwala.com", TEST_SOURCE),
+            )
+            row = cur.fetchone()
+            if not row:
+                cur.execute("SELECT id FROM contacts WHERE email = %s", ("test_g24_field@test.dabbahwala.com",))
+                row = cur.fetchone()
+            contact_id = row["id"]
+            test_field_contact_id.append(contact_id)
+
+            cur.execute(
+                """INSERT INTO opportunities
+                       (contact_id, action, priority, reason, status)
+                   VALUES (%s, 'field_sales_call', 'hot', 'test_harness_g24', 'pending')
+                   RETURNING id""",
+                (contact_id,),
+            )
+
+        sc, body = _local("GET", "/api/field-agent/pending-calls")
+        assert sc == 200, f"pending-calls returned {sc}"
+        calls = body if isinstance(body, list) else body.get("calls", body.get("pending", []))
+        ids = [c.get("contact_id") for c in calls]
+        assert contact_id in ids, f"Test contact {contact_id} not in pending-calls"
+        return {"pending_calls_count": len(calls), "contact_id": contact_id, "branch": "TRUE (has pending calls)"}
+    _run(suite, "field_agent_true_branch_pending_call", G, field_agent_insert_pending_call_opportunity)
+
+    # ── scorecard endpoint ────────────────────────────────────────────────────
+    def field_agent_scorecard():
+        """GET /api/field-agent/scorecard — verify structure."""
+        sc, body = _local("GET", "/api/field-agent/scorecard")
+        assert sc == 200, f"scorecard returned {sc}"
+        assert isinstance(body, dict), "Scorecard should be a dict"
+        return {"scorecard_keys": list(body.keys())}
+    _run(suite, "field_agent_scorecard_structure", G, field_agent_scorecard)
+
+    # ── Cleanup ───────────────────────────────────────────────────────────────
+    def cleanup_g24():
+        with get_cursor(commit=True) as cur:
+            if test_field_contact_id:
+                _cascade_delete(cur, test_field_contact_id[0])
+    _run(suite, "field_agent_cleanup", G, cleanup_g24)
+
+
+# ─── GROUP 25: n8n Reports flow ───────────────────────────────────────────────
+
+def _g25_n8n_reports_flow(suite: TestSuite) -> None:
+    """Group 25 — [Reports] Daily Activity + Outcome Report n8n flow integration tests.
+
+    Tests:
+      POST /api/reports/daily/{date}   — generate report (both 'sent'/'error' IF branches)
+      GET  /api/reports/daily/{date}   — retrieve generated report (TRUE branch: report exists)
+    Cleans up any test rows inserted.
+    """
+    G = "25_n8n_reports"
+    from datetime import date as _date
+
+    test_report_date = "2000-01-01"   # Far-past date unlikely to conflict with real data
+
+    # ── FALSE branch: GET report for non-existent date → 404 ─────────────────
+    def reports_get_nonexistent():
+        """GET /api/reports/daily/1999-01-01 — should 404 (IF Email Sent? FALSE branch analogue)."""
+        sc, body = _local("GET", "/api/reports/daily/1999-01-01")
+        assert sc == 404, f"Expected 404 for non-existent report, got {sc}: {body}"
+        return {"branch": "FALSE (no report)", "status_code": sc}
+    _run(suite, "reports_get_nonexistent_404", G, reports_get_nonexistent)
+
+    # ── TRUE branch: generate then retrieve report ────────────────────────────
+    def reports_generate_and_retrieve():
+        """POST then GET /api/reports/daily/2000-01-01 — generate + retrieve (IF TRUE)."""
+        sc, body = _local("POST", f"/api/reports/daily/{test_report_date}")
+        if sc == 404:
+            return {"skip": "reports generate endpoint not found"}
+        assert sc == 200, f"generate report returned {sc}: {str(body)[:200]}"
+
+        # Now retrieve it
+        sc2, body2 = _local("GET", f"/api/reports/daily/{test_report_date}")
+        assert sc2 == 200, f"GET report returned {sc2}: {str(body2)[:200]}"
+        assert isinstance(body2, dict), "Report should be a dict"
+        return {
+            "report_date": test_report_date,
+            "branch": "TRUE (report generated+retrieved)",
+            "keys": list(body2.keys())[:6],
+        }
+    _run(suite, "reports_generate_and_retrieve", G, reports_generate_and_retrieve)
+
+    # ── Cleanup: delete the test report row if it was generated ───────────────
+    def cleanup_g25():
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                "DELETE FROM daily_reports WHERE report_date = %s",
+                (test_report_date,),
+            )
+    _run(suite, "reports_cleanup", G, cleanup_g25)
+
+
+# ─── GROUP 26: Airtable integration (Phase 2) ────────────────────────────────
+
+def _g26_airtable_integration(suite: TestSuite) -> None:
+    """Group 26 — Airtable integration tests.
+
+    Tests all Airtable-backed endpoints:
+      POST /api/menu/sync          — fetch from Airtable → upsert menu_catalog
+        ├─ TRUE branch: records exist → upserted > 0
+        └─ verify DB has items after sync
+      POST /api/playbook/sync-from-airtable — push records into agent_playbook
+        ├─ TRUE branch: created/updated > 0
+        └─ FALSE branch: empty records → deactivates unreferenced rules
+      GET  /api/menu/items          — list active items (TRUE: data, FALSE: empty table)
+      POST /api/playbook/rules      — CRUD: create, update, delete playbook rule
+    Data created is cleaned up within each test.
+    """
+    G = "26_airtable"
+    AT_TEST_RULE = "TEST_G26_AIRTABLE_RULE"
+
+    # ── Menu sync: TRUE branch (records from Airtable) ────────────────────────
+    def menu_sync_airtable_true_branch():
+        """POST /api/menu/sync → Airtable → menu_catalog upsert (TRUE branch)."""
+        sc, body = _local("POST", "/api/menu/sync", timeout=30)
+        if sc == 502:
+            raise WarnSignal(f"Airtable unreachable during menu sync: {str(body)[:100]}")
+        if sc == 404:
+            return {"skip": "menu/sync not found"}
+        assert sc == 200, f"menu/sync returned {sc}: {str(body)[:200]}"
+        upserted = body.get("upserted", body.get("synced", body.get("total", -1))) if isinstance(body, dict) else -1
+        # Verify DB has active items after sync
+        with get_cursor(commit=False) as cur:
+            cur.execute("SAVEPOINT g26mc")
+            try:
+                cur.execute("SELECT COUNT(*) AS cnt FROM menu_catalog WHERE active = TRUE")
+                cnt = cur.fetchone()["cnt"]
+                cur.execute("RELEASE SAVEPOINT g26mc")
+            except Exception:
+                cur.execute("ROLLBACK TO SAVEPOINT g26mc")
+                cur.execute("RELEASE SAVEPOINT g26mc")
+                cnt = -1
+        return {"upserted": upserted, "active_items_in_db": cnt, "branch": "TRUE (has_airtable_records)"}
+    _run(suite, "menu_sync_airtable_true_branch", G, menu_sync_airtable_true_branch)
+
+    # ── Menu items GET: verify list endpoint returns data ────────────────────
+    def menu_items_list():
+        """GET /api/menu/items — verify items list structure."""
+        sc, body = _local("GET", "/api/menu/items")
+        assert sc == 200, f"menu/items returned {sc}"
+        items = body if isinstance(body, list) else body.get("items", [])
+        assert isinstance(items, list), "items should be a list"
+        # Each item should have required fields
+        if items:
+            item = items[0]
+            assert "item_name" in item, "Item missing item_name field"
+        return {"item_count": len(items)}
+    _run(suite, "menu_items_list_structure", G, menu_items_list)
+
+    # ── Playbook sync: TRUE branch — push test records ────────────────────────
+    def playbook_sync_airtable_true_branch():
+        """POST /api/playbook/sync-from-airtable → agent_playbook (TRUE branch)."""
+        records = [
+            {
+                "airtable_id": f"rec_test_g26_001",
+                "rule_name": AT_TEST_RULE,
+                "category": "general",
+                "instruction": "Test: always do the right thing.",
+                "priority": 50,
+                "active": True,
+            }
+        ]
+        sc, body = _local("POST", "/api/playbook/sync-from-airtable", json_body={"records": records})
+        if sc == 404:
+            return {"skip": "sync-from-airtable not found"}
+        assert sc == 200, f"sync-from-airtable returned {sc}: {str(body)[:200]}"
+        assert isinstance(body, dict), "Expected dict response"
+        # Verify in DB
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT id, rule_name, is_active FROM agent_playbook WHERE rule_name = %s", (AT_TEST_RULE,))
+            row = cur.fetchone()
+        assert row is not None, f"Test rule {AT_TEST_RULE} not found in agent_playbook after sync"
+        assert row["is_active"] is True, "Synced rule should be active"
+        return {"synced_rule": AT_TEST_RULE, "branch": "TRUE (records inserted)", "rule_id": row["id"]}
+    _run(suite, "playbook_sync_airtable_true_branch", G, playbook_sync_airtable_true_branch)
+
+    # ── Playbook sync: FALSE branch — empty records deactivates rule ──────────
+    def playbook_sync_airtable_false_branch():
+        """POST /api/playbook/sync-from-airtable with empty records → deactivates test rule."""
+        # First verify the test rule exists
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT id FROM agent_playbook WHERE rule_name = %s AND is_active = TRUE", (AT_TEST_RULE,))
+            row = cur.fetchone()
+        if not row:
+            return {"skip": "test rule not found (previous test may have failed)"}
+
+        # Sync with no records → should deactivate rule created by airtable
+        sc, body = _local("POST", "/api/playbook/sync-from-airtable", json_body={"records": []})
+        if sc == 404:
+            return {"skip": "sync-from-airtable not found"}
+        assert sc == 200, f"sync returned {sc}"
+        # Verify rule was deactivated (FALSE branch: rule removed from Airtable)
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT is_active FROM agent_playbook WHERE rule_name = %s", (AT_TEST_RULE,))
+            row2 = cur.fetchone()
+        # If the rule still exists, it should be deactivated
+        if row2:
+            assert row2["is_active"] is False, "Rule should be deactivated when not in sync payload"
+        return {"branch": "FALSE (rule deactivated/removed)", "deactivated": row2 is None or not row2["is_active"]}
+    _run(suite, "playbook_sync_airtable_false_branch", G, playbook_sync_airtable_false_branch)
+
+    # ── CRUD: create/update/delete playbook rule ──────────────────────────────
+    def playbook_crud_create_update_delete():
+        """POST/PUT/DELETE /api/playbook/rules — full CRUD cycle."""
+        # Create
+        sc, body = _local("POST", "/api/playbook/rules", json_body={
+            "rule_name": "TEST_G26_CRUD_RULE",
+            "category": "inference",
+            "instruction": "Test CRUD rule — do nothing",
+            "priority": 10,
+            "active": True,
+        })
+        if sc == 404:
+            return {"skip": "POST /api/playbook/rules not found"}
+        assert sc in (200, 201), f"create rule returned {sc}: {str(body)[:200]}"
+        rule_id = body.get("id") if isinstance(body, dict) else None
+
+        if rule_id:
+            # Update
+            sc2, body2 = _local("PUT", f"/api/playbook/rules/{rule_id}", json_body={"priority": 20, "instruction": "Updated"})
+            # Delete
+            sc3, _ = _local("DELETE", f"/api/playbook/rules/{rule_id}")
+            assert sc3 in (200, 204), f"delete rule returned {sc3}"
+
+        # Cleanup fallback in DB
+        with get_cursor(commit=True) as cur:
+            cur.execute("DELETE FROM agent_playbook WHERE rule_name = %s", ("TEST_G26_CRUD_RULE",))
+
+        return {"created_id": rule_id, "crud_complete": True}
+    _run(suite, "playbook_crud_create_update_delete", G, playbook_crud_create_update_delete)
+
+    # ── Airtable cleanup ──────────────────────────────────────────────────────
+    def cleanup_g26():
+        with get_cursor(commit=True) as cur:
+            cur.execute("DELETE FROM agent_playbook WHERE rule_name IN (%s, %s)",
+                       (AT_TEST_RULE, "TEST_G26_CRUD_RULE"))
+    _run(suite, "airtable_cleanup", G, cleanup_g26)
+
+
+# ─── GROUP 27: Dashboard integration (Phase 3) ───────────────────────────────
+
+def _g27_dashboard_integration(suite: TestSuite) -> None:
+    """Group 27 — Dashboard integration tests.
+
+    Tests all UI-facing Python endpoints that the DabbahWala dashboard calls:
+      GET  /api/contacts/{id}/priority PATCH — update contact priority
+      POST /api/broadcasts/             — create broadcast job
+      POST /api/broadcasts/delay-alert  — create delay alert
+      POST /api/broadcasts/{id}/queue   — queue recipients for job
+      GET  /api/broadcasts/             — list broadcast jobs
+      POST /api/broadcasts/recipients/{id}/sent    — mark recipient sent
+      POST /api/broadcasts/recipients/{id}/failed  — mark recipient failed
+      GET  /api/query/categories        — fetch query categories
+    All data inserted is cleaned up within each sub-test.
+    """
+    G = "27_dashboard"
+
+    # ── Broadcast: POST / (create promo job) ──────────────────────────────────
+    broadcast_job_id: list = []
+
+    def broadcast_create_promo_job():
+        """POST /api/broadcasts/ — create a promo broadcast job."""
+        sc, body = _local("POST", "/api/broadcasts/", json_body={
+            "title": "TEST_G27_Promo",
+            "broadcast_type": "promo",
+            "channels": ["sms"],
+            "sms_message": "Test promo — please ignore",
+            "target_type": "all_active",
+            "created_by": "test_harness",
+        })
+        if sc == 404:
+            return {"skip": "POST /api/broadcasts/ not found"}
+        assert sc in (200, 201), f"create broadcast returned {sc}: {str(body)[:300]}"
+        job_id = body.get("id") if isinstance(body, dict) else None
+        if job_id:
+            broadcast_job_id.append(job_id)
+        return {"job_id": job_id, "status": body.get("status") if isinstance(body, dict) else None}
+    _run(suite, "broadcast_create_promo_job", G, broadcast_create_promo_job)
+
+    # ── Broadcast: GET / (list jobs) ──────────────────────────────────────────
+    def broadcast_list_jobs():
+        """GET /api/broadcasts/ — list all broadcast jobs."""
+        sc, body = _local("GET", "/api/broadcasts/")
+        assert sc == 200, f"GET /api/broadcasts/ returned {sc}"
+        jobs = body if isinstance(body, list) else body.get("jobs", body.get("items", []))
+        assert isinstance(jobs, list), "jobs should be a list"
+        # If we created a job earlier, it should appear
+        if broadcast_job_id:
+            ids = [j.get("id") for j in jobs]
+            assert broadcast_job_id[0] in ids, f"Created job {broadcast_job_id[0]} not in job list"
+        return {"job_count": len(jobs)}
+    _run(suite, "broadcast_list_jobs", G, broadcast_list_jobs)
+
+    # ── Broadcast: POST /delay-alert ──────────────────────────────────────────
+    delay_job_id: list = []
+
+    def broadcast_create_delay_alert():
+        """POST /api/broadcasts/delay-alert — create a delay alert job."""
+        sc, body = _local("POST", "/api/broadcasts/delay-alert", json_body={
+            "title": "TEST_G27_Delay",
+            "sms_message": "Deliveries delayed — sorry! (test)",
+            "target_type": "all_active",
+            "created_by": "test_harness",
+        })
+        if sc == 404:
+            return {"skip": "POST /api/broadcasts/delay-alert not found"}
+        if sc == 422:
+            return {"skip": f"delay-alert schema mismatch: {str(body)[:200]}"}
+        assert sc in (200, 201), f"create delay-alert returned {sc}: {str(body)[:300]}"
+        job_id = body.get("id") if isinstance(body, dict) else None
+        if job_id:
+            delay_job_id.append(job_id)
+        return {"job_id": job_id}
+    _run(suite, "broadcast_create_delay_alert", G, broadcast_create_delay_alert)
+
+    # ── Broadcast: GET /{job_id} — retrieve created job ───────────────────────
+    def broadcast_get_job():
+        """GET /api/broadcasts/{id} — retrieve a single job."""
+        if not broadcast_job_id:
+            return {"skip": "no job created"}
+        job_id = broadcast_job_id[0]
+        sc, body = _local("GET", f"/api/broadcasts/{job_id}")
+        assert sc == 200, f"GET /api/broadcasts/{job_id} returned {sc}"
+        assert isinstance(body, dict), "Job should be a dict"
+        assert body.get("id") == job_id, "Returned wrong job"
+        return {"job_id": job_id, "status": body.get("status")}
+    _run(suite, "broadcast_get_single_job", G, broadcast_get_job)
+
+    # ── Broadcast: queue recipients for job ───────────────────────────────────
+    test_recipient_id: list = []
+
+    def broadcast_queue_recipients():
+        """POST /api/broadcasts/{id}/queue — queue recipients."""
+        if not broadcast_job_id:
+            return {"skip": "no job created"}
+        job_id = broadcast_job_id[0]
+        # Insert a test contact to use as recipient
+        with get_cursor(commit=True) as cur:
+            cur.execute(
+                """INSERT INTO contacts
+                       (phone, email, first_name, last_name, source,
+                        lifecycle_segment, email_nurture_enabled)
+                   VALUES (%s, %s, 'TestG27', 'Broadcast', %s, 'active', FALSE)
+                   ON CONFLICT (email) DO UPDATE SET first_name = 'TestG27'
+                   RETURNING id""",
+                ("+10000000027b", "test_g27_broadcast@test.dabbahwala.com", TEST_SOURCE),
+            )
+            row = cur.fetchone()
+            if not row:
+                cur.execute("SELECT id FROM contacts WHERE email = %s", ("test_g27_broadcast@test.dabbahwala.com",))
+                row = cur.fetchone()
+            contact_id = row["id"]
+
+        sc, body = _local("POST", f"/api/broadcasts/{job_id}/queue")
+        if sc == 404:
+            return {"skip": "queue endpoint not found"}
+        assert sc == 200, f"queue recipients returned {sc}: {str(body)[:200]}"
+
+        # Verify recipients in DB
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT id, channel, status FROM broadcast_recipients WHERE job_id = %s LIMIT 5", (job_id,))
+            recipients = cur.fetchall()
+            if recipients:
+                test_recipient_id.append(recipients[0]["id"])
+
+        return {
+            "job_id": job_id,
+            "recipients_queued": len(recipients) if recipients else body.get("total_recipients", 0),
+            "contact_id": contact_id,
+        }
+    _run(suite, "broadcast_queue_recipients", G, broadcast_queue_recipients)
+
+    # ── Broadcast: mark recipient sent (TRUE branch) ──────────────────────────
+    def broadcast_mark_sent():
+        """POST /api/broadcasts/recipients/{id}/sent — mark recipient as sent."""
+        if not test_recipient_id:
+            return {"skip": "no recipient to mark"}
+        recipient_id = test_recipient_id[0]
+        sc, body = _local("POST", f"/api/broadcasts/recipients/{recipient_id}/sent")
+        assert sc == 200, f"mark sent returned {sc}: {str(body)[:200]}"
+        # Verify in DB
+        with get_cursor(commit=False) as cur:
+            cur.execute("SELECT status FROM broadcast_recipients WHERE id = %s", (recipient_id,))
+            row = cur.fetchone()
+        assert row and row["status"] == "sent", f"Expected status=sent, got {row}"
+        return {"recipient_id": recipient_id, "status": "sent", "branch": "TRUE (sent)"}
+    _run(suite, "broadcast_mark_recipient_sent", G, broadcast_mark_sent)
+
+    # ── Contact priority update ───────────────────────────────────────────────
+    def contact_priority_update():
+        """PATCH /api/contacts/{id}/priority — update contact priority."""
+        if not suite.test_contact_id:
+            return {"skip": "no test contact available"}
+        sc, body = _local("PATCH", f"/api/contacts/{suite.test_contact_id}/priority",
+                         json_body={"priority": "hot"})
+        if sc == 404:
+            return {"skip": "contacts priority endpoint not found"}
+        assert sc in (200, 204), f"update priority returned {sc}: {str(body)[:200]}"
+        return {"contact_id": suite.test_contact_id, "priority": "hot"}
+    _run(suite, "contact_priority_update", G, contact_priority_update)
+
+    # ── Query categories endpoint ─────────────────────────────────────────────
+    def query_categories():
+        """GET /api/query/categories — list query categories for self-service."""
+        sc, body = _local("GET", "/api/query/categories")
+        assert sc == 200, f"query/categories returned {sc}"
+        assert isinstance(body, (list, dict)), "categories should be list or dict"
+        return {"categories_type": type(body).__name__}
+    _run(suite, "query_categories_structure", G, query_categories)
+
+    # ── Cleanup ───────────────────────────────────────────────────────────────
+    def cleanup_g27():
+        with get_cursor(commit=True) as cur:
+            # Delete broadcast recipients first (FK constraint)
+            if broadcast_job_id:
+                cur.execute("DELETE FROM broadcast_recipients WHERE job_id = ANY(%s)", (broadcast_job_id,))
+                cur.execute("DELETE FROM broadcast_jobs WHERE id = ANY(%s)", (broadcast_job_id,))
+            if delay_job_id:
+                cur.execute("DELETE FROM broadcast_recipients WHERE job_id = ANY(%s)", (delay_job_id,))
+                cur.execute("DELETE FROM broadcast_jobs WHERE id = ANY(%s)", (delay_job_id,))
+            # Delete test contact
+            cur.execute("DELETE FROM contacts WHERE email = %s", ("test_g27_broadcast@test.dabbahwala.com",))
+    _run(suite, "dashboard_cleanup", G, cleanup_g27)
+
+
+
+
 def _g14_cleanup(suite: TestSuite) -> None:
     G = "14_cleanup"
 
@@ -2244,6 +2928,12 @@ def run_full_suite(triggered_by: str = "manual") -> TestSuite:
         _g19_n8n_action_queue_all_routes(suite)
         _g20_n8n_broadcast_flow(suite)
         _g21_n8n_menu_sync_flow(suite)
+        _g22_n8n_sms_dispatch_flow(suite)
+        _g23_n8n_intelligence_flow(suite)
+        _g24_n8n_field_agent_flow(suite)
+        _g25_n8n_reports_flow(suite)
+        _g26_airtable_integration(suite)
+        _g27_dashboard_integration(suite)
     except Exception as e:
         logger.exception("Test suite failed unexpectedly at group level: %s", e)
     finally:

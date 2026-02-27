@@ -28,3 +28,8 @@ Thumbs.db
 
 # Postgres
 *.sql.bak
+
+# Node / Jest
+node_modules/
+.coverage
+tests/n8n/tests/
