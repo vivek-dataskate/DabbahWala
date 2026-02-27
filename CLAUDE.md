@@ -27,9 +27,8 @@ Before opening any PR, review the branch diff (`git diff main...HEAD`) and updat
 | Schema, stored procs, migrations | `SYSTEM.md` § Database Schema |
 | New/modified API routes or routers | `SYSTEM.md` § API Layer |
 | Agent pipeline logic | `SYSTEM.md` § Claude AI Agent Pipeline |
-| n8n workflow added/changed | `SYSTEM.md` § n8n Workflow Layer + `FEATURES.md` relevant feature |
+| n8n workflow added/changed | `SYSTEM.md` § n8n Workflow Layer + § Feature Cross-Reference |
 | External service integration | `SYSTEM.md` § External Service Integrations |
-| Feature added or changed end-to-end | `FEATURES.md` — add/update the feature section |
 | Next migration number used | `CLAUDE.md` § Database Migrations (increment the number) |
 | n8n workflow count changed | `CLAUDE.md` § n8n Workflow Status |
 | Any new/modified feature (always) | `TESTS.md` + `app/services/test_harness_service.py` |

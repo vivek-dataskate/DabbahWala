@@ -2,7 +2,7 @@
 
 How to use the system day-to-day. Every customer journey, system function, and feature explained from an operator's perspective — what to do, where to do it, and what to watch for.
 
-> **Navigation:** [README](README.md) · [How It Works](LIFECYCLE.md) · [Technical Reference](SYSTEM.md) · [Feature Assets](FEATURES.md)
+> **Navigation:** [README](README.md) · [Technical Reference](SYSTEM.md) · [Tests](TESTS.md)
 
 ---
 
@@ -973,5 +973,5 @@ Returns common questions the chatbot is well-positioned to answer based on the c
 
 ---
 
-*Last updated: 2026-02-26*
-*See also: [How It Works — LIFECYCLE.md](LIFECYCLE.md) · [Technical Reference — SYSTEM.md](SYSTEM.md) · [Feature Assets — FEATURES.md](FEATURES.md)*
+*Last updated: 2026-02-27*
+*See also: [Technical Reference — SYSTEM.md](SYSTEM.md) · [Tests — TESTS.md](TESTS.md)*
