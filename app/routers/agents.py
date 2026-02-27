@@ -2350,56 +2350,24 @@ def run_agent_cycle_all_contacts(limit: int = 1000):
             payload = r.get("action_payload", {})
             contact = r.get("contact", {})
 
+            # _enqueue_action() inside _run_full_cycle already queued this action.
+            # Just track counts and build the outreach log — no re-queuing.
             if chosen_action == "move_campaign":
                 to_campaign = payload.get("to_campaign", "")
                 email = payload.get("email") or contact.get("email", "")
                 if email and to_campaign:
-                    try:
-                        pushed = push_lead_to_instantly(
-                            email=email,
-                            first_name=contact.get("first_name", ""),
-                            last_name=contact.get("last_name", ""),
-                            phone=payload.get("phone") or contact.get("phone", "") or "",
-                            campaign_name=to_campaign,
-                            contact_id=cid,
-                        )
-                        if pushed:
-                            campaigns_pushed += 1
-                            r["instantly_pushed"] = to_campaign
-                            email_outreach_log.append({
-                                "name": f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip(),
-                                "email": email,
-                                "campaign": to_campaign,
-                                "segment": contact.get("lifecycle_segment", ""),
-                            })
-                            logger.info(
-                                "Instantly push: contact_id=%s → campaign=%s", cid, to_campaign
-                            )
-                    except Exception as e:
-                        logger.warning("Instantly push failed contact_id=%s: %s", cid, e)
+                    campaigns_pushed += 1
+                    r["instantly_queued"] = to_campaign
+                    email_outreach_log.append({
+                        "name": f"{contact.get('first_name', '')} {contact.get('last_name', '')}".strip(),
+                        "email": email,
+                        "campaign": to_campaign,
+                        "segment": contact.get("lifecycle_segment", ""),
+                    })
 
             elif chosen_action == "escalate_airtable":
-                urgency = payload.get("urgency", "high")
-                notes = payload.get("notes", "") or r.get("reasoning_snippet", "")
-                try:
-                    create_field_sales_task({
-                        "first_name": contact.get("first_name", ""),
-                        "last_name": contact.get("last_name", ""),
-                        "phone": contact.get("phone", "") or "",
-                        "email": contact.get("email", "") or "",
-                        "priority": "Hot" if urgency == "high" else "Warm",
-                        "reason": notes,
-                        "suggested_message": notes,
-                        "action_type": "escalate_airtable",
-                        "lifecycle_segment": contact.get("lifecycle_segment", ""),
-                        "total_orders": contact.get("total_orders", 0),
-                        "last_order_at": contact.get("last_order_at"),
-                    })
-                    airtable_pushed += 1
-                    r["airtable_pushed"] = True
-                    logger.info("Airtable task created: contact_id=%s urgency=%s", cid, urgency)
-                except Exception as e:
-                    logger.warning("Airtable push failed contact_id=%s: %s", cid, e)
+                airtable_pushed += 1
+                r["airtable_queued"] = True
 
             # Strip the full contact dict from the result to keep response lean
             r.pop("contact", None)
