@@ -84,6 +84,113 @@ def mark_executed(queue_id: int):
         return {"status": "ok"}
 
 
+@router.post("/push-lead")
+def push_lead(body: PushLeadRequest):
+    """
+    Enqueue a lead to be pushed to an Instantly campaign via action_queue.
+    n8n's Action Queue Executor picks this up within 30 minutes.
+    Returns the new action_queue row id so callers can track it.
+    """
+    try:
+        row = _get_routing_row(body.campaign_name)
+    except HTTPException as e:
+        raise e
+    instantly_id = row.get("instantly_campaign_id")
+    if not instantly_id:
+        raise HTTPException(status_code=422, detail=f"campaign_routing has no instantly_campaign_id for {body.campaign_name}")
+
+    payload = {
+        "instantly_campaign_id": instantly_id,
+        "campaign_name": body.campaign_name,
+        "email": body.email,
+        "first_name": body.first_name,
+        "last_name": body.last_name,
+        "phone": body.phone,
+    }
+    try:
+        with get_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO action_queue (contact_id, action_type, payload)
+                VALUES (%s, 'push_instantly_lead', %s::jsonb)
+                RETURNING id
+                """,
+                (body.contact_id, json.dumps(payload)),
+            )
+            queue_id = cur.fetchone()["id"]
+        logger.info("push-lead: enqueued action_queue id=%d email=%s campaign=%s", queue_id, body.email, body.campaign_name)
+        return {"queued": True, "queue_id": queue_id, "instantly_campaign_id": instantly_id}
+    except Exception as e:
+        logger.error("push-lead: DB insert failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)[:300])
+
+
+@router.get("/pending")
+def get_pending_leads():
+    """
+    Return pending push_instantly_lead items from action_queue,
+    joined with contacts for first/last name where contact_id is set.
+    """
+    with get_cursor(commit=False) as cur:
+        cur.execute("""
+            SELECT
+                aq.id            AS queue_id,
+                aq.contact_id,
+                c.first_name     AS contact_first_name,
+                c.last_name      AS contact_last_name,
+                aq.payload->>'email'         AS email,
+                aq.payload->>'campaign_name' AS campaign_name,
+                aq.payload->>'instantly_campaign_id' AS instantly_campaign_id,
+                aq.status,
+                aq.created_at
+            FROM action_queue aq
+            LEFT JOIN contacts c ON c.id = aq.contact_id
+            WHERE aq.action_type = 'push_instantly_lead'
+              AND aq.status = 'pending'
+            ORDER BY aq.created_at DESC
+            LIMIT 100
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+    return rows
+
+
+@router.post("/log-push")
+def log_push(entry: PushLogEntry):
+    """Record a push attempt result in campaign_push_log."""
+    try:
+        with get_cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO campaign_push_log
+                    (queue_id, email, to_campaign, success, status_code, error_message, response_body)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                RETURNING id
+                """,
+                (entry.queue_id, entry.email, entry.to_campaign, entry.success,
+                 entry.status_code, entry.error_message, entry.response_body),
+            )
+            log_id = cur.fetchone()["id"]
+        return {"status": "ok", "id": log_id}
+    except Exception as e:
+        logger.error("log-push: insert failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)[:300])
+
+
+@router.get("/push-log")
+def get_push_log(limit: int = 20, success: Optional[bool] = None):
+    """Return recent campaign push log entries, optionally filtered by success."""
+    with get_cursor(commit=False) as cur:
+        if success is None:
+            cur.execute(
+                "SELECT * FROM campaign_push_log ORDER BY created_at DESC LIMIT %s",
+                (min(limit, 200),),
+            )
+        else:
+            cur.execute(
+                "SELECT * FROM campaign_push_log WHERE success = %s ORDER BY created_at DESC LIMIT %s",
+                (success, min(limit, 200)),
+            )
+        return [dict(r) for r in cur.fetchall()]
 
 
 # ── Campaign email template editor ─────────────────────────────────────────────
@@ -225,6 +332,25 @@ def _load_campaign_json(campaign_name: str) -> tuple[dict, dict]:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Template file missing for {campaign_name}")
     return row, json.loads(path.read_text())
+
+
+class PushLeadRequest(BaseModel):
+    email: str
+    first_name: str
+    last_name: str
+    phone: str
+    campaign_name: str
+    contact_id: Optional[int] = None
+
+
+class PushLogEntry(BaseModel):
+    queue_id: Optional[int] = None
+    email: str
+    to_campaign: str
+    success: bool
+    status_code: Optional[int] = None
+    error_message: Optional[str] = None
+    response_body: Optional[str] = None
 
 
 class TemplateUpdate(BaseModel):

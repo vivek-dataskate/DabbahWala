@@ -805,3 +805,25 @@ CREATE TABLE IF NOT EXISTS growth_baseline (
     baseline_conv_rate NUMERIC(5,4) NOT NULL DEFAULT 0,
     notes             TEXT
 );
+
+-- ---------------------------------------------------------------------------
+-- Campaign push log: records every attempt to push a lead to Instantly
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS campaign_push_log (
+    id              SERIAL PRIMARY KEY,
+    queue_id        INTEGER,        -- action_queue.id (nullable for test inserts)
+    email           TEXT NOT NULL,
+    to_campaign     TEXT NOT NULL,
+    success         BOOLEAN NOT NULL DEFAULT false,
+    status_code     INTEGER,
+    error_message   TEXT,
+    response_body   TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_campaign_push_log_email
+    ON campaign_push_log (email);
+CREATE INDEX IF NOT EXISTS idx_campaign_push_log_created_at
+    ON campaign_push_log (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_campaign_push_log_success
+    ON campaign_push_log (success);

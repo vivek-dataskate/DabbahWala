@@ -20,7 +20,7 @@ Verifies the app and all external services are reachable with valid credentials.
 | `db_connection` | PostgreSQL connection via `get_cursor` |
 | `api_health` | `GET /health` returns `{status: ok}` |
 | `telnyx_api` | Telnyx API key valid — `GET /v2/messaging_profiles` |
-| `instantly_api` | Instantly API key valid — `GET /campaign/list` |
+| `instantly_api` | Instantly API key valid — `GET /api/v2/campaigns` |
 | `airtable_api` | Airtable API key valid — `GET /Weekly Menu?maxRecords=1` |
 | `shipday_api` | Shipday API key valid — `GET /orders` |
 | `anthropic_api` | Anthropic API key valid — sends minimal `claude-haiku` message |
@@ -125,19 +125,28 @@ Tests the 5-phase intelligence cycle and lifecycle segment assignment.
 
 ## Group 8 — Instantly / Email Campaigns (`8_instantly_email`)
 
-Tests Instantly email campaign operations end-to-end.
+Tests Instantly email campaign operations end-to-end. API tests require `INSTANTLY_API_KEY`; local app tests always run.
+
+**Instantly API tests** (skipped if `INSTANTLY_API_KEY` not set):
 
 | Test Name | What It Checks |
 |-----------|----------------|
-| `instantly_campaigns_list` | `GET /campaign/list` returns campaigns |
-| `instantly_all_5_campaigns` | All 5 DW campaign names present in Instantly |
-| `instantly_lead_add` | Adds test email to `DW-NurtureSlow-ColdContacts` campaign |
-| `instantly_lead_verify` | Confirms test lead exists in campaign |
-| `instantly_analytics` | `GET /analytics/campaign/summary` returns data |
-| `instantly_campaign_sync_endpoint` | `POST /api/webhooks/sync-campaigns` accepts payload |
-| `instantly_lead_remove` | Removes test email from campaign (cleanup) |
-| `campaigns_push_log` | `POST /api/campaigns/log-push` writes a row; `GET /api/campaigns/push-log` returns it |
-| `campaigns_pending_has_names` | `GET /api/campaigns/pending` includes `contact_first_name` / `contact_last_name` fields |
+| `instantly_campaigns_list` | `GET /api/v2/campaigns` returns campaigns |
+| `instantly_all_5_campaigns` | All 5 DW campaign names present in Instantly; resolves cold campaign ID |
+| `instantly_lead_add` | Adds test email to `DW-NurtureSlow-ColdContacts` via `POST /api/v2/leads` |
+| `instantly_lead_verify` | Confirms test lead exists via `POST /api/v2/leads/list` |
+| `instantly_analytics` | `GET /api/v2/campaigns/analytics` returns data |
+| `instantly_lead_remove` | Removes test email via `DELETE /api/v2/leads` (cleanup) |
+
+**Local app tests** (always run):
+
+| Test Name | What It Checks |
+|-----------|----------------|
+| `instantly_campaign_routing_list` | `GET /api/webhooks/campaigns` returns campaign_routing rows with instantly_id |
+| `instantly_campaign_stats_webhook` | `POST /api/webhooks/campaign-stats` updates campaign_routing stats |
+| `campaigns_push_log` | `POST /api/campaigns/log-push` writes to `campaign_push_log`; `GET /api/campaigns/push-log` reads it back |
+| `campaigns_pending_has_names` | `GET /api/campaigns/pending` returns rows with `contact_first_name` / `contact_last_name` |
+| `instantly_lead_enqueue` | **E2E Postgres path**: `POST /api/campaigns/push-lead` → `action_queue` row created → visible in `GET /api/campaigns/pending` |
 
 **Expected campaigns:** `DW-NurtureSlow-ColdContacts`, `DW-PromoStandard-ActiveEngaged`, `DW-NewCustomerOnboarding`, `DW-PromoAggressive-LapsedCustomers`, `DW-Reactivation-LongDormant`
 
