@@ -178,13 +178,27 @@ async def download_shipday_csv(file_id: str):
 
 def _load_menu_lookup(cur) -> tuple:
     """Load menu_catalog into lookup dicts for CSV dish name resolution.
-    Returns (alias_map, master_norm_map, master_set).
-    alias_map is empty — alias resolution now uses case-insensitive matching on item_name.
+    Returns (alias_map, master_norm_map, master_set, catalog_available).
+    catalog_available=False means the table doesn't exist yet — callers
+    should skip any further writes to menu_catalog.
+    Uses a savepoint so a missing table doesn't abort the outer transaction.
     """
     alias_map = {}  # no separate alias table; kept for API compatibility
 
-    cur.execute("SELECT id, item_name, category, is_veg, price FROM menu_catalog WHERE active = true")
-    master_rows = cur.fetchall()
+    cur.execute("SAVEPOINT menu_lookup")
+    try:
+        cur.execute("SELECT id, item_name, category, is_veg, price FROM menu_catalog WHERE active = true")
+        master_rows = cur.fetchall()
+        cur.execute("RELEASE SAVEPOINT menu_lookup")
+    except Exception as exc:
+        cur.execute("ROLLBACK TO SAVEPOINT menu_lookup")
+        cur.execute("RELEASE SAVEPOINT menu_lookup")
+        if "does not exist" in str(exc) or "UndefinedTable" in type(exc).__name__:
+            logger.warning("menu_catalog table not found — dish name resolution disabled. "
+                           "Run migration 007 to create the table.")
+            return {}, {}, set(), False
+        raise
+
     master_set = {r['item_name'] for r in master_rows}
     master_norm = {}
     for r in master_rows:
@@ -192,7 +206,7 @@ def _load_menu_lookup(cur) -> tuple:
         master_norm[norm] = r['item_name']
 
     logger.debug("Loaded %d active menu items for dish resolution", len(master_set))
-    return alias_map, master_norm, master_set
+    return alias_map, master_norm, master_set, True
 
 
 def resolve_dish_name(raw_name: str, alias_map: dict, master_norm: dict, master_set: set) -> str:
@@ -336,7 +350,7 @@ async def process_daily_orders(
             if full:
                 name_lookup[full] = dict(r)
 
-        alias_map, master_norm, master_set = _load_menu_lookup(cur)
+        alias_map, master_norm, master_set, catalog_available = _load_menu_lookup(cur)
 
     logger.info(
         "Lookup tables loaded: %d phone records, %d name records",
@@ -619,7 +633,7 @@ async def process_daily_orders(
             for dish, qty, price, line_total in items:
                 if dish in master_set:
                     menu_matched += 1
-                else:
+                elif catalog_available:
                     # New item not in catalog — add with price from CSV
                     cur.execute(
                         "INSERT INTO menu_catalog (item_name, price, added_date) VALUES (%s, %s, CURRENT_DATE) "
@@ -628,12 +642,22 @@ async def process_daily_orders(
                     master_set.add(dish)
                     menu_created += 1
 
-                cur.execute(
-                    "INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) "
-                    "VALUES (%s, %s, %s, %s, %s)",
-                    (order_db_id, dish, qty, price, line_total)
-                )
-                item_count += 1
+                cur.execute("SAVEPOINT order_item_insert")
+                try:
+                    cur.execute(
+                        "INSERT INTO order_items (order_id, item_name, quantity, unit_price, line_total) "
+                        "VALUES (%s, %s, %s, %s, %s)",
+                        (order_db_id, dish, qty, price, line_total)
+                    )
+                    cur.execute("RELEASE SAVEPOINT order_item_insert")
+                    item_count += 1
+                except Exception as exc:
+                    cur.execute("ROLLBACK TO SAVEPOINT order_item_insert")
+                    cur.execute("RELEASE SAVEPOINT order_item_insert")
+                    if "does not exist" in str(exc):
+                        logger.warning("order_items table not found — skipping item insert for order %s", order_db_id)
+                    else:
+                        raise
 
             # Fire order_placed event + update contact
             if contact_id:
