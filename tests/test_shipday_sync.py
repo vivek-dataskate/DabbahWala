@@ -545,3 +545,246 @@ class TestRunFeedbackSync:
 
         assert module._feedback_sync_state["running"] is False
         assert module._feedback_sync_state["errors"] == 1
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 8. Additional unit tests for uncovered paths
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestGetShipdayKeyRaises:
+    def test_get_shipday_key_raises_when_no_key(self, monkeypatch):
+        """_get_shipday_key raises HTTPException when no API key env var is set."""
+        from fastapi import HTTPException as FastAPIHTTPException
+        monkeypatch.delenv("SHIPDAY_API_KEY", raising=False)
+        monkeypatch.delenv("SHIPDAY_KEY", raising=False)
+        from app.routers.shipday_sync import _get_shipday_key
+        with pytest.raises(FastAPIHTTPException) as exc_info:
+            _get_shipday_key()
+        assert exc_info.value.status_code == 500
+
+    def test_get_shipday_key_returns_key_when_set(self, monkeypatch):
+        """_get_shipday_key returns the key when SHIPDAY_API_KEY is set."""
+        monkeypatch.setenv("SHIPDAY_API_KEY", "test-shipday-key-123")
+        from app.routers.shipday_sync import _get_shipday_key
+        assert _get_shipday_key() == "test-shipday-key-123"
+
+
+class TestFetchOrderDetailHTTPStatusError:
+    def test_returns_none_on_http_status_error(self):
+        """_fetch_order_detail returns None when HTTPStatusError is raised."""
+        import httpx
+        from app.routers.shipday_sync import _fetch_order_detail
+
+        mock_response = MagicMock()
+        mock_response.status_code = 500
+        mock_response.text = "Internal Server Error"
+
+        error_resp = MagicMock()
+        error_resp.status_code = 500
+        error_resp.text = "Internal Server Error"
+
+        mock_client = MagicMock()
+        mock_client.get.return_value = MagicMock(
+            status_code=500,
+            raise_for_status=MagicMock(
+                side_effect=httpx.HTTPStatusError(
+                    "Server Error", request=MagicMock(), response=error_resp
+                )
+            )
+        )
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+
+        with patch("app.routers.shipday_sync.httpx.Client", return_value=mock_client):
+            result = _fetch_order_detail("test-key", "SD-500")
+
+        assert result is None
+
+
+class TestRunFeedbackSyncSentimentCounts:
+    def test_positive_negative_neutral_counters_incremented(self):
+        """_run_feedback_sync increments positive/negative/neutral counters correctly."""
+        import app.routers.shipday_sync as module
+
+        module._sync_state["running"] = False
+
+        pending = [
+            {"shipday_order_id": "SD-POS", "contact_id": 1, "actual_delivery": None},
+            {"shipday_order_id": "SD-NEG", "contact_id": 2, "actual_delivery": None},
+            {"shipday_order_id": "SD-NEU", "contact_id": 3, "actual_delivery": None},
+        ]
+
+        sentiments = {"SD-POS": "positive", "SD-NEG": "negative", "SD-NEU": "neutral"}
+        fetchone_returns = {
+            "SD-POS": {"sentiment": "positive"},
+            "SD-NEG": {"sentiment": "negative"},
+            "SD-NEU": {"sentiment": "neutral"},
+        }
+
+        call_count = [0]
+
+        @contextmanager
+        def _multi_cursor(commit=False):
+            cur = MagicMock()
+            call_count[0] += 1
+            if call_count[0] == 1:
+                cur.fetchall.return_value = pending
+            else:
+                # Determine which order we're on
+                idx = call_count[0] - 2
+                order_id = pending[idx % len(pending)]["shipday_order_id"]
+                cur.fetchone.return_value = fetchone_returns.get(order_id, {"sentiment": "neutral"})
+            yield cur
+
+        def fake_fetch(api_key, order_id):
+            return {"orderId": order_id, "feedback": "Some feedback"}
+
+        def fake_store(order_id, order, occurred_at):
+            return ["customer_feedback"]
+
+        with patch("app.routers.shipday_sync.get_cursor", side_effect=_multi_cursor), \
+             patch("app.routers.shipday_sync._fetch_order_detail", side_effect=fake_fetch), \
+             patch("app.routers.shipday_sync._store_order_communications", side_effect=fake_store), \
+             patch("app.routers.shipday_sync._create_feedback_opportunity"), \
+             patch("app.routers.shipday_sync.time.sleep"):
+            module._run_feedback_sync(days_back=7)
+
+        assert module._sync_state["running"] is False
+        assert module._sync_state["feedback_positive"] == 1
+        assert module._sync_state["feedback_negative"] == 1
+        assert module._sync_state["feedback_neutral"] == 1
+        assert module._sync_state["opportunities_created"] == 2  # pos + neg
+
+
+class TestRunFeedbackSyncOuterException:
+    def test_outer_exception_is_caught_and_logged(self):
+        """_run_feedback_sync catches unexpected exception from outer DB query."""
+        import app.routers.shipday_sync as module
+
+        module._sync_state["running"] = False
+
+        @contextmanager
+        def _crashing_cursor(commit=False):
+            raise Exception("Outer DB crash!")
+            yield  # pragma: no cover
+
+        with patch("app.routers.shipday_sync.get_cursor", side_effect=_crashing_cursor), \
+             patch.dict("os.environ", {"SHIPDAY_API_KEY": "test-key"}):
+            module._run_feedback_sync(days_back=7)
+
+        assert module._sync_state["running"] is False
+        assert module._sync_state["errors"] >= 1
+
+
+class TestShipdaySyncEndpoints:
+    """Test the endpoints in shipday_sync.py via a dedicated TestClient."""
+
+    @pytest.fixture
+    def shipday_client(self):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.routers.shipday_sync import router
+        app = FastAPI()
+        app.include_router(router)
+        return TestClient(app, raise_server_exceptions=False)
+
+    def test_sync_feedback_already_running(self, shipday_client):
+        """sync_feedback returns already_running when _sync_state running=True."""
+        import app.routers.shipday_sync as module
+        module._sync_state["running"] = True
+        try:
+            resp = shipday_client.post("/sync-feedback", json={"days_back": 3})
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["status"] == "already_running"
+        finally:
+            module._sync_state["running"] = False
+
+    def test_sync_feedback_starts_background(self, shipday_client):
+        """sync_feedback with run_in_background=True returns 'started'."""
+        import app.routers.shipday_sync as module
+        module._sync_state["running"] = False
+        with patch("app.routers.shipday_sync._run_feedback_sync"):
+            resp = shipday_client.post("/sync-feedback", json={"days_back": 5})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "started"
+        assert data["days_back"] == 5
+
+    def test_sync_feedback_synchronous_mode(self, shipday_client):
+        """sync_feedback with run_in_background=False runs inline."""
+        import app.routers.shipday_sync as module
+        module._sync_state["running"] = False
+        with patch("app.routers.shipday_sync._run_feedback_sync") as mock_run:
+            resp = shipday_client.post(
+                "/sync-feedback",
+                json={"days_back": 3, "run_in_background": False}
+            )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "complete"
+        mock_run.assert_called_once_with(3, False)
+
+    def test_feedback_stats_returns_data(self, shipday_client):
+        """feedback_stats returns breakdown and recent_feedback."""
+        breakdown_rows = [
+            {"comm_type": "customer_feedback", "sentiment": "positive", "count": 5, "latest": None}
+        ]
+        recent_rows = [
+            {"id": 1, "shipday_order_id": "SD-1", "order_number": "ORD-1",
+             "content": "Great!", "sentiment": "positive", "occurred_at": None,
+             "email": "a@b.com", "full_name": "Ali Khan", "phone": "+14041234567"}
+        ]
+        cur = MagicMock()
+        cur.fetchall.side_effect = [breakdown_rows, recent_rows]
+
+        with patch("app.routers.shipday_sync.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = shipday_client.get("/feedback-stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "breakdown" in data
+        assert "recent_feedback" in data
+
+    def test_feedback_stats_empty(self, shipday_client):
+        """feedback_stats with empty DB returns empty lists."""
+        cur = MagicMock()
+        cur.fetchall.side_effect = [[], []]
+        with patch("app.routers.shipday_sync.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = shipday_client.get("/feedback-stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["breakdown"] == []
+        assert data["recent_feedback"] == []
+
+    def test_feedback_stats_db_error_returns_500(self, shipday_client):
+        """feedback_stats with DB error returns 500."""
+        with patch("app.routers.shipday_sync.get_cursor",
+                   side_effect=Exception("DB failure")):
+            resp = shipday_client.get("/feedback-stats")
+        assert resp.status_code == 500
+
+    def test_feedback_stats_serializes_datetimes(self, shipday_client):
+        """feedback_stats converts datetime objects to ISO strings."""
+        from datetime import datetime, timezone as tz
+        dt = datetime(2026, 1, 15, 10, 0, 0, tzinfo=tz.utc)
+        breakdown_rows = [
+            {"comm_type": "customer_feedback", "sentiment": "positive",
+             "count": 3, "latest": dt}   # datetime → triggers isoformat()
+        ]
+        recent_rows = [
+            {"id": 1, "shipday_order_id": "SD-1", "order_number": "ORD-1",
+             "content": "Good!", "sentiment": "positive", "occurred_at": dt,
+             "email": "a@b.com", "full_name": "Test User", "phone": "+14041234567"}
+        ]
+        cur = MagicMock()
+        cur.fetchall.side_effect = [breakdown_rows, recent_rows]
+
+        with patch("app.routers.shipday_sync.get_cursor",
+                   side_effect=lambda commit=False: _cursor_ctx(cur)):
+            resp = shipday_client.get("/feedback-stats")
+        assert resp.status_code == 200
+        data = resp.json()
+        # The datetime should have been serialized as a string
+        assert isinstance(data["breakdown"][0]["latest"], str)
