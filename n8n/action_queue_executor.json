@@ -793,70 +793,56 @@
       ]
     },
     "Route by Action Type": {
-      "send_sms": [
+      "main": [
         [
           {
             "node": "Send SMS via Telnyx",
             "type": "main",
             "index": 0
           }
-        ]
-      ],
-      "escalate_airtable": [
-        [
-          {
-            "node": "Create Airtable Escalation",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ],
-      "move_campaign": [
+        ],
         [
           {
             "node": "Move to Campaign (Instantly)",
             "type": "main",
             "index": 0
           }
-        ]
-      ],
-      "sync_airtable_task": [
+        ],
+        [
+          {
+            "node": "Create Airtable Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ],
         [
           {
             "node": "Create Airtable Field Sales Task",
             "type": "main",
             "index": 0
           }
-        ]
-      ],
-      "push_instantly_lead": [
+        ],
         [
           {
             "node": "Push Lead to Instantly Campaign",
             "type": "main",
             "index": 0
           }
-        ]
-      ],
-      "push_instantly_sequences": [
+        ],
         [
           {
             "node": "Push Sequences to Instantly",
             "type": "main",
             "index": 0
           }
-        ]
-      ],
-      "upload_google_drive": [
+        ],
         [
           {
             "node": "Download CSV for Drive",
             "type": "main",
             "index": 0
           }
-        ]
-      ],
-      "send_email_report": [
+        ],
         [
           {
             "node": "Send Email Report",
