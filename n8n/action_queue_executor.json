@@ -757,6 +757,12 @@
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",
         "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nODhwaXjVuf9ET7H",
+          "name": "DW Admin Secret"
+        }
       }
     },
     {
@@ -777,6 +783,12 @@
         "specifyBody": "json",
         "jsonBody": "={{ $json }}",
         "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "nODhwaXjVuf9ET7H",
+          "name": "DW Admin Secret"
+        }
       }
     }
   ],
