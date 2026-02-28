@@ -234,3 +234,89 @@ def read_google_doc(
     _check_admin_secret(x_admin_secret)
     from app.services.drive import read_doc
     return read_doc(doc_id)
+
+
+# ---------------------------------------------------------------------------
+# POST /api/internal/airtable/escalate
+# POST /api/internal/airtable/field-sales-task
+# ---------------------------------------------------------------------------
+import httpx as _httpx  # noqa: E402  (placed here to avoid import ordering issues)
+
+
+def _airtable_post(table_name: str, fields: dict, x_admin_secret: str | None) -> dict:
+    """Shared helper: POST one record to an Airtable table."""
+    _check_admin_secret(x_admin_secret)
+    api_key = os.environ.get("AIRTABLE_API_KEY", "").strip()
+    base_id = os.environ.get("AIRTABLE_BASE_ID", "appuy2VTIao6XVpIW").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="AIRTABLE_API_KEY not configured")
+    url = f"https://api.airtable.com/v0/{base_id}/{table_name}"
+    try:
+        resp = _httpx.post(
+            url,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"records": [{"fields": fields}]},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except _httpx.HTTPStatusError as e:
+        logger.error("Airtable %s error %s: %s", table_name, e.response.status_code, e.response.text[:300])
+        raise HTTPException(status_code=502, detail=f"Airtable error {e.response.status_code}: {e.response.text[:200]}")
+    except Exception as e:
+        logger.error("Airtable %s request failed: %s", table_name, e)
+        raise HTTPException(status_code=502, detail=f"Airtable request failed: {str(e)[:200]}")
+
+
+@router.post("/airtable/escalate")
+def airtable_escalate(payload: dict, x_admin_secret: str | None = Header(default=None)):
+    """
+    Create an escalation record in Airtable Field Sales Tasks table.
+    Called by n8n Action Queue Executor for escalate_airtable actions.
+    Body: the action_queue item JSON (id, contact_id, payload, first_name, last_name, phone, email, etc.)
+    """
+    p = payload.get("payload", {})
+    fields = {
+        "Customer Name": (
+            ((payload.get("first_name") or "") + " " + (payload.get("last_name") or "")).strip()
+            or p.get("customer_name", "Unknown")
+        ),
+        "Phone": payload.get("phone") or p.get("phone", ""),
+        "Email": payload.get("email") or "",
+        "Priority": "Hot" if p.get("urgency") == "high" else "Warm",
+        "Reason": (p.get("notes") or "Escalated by Orchestrator")[:2000],
+        "Suggested Action": (p.get("suggested_copy") or "")[:500],
+        "Status": "New",
+        "Action Type": "field_sales_call",
+        "Confidence Score": 0.9,
+    }
+    result = _airtable_post("Field%20Sales%20Tasks", fields, x_admin_secret)
+    logger.info("airtable/escalate: created record for contact_id=%s", payload.get("contact_id"))
+    return {"status": "ok", "airtable": result}
+
+
+@router.post("/airtable/field-sales-task")
+def airtable_field_sales_task(payload: dict, x_admin_secret: str | None = Header(default=None)):
+    """
+    Create a field sales task record in Airtable.
+    Called by n8n Action Queue Executor for sync_airtable_task actions.
+    Body: the action_queue item JSON.
+    """
+    p = payload.get("payload", {})
+    fields = {
+        "Customer Name": p.get("customer_name", ""),
+        "Phone": p.get("phone", ""),
+        "Email": p.get("email", ""),
+        "Priority": p.get("priority", "Warm"),
+        "Reason": (p.get("reason") or "")[:2000],
+        "Suggested Action": (p.get("suggested_action") or "")[:500],
+        "Action Type": p.get("action_type", ""),
+        "Lifecycle Stage": p.get("lifecycle_stage", ""),
+        "Total Orders": p.get("total_orders", 0),
+        "Last Order": p.get("last_order", ""),
+        "Postgres Opportunity ID": str(p.get("postgres_opportunity_id", "")),
+        "Status": "New",
+    }
+    result = _airtable_post("Field%20Sales%20Tasks", fields, x_admin_secret)
+    logger.info("airtable/field-sales-task: created record for contact_id=%s", payload.get("contact_id"))
+    return {"status": "ok", "airtable": result}
