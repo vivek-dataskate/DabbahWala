@@ -418,6 +418,30 @@ def _drain_campaign_queue() -> int:
     double-processed.  Skips placeholder emails and APP_TO_DIRECT (no Instantly
     campaign exists for that label).
     """
+    # Mark rows that can never be drained (no real email, or APP_TO_DIRECT) as failed
+    # so they don't accumulate as pending forever.
+    with get_cursor() as cur:
+        cur.execute("""
+            UPDATE campaign_queue cq
+            SET status = 'failed', executed_at = now()
+            WHERE cq.status = 'pending'
+              AND (
+                cq.to_campaign = 'APP_TO_DIRECT'
+                OR NOT EXISTS (
+                    SELECT 1 FROM contacts c
+                    WHERE c.id = cq.contact_id
+                      AND c.email IS NOT NULL
+                      AND c.email NOT LIKE '%@app.placeholder.local'
+                )
+              )
+        """)
+        skipped = cur.rowcount
+    if skipped:
+        logger.info(
+            "drain_campaign_queue: marked %d undrainable rows as failed (no real email or APP_TO_DIRECT)",
+            skipped,
+        )
+
     with get_cursor(commit=False) as cur:
         cur.execute("""
             SELECT cq.id AS queue_id, cq.to_campaign,
@@ -450,8 +474,14 @@ def _drain_campaign_queue() -> int:
                 )
             drained += 1
         else:
+            # Campaign not in routing table — mark failed so it doesn't loop forever
+            with get_cursor() as cur:
+                cur.execute(
+                    "UPDATE campaign_queue SET status='failed', executed_at=now() WHERE id=%s",
+                    (row['queue_id'],),
+                )
             logger.warning(
-                "drain_campaign_queue: no Instantly campaign for %s (contact_id=%s)",
+                "drain_campaign_queue: no Instantly campaign for %s (contact_id=%s) — marked failed",
                 row['to_campaign'], row['contact_id'],
             )
     if drained:
