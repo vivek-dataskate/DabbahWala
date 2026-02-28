@@ -6,7 +6,9 @@ from pathlib import Path
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, HTTPException
+import threading
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 from app.config import ANTHROPIC_API_KEY, INSTANTLY_API_KEY
@@ -965,8 +967,59 @@ def setup_instantly_campaigns():
     }
 
 
+def _do_bulk_push(contacts: list, activation_results: dict) -> None:
+    """Background worker that pushes contacts to Instantly. Runs in a thread."""
+    if not INSTANTLY_API_KEY:
+        logger.error("bulk-push-now background: INSTANTLY_API_KEY not set")
+        return
+
+    headers = {
+        "Authorization": f"Bearer {INSTANTLY_API_KEY}",
+        "Content-Type": "application/json",
+    }
+
+    pushed = 0
+    skipped = 0
+    failed = 0
+    errors: list[str] = []
+
+    for row in contacts:
+        email = row["email"]
+        campaign_id = row["instantly_campaign_id"]
+        try:
+            resp = httpx.post(
+                "https://api.instantly.ai/api/v2/leads",
+                headers=headers,
+                json={
+                    "email": email,
+                    "first_name": row["first_name"] or "",
+                    "last_name": row["last_name"] or "",
+                    "campaign_id": campaign_id,
+                    "skip_if_in_workspace": True,
+                },
+                timeout=15,
+            )
+            if resp.status_code in (200, 201):
+                pushed += 1
+            elif resp.status_code == 422:
+                skipped += 1
+            else:
+                failed += 1
+                if len(errors) < 5:
+                    errors.append(f"{email}: http {resp.status_code} {resp.text[:120]}")
+        except Exception as e:
+            failed += 1
+            if len(errors) < 5:
+                errors.append(f"{email}: {str(e)[:120]}")
+
+    logger.info(
+        "bulk-push-now: done — pushed=%d skipped=%d failed=%d errors=%s",
+        pushed, skipped, failed, errors,
+    )
+
+
 @router.post("/bulk-push-now")
-def bulk_push_now():
+def bulk_push_now(background_tasks: BackgroundTasks):
     """
     Immediately push all eligible contacts to their Instantly campaigns.
 
@@ -976,10 +1029,10 @@ def bulk_push_now():
       - Has a campaign_routing entry
       - last_order_at is NULL or more than 2 days ago (recently active customers excluded)
 
-    Pushes directly to Instantly API (does NOT use action_queue — bypasses the queue
-    so delivery is immediate regardless of the n8n 30-min polling window).
+    Pushes directly to Instantly API in a background thread (does NOT use action_queue).
     Uses skip_if_in_workspace=true so re-running is safe and idempotent.
     Also activates all 6 DW campaigns if they are inactive.
+    Returns immediately — results are logged to Render logs.
     """
     if not INSTANTLY_API_KEY:
         raise HTTPException(status_code=503, detail="INSTANTLY_API_KEY not configured")
@@ -989,7 +1042,7 @@ def bulk_push_now():
         "Content-Type": "application/json",
     }
 
-    # 1. Activate any inactive DW campaigns
+    # 1. Activate any inactive DW campaigns (fast, just 6 calls)
     routing_rows = _get_routing_rows()
     activation_results: dict = {}
     for row in routing_rows:
@@ -1032,54 +1085,14 @@ def bulk_push_now():
         """)
         contacts = cur.fetchall()
 
-    logger.info("bulk-push-now: %d eligible contacts to push to Instantly", len(contacts))
+    logger.info("bulk-push-now: queued %d eligible contacts for background push", len(contacts))
 
-    pushed = 0
-    skipped = 0
-    failed = 0
-    errors: list[str] = []
-
-    for row in contacts:
-        email = row["email"]
-        campaign_id = row["instantly_campaign_id"]
-        try:
-            resp = httpx.post(
-                "https://api.instantly.ai/api/v2/leads",
-                headers=headers,
-                json={
-                    "email": email,
-                    "first_name": row["first_name"] or "",
-                    "last_name": row["last_name"] or "",
-                    "campaign_id": campaign_id,
-                    "skip_if_in_workspace": True,
-                },
-                timeout=15,
-            )
-            if resp.status_code in (200, 201):
-                pushed += 1
-            elif resp.status_code == 422:
-                # Already in workspace — that's fine
-                skipped += 1
-            else:
-                failed += 1
-                if len(errors) < 5:
-                    errors.append(f"{email}: http {resp.status_code} {resp.text[:120]}")
-        except Exception as e:
-            failed += 1
-            if len(errors) < 5:
-                errors.append(f"{email}: {str(e)[:120]}")
-
-    logger.info(
-        "bulk-push-now: done — pushed=%d skipped=%d failed=%d",
-        pushed, skipped, failed,
-    )
+    # 3. Run the actual Instantly API calls in a background thread so we don't time out
+    background_tasks.add_task(_do_bulk_push, contacts, activation_results)
 
     return {
-        "status": "ok",
+        "status": "started",
         "total_eligible": len(contacts),
-        "pushed": pushed,
-        "already_in_workspace": skipped,
-        "failed": failed,
-        "sample_errors": errors,
         "campaign_activations": activation_results,
+        "note": "Push is running in background. Check Render logs for pushed/skipped/failed counts.",
     }
