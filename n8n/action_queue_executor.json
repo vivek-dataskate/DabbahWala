@@ -373,9 +373,9 @@
           ]
         },
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ {\"records\": [{\"fields\": {\"Customer Name\": ($json.first_name || \"\") + \" \" + ($json.last_name || \"\"),\"Phone\": $json.phone || \"\",\"Email\": $json.email || \"\",\"Priority\": ($json.payload && $json.payload.urgency === \"high\") ? \"Hot\" : \"Warm\",\"Reason\": ($json.payload && $json.payload.notes) ? $json.payload.notes : \"Escalated by Orchestrator Agent\",\"Suggested Action\": ($json.payload && $json.payload.suggested_copy) ? $json.payload.suggested_copy : \"\",\"Status\": \"New\",\"Action Type\": \"field_sales_call\",\"Confidence Score\": 0.9}}]} }}",
-        "options": {}
+        "specifyBody": "raw",
+        "options": {},
+        "rawBody": "={{ $json._body }}"
       }
     },
     {
@@ -493,9 +493,9 @@
           ]
         },
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ {\"records\": [{\"fields\": {\"Customer Name\": ($json.payload && $json.payload.customer_name) ? $json.payload.customer_name : \"\",\"Phone\": ($json.payload && $json.payload.phone) ? $json.payload.phone : \"\",\"Email\": ($json.payload && $json.payload.email) ? $json.payload.email : \"\",\"Priority\": ($json.payload && $json.payload.priority) ? $json.payload.priority : \"Warm\",\"Reason\": ($json.payload && $json.payload.reason) ? $json.payload.reason : \"\",\"Suggested Action\": ($json.payload && $json.payload.suggested_action) ? $json.payload.suggested_action : \"\",\"Action Type\": ($json.payload && $json.payload.action_type) ? $json.payload.action_type : \"\",\"Lifecycle Stage\": ($json.payload && $json.payload.lifecycle_stage) ? $json.payload.lifecycle_stage : \"\",\"Total Orders\": ($json.payload && $json.payload.total_orders) ? $json.payload.total_orders : 0,\"Last Order\": ($json.payload && $json.payload.last_order) ? $json.payload.last_order : \"\",\"Postgres Opportunity ID\": ($json.payload && $json.payload.postgres_opportunity_id) ? $json.payload.postgres_opportunity_id : \"\",\"Status\": \"New\"}}]} }}",
-        "options": {}
+        "specifyBody": "raw",
+        "options": {},
+        "rawBody": "={{ $json._body }}"
       }
     },
     {
@@ -738,6 +738,32 @@
           "name": "DW Admin Secret"
         }
       }
+    },
+    {
+      "id": "build-escalation-body",
+      "name": "Build Escalation Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        220
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst payload = item.payload || {};\nconst body = JSON.stringify({\n  records: [{\n    fields: {\n      'Customer Name': ((item.first_name || '') + ' ' + (item.last_name || '')).trim() || 'Unknown',\n      'Phone': item.phone || '',\n      'Email': item.email || '',\n      'Priority': payload.urgency === 'high' ? 'Hot' : 'Warm',\n      'Reason': (payload.notes || 'Escalated by Orchestrator').substring(0, 2000),\n      'Suggested Action': (payload.suggested_copy || '').substring(0, 500),\n      'Status': 'New',\n      'Action Type': 'field_sales_call',\n      'Confidence Score': 0.9\n    }\n  }]\n});\nreturn [{ json: { ...item, _body: body } }];"
+      }
+    },
+    {
+      "id": "build-field-sales-body",
+      "name": "Build Field Sales Body",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1400,
+        440
+      ],
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst payload = item.payload || {};\nconst body = JSON.stringify({\n  records: [{\n    fields: {\n      'Customer Name': payload.customer_name || '',\n      'Phone': payload.phone || '',\n      'Email': payload.email || '',\n      'Priority': payload.priority || 'Warm',\n      'Reason': (payload.reason || '').substring(0, 2000),\n      'Suggested Action': (payload.suggested_action || '').substring(0, 500),\n      'Action Type': payload.action_type || '',\n      'Lifecycle Stage': payload.lifecycle_stage || '',\n      'Total Orders': payload.total_orders || 0,\n      'Last Order': payload.last_order || '',\n      'Postgres Opportunity ID': payload.postgres_opportunity_id || '',\n      'Status': 'New'\n    }\n  }]\n});\nreturn [{ json: { ...item, _body: body } }];"
+      }
     }
   ],
   "connections": {
@@ -810,14 +836,14 @@
         ],
         [
           {
-            "node": "Create Airtable Escalation",
+            "node": "Build Escalation Body",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Create Airtable Field Sales Task",
+            "node": "Build Field Sales Body",
             "type": "main",
             "index": 0
           }
@@ -989,6 +1015,28 @@
         [
           {
             "node": "Fetch Pending Actions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Escalation Body": {
+      "main": [
+        [
+          {
+            "node": "Create Airtable Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Field Sales Body": {
+      "main": [
+        [
+          {
+            "node": "Create Airtable Field Sales Task",
             "type": "main",
             "index": 0
           }
