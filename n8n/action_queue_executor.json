@@ -742,27 +742,41 @@
     {
       "id": "escalate-to-airtable",
       "name": "Escalate to Airtable",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1400,
         220
       ],
       "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst payload = item.payload || {};\nconst creds = $('Get Credentials').first().json;\n\nconst airtableBody = {\n  records: [{\n    fields: {\n      'Customer Name': ((item.first_name || '') + ' ' + (item.last_name || '')).trim() || 'Unknown',\n      'Phone': item.phone || payload.phone || '',\n      'Email': item.email || '',\n      'Priority': payload.urgency === 'high' ? 'Hot' : 'Warm',\n      'Reason': (payload.notes || 'Escalated by Orchestrator').substring(0, 2000),\n      'Suggested Action': (payload.suggested_copy || '').substring(0, 500),\n      'Status': 'New',\n      'Action Type': 'field_sales_call',\n      'Confidence Score': 0.9\n    }\n  }]\n};\n\nconst result = await $helpers.httpRequest({\n  method: 'POST',\n  url: `https://api.airtable.com/v0/${creds.AIRTABLE_BASE_ID}/Field%20Sales%20Tasks`,\n  headers: {\n    'Authorization': `Bearer ${creds.AIRTABLE_API_KEY}`,\n    'Content-Type': 'application/json'\n  },\n  body: airtableBody,\n});\n\nreturn [{ json: { ...item, airtable_result: result } }];"
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/internal/airtable/escalate",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
       }
     },
     {
       "id": "field-sales-to-airtable",
       "name": "Field Sales Task to Airtable",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
       "position": [
         1400,
         440
       ],
       "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst payload = item.payload || {};\nconst creds = $('Get Credentials').first().json;\n\nconst airtableBody = {\n  records: [{\n    fields: {\n      'Customer Name': payload.customer_name || '',\n      'Phone': payload.phone || '',\n      'Email': payload.email || '',\n      'Priority': payload.priority || 'Warm',\n      'Reason': (payload.reason || '').substring(0, 2000),\n      'Suggested Action': (payload.suggested_action || '').substring(0, 500),\n      'Action Type': payload.action_type || '',\n      'Lifecycle Stage': payload.lifecycle_stage || '',\n      'Total Orders': payload.total_orders || 0,\n      'Last Order': payload.last_order || '',\n      'Postgres Opportunity ID': payload.postgres_opportunity_id || '',\n      'Status': 'New'\n    }\n  }]\n};\n\nconst result = await $helpers.httpRequest({\n  method: 'POST',\n  url: `https://api.airtable.com/v0/${creds.AIRTABLE_BASE_ID}/Field%20Sales%20Tasks`,\n  headers: {\n    'Authorization': `Bearer ${creds.AIRTABLE_API_KEY}`,\n    'Content-Type': 'application/json'\n  },\n  body: airtableBody,\n});\n\nreturn [{ json: { ...item, airtable_result: result } }];"
+        "method": "POST",
+        "url": "=https://dabbahwala-latest.onrender.com/api/internal/airtable/field-sales-task",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
       }
     }
   ],
