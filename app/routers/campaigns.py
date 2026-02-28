@@ -16,6 +16,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class PushLeadRequest(BaseModel):
+    email: str
+    first_name: str
+    last_name: str
+    phone: str
+    campaign_name: str
+    contact_id: Optional[int] = None
+
+
+class PushLogEntry(BaseModel):
+    queue_id: Optional[int] = None
+    email: str
+    to_campaign: str
+    success: bool
+    status_code: Optional[int] = None
+    error_message: Optional[str] = None
+    response_body: Optional[str] = None
 
 
 @router.get("/active-contacts")
@@ -332,25 +349,6 @@ def _load_campaign_json(campaign_name: str) -> tuple[dict, dict]:
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Template file missing for {campaign_name}")
     return row, json.loads(path.read_text())
-
-
-class PushLeadRequest(BaseModel):
-    email: str
-    first_name: str
-    last_name: str
-    phone: str
-    campaign_name: str
-    contact_id: Optional[int] = None
-
-
-class PushLogEntry(BaseModel):
-    queue_id: Optional[int] = None
-    email: str
-    to_campaign: str
-    success: bool
-    status_code: Optional[int] = None
-    error_message: Optional[str] = None
-    response_body: Optional[str] = None
 
 
 class TemplateUpdate(BaseModel):
