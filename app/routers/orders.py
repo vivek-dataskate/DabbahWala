@@ -384,7 +384,6 @@ def _run_import_pipeline(api_key: str, days_back: int, max_pages: int) -> None:
       3. Refresh engagement rollups (evidence layer)
       4. Run the Claude agent cycle for every active contact
     """
-    from app.routers.shipday_sync import _run_feedback_sync
     from app.routers.agents import _run_full_cycle
 
     global _pipeline_state

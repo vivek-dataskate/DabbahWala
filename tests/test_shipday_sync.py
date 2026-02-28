@@ -138,7 +138,7 @@ class TestClassifySentiment:
 class TestFetchOrderDetail:
     def setup_method(self):
         # Import lazily so monkeypatching has already happened
-        from app.routers.shipday_sync import _fetch_order_detail
+        from app.routers.orders import _fetch_order_detail
         self._fn = _fetch_order_detail
 
     def test_returns_order_on_200(self):
@@ -208,11 +208,11 @@ class TestFetchOrderDetail:
 
 class TestStoreOrderCommunications:
     def setup_method(self):
-        from app.routers.shipday_sync import _store_order_communications
+        from app.routers.orders import _store_order_communications
         self._fn = _store_order_communications
 
     def _make_db_patch(self, cur):
-        return patch("app.routers.shipday_sync.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur))
+        return patch("app.routers.orders.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur))
 
     def test_stores_feedback_instruction_and_pod(self):
         cur = _make_cursor()
@@ -270,11 +270,11 @@ class TestStoreOrderCommunications:
 
 class TestCreateFeedbackOpportunity:
     def setup_method(self):
-        from app.routers.shipday_sync import _create_feedback_opportunity
+        from app.routers.orders import _create_feedback_opportunity
         self._fn = _create_feedback_opportunity
 
     def _make_db_patch(self, cur):
-        return patch("app.routers.shipday_sync.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur))
+        return patch("app.routers.orders.get_cursor", side_effect=lambda commit=False: _cursor_ctx(cur))
 
     def test_creates_hot_opportunity_for_negative(self):
         cur = _make_cursor()
@@ -318,8 +318,8 @@ class TestCreateFeedbackOpportunity:
 class TestSyncFeedbackEndpoint:
     def test_starts_background_sync_by_default(self, client):
         """Default run_in_background=True → returns 'started' immediately."""
-        with patch("app.routers.shipday_sync._run_feedback_sync") as mock_run, \
-             patch("app.routers.shipday_sync._sync_state", {"running": False}):
+        with patch("app.routers.orders._run_feedback_sync") as mock_run, \
+             patch("app.routers.orders._feedback_sync_state", {"running": False}):
             resp = client.post("/api/shipday/sync-feedback", json={"days_back": 3})
 
         assert resp.status_code == 200
@@ -334,7 +334,7 @@ class TestSyncFeedbackEndpoint:
             "started_at": "2026-02-20T10:00:00Z",
             "orders_checked": 5,
         }
-        with patch("app.routers.shipday_sync._sync_state", running_state):
+        with patch("app.routers.orders._feedback_sync_state", running_state):
             resp = client.post("/api/shipday/sync-feedback", json={"days_back": 3})
 
         assert resp.status_code == 200
@@ -342,8 +342,8 @@ class TestSyncFeedbackEndpoint:
 
     def test_synchronous_mode_blocks_and_returns_complete(self, client):
         """run_in_background=False → sync runs inline, returns complete."""
-        with patch("app.routers.shipday_sync._run_feedback_sync") as mock_run, \
-             patch("app.routers.shipday_sync._sync_state", {"running": False, "orders_checked": 2}):
+        with patch("app.routers.orders._run_feedback_sync") as mock_run, \
+             patch("app.routers.orders._feedback_sync_state", {"running": False, "orders_checked": 2}):
             resp = client.post(
                 "/api/shipday/sync-feedback",
                 json={"days_back": 7, "run_in_background": False},
@@ -352,23 +352,23 @@ class TestSyncFeedbackEndpoint:
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "complete"
-        mock_run.assert_called_once_with(7)
+        mock_run.assert_called_once_with(7, False)
 
     def test_missing_api_key_during_background_run(self, monkeypatch):
         """If SHIPDAY_API_KEY is not set, the background worker logs and exits cleanly."""
         import importlib
-        import app.routers.shipday_sync as module
+        import app.routers.orders as module
 
         monkeypatch.delenv("SHIPDAY_API_KEY", raising=False)
         monkeypatch.delenv("SHIPDAY_KEY", raising=False)
 
         # Reset state
-        module._sync_state["running"] = False
+        module._feedback_sync_state["running"] = False
 
         # Call _run_feedback_sync directly (no HTTP, no DB needed)
         module._run_feedback_sync(days_back=1)
 
-        assert module._sync_state["running"] is False
+        assert module._feedback_sync_state["running"] is False
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -394,7 +394,7 @@ class TestFeedbackStatsEndpoint:
         cur.fetchall.side_effect = [breakdown_rows, recent_rows]
 
         with patch(
-            "app.routers.shipday_sync.get_cursor",
+            "app.routers.orders.get_cursor",
             side_effect=lambda commit=False: _cursor_ctx(cur),
         ):
             resp = client.get("/api/shipday/feedback-stats")
@@ -413,7 +413,7 @@ class TestFeedbackStatsEndpoint:
         cur.fetchall.side_effect = [[], []]
 
         with patch(
-            "app.routers.shipday_sync.get_cursor",
+            "app.routers.orders.get_cursor",
             side_effect=lambda commit=False: _cursor_ctx(cur),
         ):
             resp = client.get("/api/shipday/feedback-stats")
@@ -425,7 +425,7 @@ class TestFeedbackStatsEndpoint:
 
     def test_returns_500_on_db_error(self, client):
         with patch(
-            "app.routers.shipday_sync.get_cursor",
+            "app.routers.orders.get_cursor",
             side_effect=Exception("connection refused"),
         ):
             resp = client.get("/api/shipday/feedback-stats")
@@ -456,9 +456,9 @@ class TestRunFeedbackSync:
         return [row1, row2]
 
     def test_syncs_two_orders_with_positive_feedback(self):
-        import app.routers.shipday_sync as module
+        import app.routers.orders as module
 
-        module._sync_state["running"] = False
+        module._feedback_sync_state["running"] = False
 
         pending = self._pending_rows()
 
@@ -491,22 +491,22 @@ class TestRunFeedbackSync:
             "proofOfDelivery": {},
         }
 
-        with patch("app.routers.shipday_sync.get_cursor", side_effect=_multi_cursor), \
-             patch("app.routers.shipday_sync._fetch_order_detail", return_value=positive_order), \
-             patch("app.routers.shipday_sync._store_order_communications",
+        with patch("app.routers.orders.get_cursor", side_effect=_multi_cursor), \
+             patch("app.routers.orders._fetch_order_detail", return_value=positive_order), \
+             patch("app.routers.orders._store_order_communications",
                    return_value=["customer_feedback"]), \
-             patch("app.routers.shipday_sync._create_feedback_opportunity") as mock_opp:
+             patch("app.routers.orders._create_feedback_opportunity") as mock_opp:
             module._run_feedback_sync(days_back=3)
 
-        assert module._sync_state["running"] is False
-        assert module._sync_state["orders_checked"] == 2
+        assert module._feedback_sync_state["running"] is False
+        assert module._feedback_sync_state["orders_checked"] == 2
         # Both orders had feedback → opportunities created for each
         assert mock_opp.call_count == 2
 
     def test_handles_fetch_failure_gracefully(self):
-        import app.routers.shipday_sync as module
+        import app.routers.orders as module
 
-        module._sync_state["running"] = False
+        module._feedback_sync_state["running"] = False
 
         pending = [{"shipday_order_id": "SD-FAIL", "contact_id": 10, "actual_delivery": None}]
 
@@ -516,18 +516,18 @@ class TestRunFeedbackSync:
             cur.fetchall.return_value = pending
             yield cur
 
-        with patch("app.routers.shipday_sync.get_cursor", side_effect=_multi_cursor), \
-             patch("app.routers.shipday_sync._fetch_order_detail", return_value=None):
+        with patch("app.routers.orders.get_cursor", side_effect=_multi_cursor), \
+             patch("app.routers.orders._fetch_order_detail", return_value=None):
             module._run_feedback_sync(days_back=1)
 
-        assert module._sync_state["running"] is False
-        assert module._sync_state["errors"] == 0       # None-return is not an error
-        assert module._sync_state["orders_with_comms"] == 0
+        assert module._feedback_sync_state["running"] is False
+        assert module._feedback_sync_state["errors"] == 0       # None-return is not an error
+        assert module._feedback_sync_state["orders_with_comms"] == 0
 
     def test_increments_error_count_on_store_exception(self):
-        import app.routers.shipday_sync as module
+        import app.routers.orders as module
 
-        module._sync_state["running"] = False
+        module._feedback_sync_state["running"] = False
 
         pending = [{"shipday_order_id": "SD-ERR", "contact_id": 11, "actual_delivery": None}]
 
@@ -537,11 +537,11 @@ class TestRunFeedbackSync:
             cur.fetchall.return_value = pending
             yield cur
 
-        with patch("app.routers.shipday_sync.get_cursor", side_effect=_multi_cursor), \
-             patch("app.routers.shipday_sync._fetch_order_detail", return_value={"orderId": "SD-ERR", "feedback": "ok"}), \
-             patch("app.routers.shipday_sync._store_order_communications",
+        with patch("app.routers.orders.get_cursor", side_effect=_multi_cursor), \
+             patch("app.routers.orders._fetch_order_detail", return_value={"orderId": "SD-ERR", "feedback": "ok"}), \
+             patch("app.routers.orders._store_order_communications",
                    side_effect=Exception("DB write failed")):
             module._run_feedback_sync(days_back=1)
 
-        assert module._sync_state["running"] is False
-        assert module._sync_state["errors"] == 1
+        assert module._feedback_sync_state["running"] is False
+        assert module._feedback_sync_state["errors"] == 1
