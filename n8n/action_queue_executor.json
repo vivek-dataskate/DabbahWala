@@ -79,7 +79,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// n8n HTTP Request already splits the JSON array into individual items.\n// Each item arriving here is one action object — just pass them through.\nreturn $input.all().map(item => ({ json: item.json }));"
+        "jsCode": "// n8n HTTP Request already splits the JSON array into individual items.\n// Each item arriving here is one action object \u2014 just pass them through.\nreturn $input.all().map(item => ({ json: item.json }));"
       },
       "id": "split-actions",
       "name": "Split Actions",
@@ -458,7 +458,7 @@
     {
       "parameters": {},
       "id": "no-actions",
-      "name": "No Actions — Skip",
+      "name": "No Actions \u2014 Skip",
       "type": "n8n-nodes-base.noOp",
       "typeVersion": 1,
       "position": [
@@ -740,8 +740,8 @@
       }
     },
     {
-      "id": "build-escalation-body",
-      "name": "Build Escalation Body",
+      "id": "escalate-to-airtable",
+      "name": "Escalate to Airtable",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -749,12 +749,12 @@
         220
       ],
       "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst payload = item.payload || {};\nconst body = JSON.stringify({\n  records: [{\n    fields: {\n      'Customer Name': ((item.first_name || '') + ' ' + (item.last_name || '')).trim() || 'Unknown',\n      'Phone': item.phone || '',\n      'Email': item.email || '',\n      'Priority': payload.urgency === 'high' ? 'Hot' : 'Warm',\n      'Reason': (payload.notes || 'Escalated by Orchestrator').substring(0, 2000),\n      'Suggested Action': (payload.suggested_copy || '').substring(0, 500),\n      'Status': 'New',\n      'Action Type': 'field_sales_call',\n      'Confidence Score': 0.9\n    }\n  }]\n});\nreturn [{ json: { ...item, _body: body } }];"
+        "jsCode": "const item = $input.first().json;\nconst payload = item.payload || {};\nconst creds = $('Get Credentials').first().json;\n\nconst airtableBody = {\n  records: [{\n    fields: {\n      'Customer Name': ((item.first_name || '') + ' ' + (item.last_name || '')).trim() || 'Unknown',\n      'Phone': item.phone || payload.phone || '',\n      'Email': item.email || '',\n      'Priority': payload.urgency === 'high' ? 'Hot' : 'Warm',\n      'Reason': (payload.notes || 'Escalated by Orchestrator').substring(0, 2000),\n      'Suggested Action': (payload.suggested_copy || '').substring(0, 500),\n      'Status': 'New',\n      'Action Type': 'field_sales_call',\n      'Confidence Score': 0.9\n    }\n  }]\n};\n\nconst result = await $helpers.httpRequest({\n  method: 'POST',\n  url: `https://api.airtable.com/v0/${creds.AIRTABLE_BASE_ID}/Field%20Sales%20Tasks`,\n  headers: {\n    'Authorization': `Bearer ${creds.AIRTABLE_API_KEY}`,\n    'Content-Type': 'application/json'\n  },\n  body: airtableBody,\n});\n\nreturn [{ json: { ...item, airtable_result: result } }];"
       }
     },
     {
-      "id": "build-field-sales-body",
-      "name": "Build Field Sales Body",
+      "id": "field-sales-to-airtable",
+      "name": "Field Sales Task to Airtable",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
@@ -762,7 +762,7 @@
         440
       ],
       "parameters": {
-        "jsCode": "const item = $input.first().json;\nconst payload = item.payload || {};\nconst body = JSON.stringify({\n  records: [{\n    fields: {\n      'Customer Name': payload.customer_name || '',\n      'Phone': payload.phone || '',\n      'Email': payload.email || '',\n      'Priority': payload.priority || 'Warm',\n      'Reason': (payload.reason || '').substring(0, 2000),\n      'Suggested Action': (payload.suggested_action || '').substring(0, 500),\n      'Action Type': payload.action_type || '',\n      'Lifecycle Stage': payload.lifecycle_stage || '',\n      'Total Orders': payload.total_orders || 0,\n      'Last Order': payload.last_order || '',\n      'Postgres Opportunity ID': payload.postgres_opportunity_id || '',\n      'Status': 'New'\n    }\n  }]\n});\nreturn [{ json: { ...item, _body: body } }];"
+        "jsCode": "const item = $input.first().json;\nconst payload = item.payload || {};\nconst creds = $('Get Credentials').first().json;\n\nconst airtableBody = {\n  records: [{\n    fields: {\n      'Customer Name': payload.customer_name || '',\n      'Phone': payload.phone || '',\n      'Email': payload.email || '',\n      'Priority': payload.priority || 'Warm',\n      'Reason': (payload.reason || '').substring(0, 2000),\n      'Suggested Action': (payload.suggested_action || '').substring(0, 500),\n      'Action Type': payload.action_type || '',\n      'Lifecycle Stage': payload.lifecycle_stage || '',\n      'Total Orders': payload.total_orders || 0,\n      'Last Order': payload.last_order || '',\n      'Postgres Opportunity ID': payload.postgres_opportunity_id || '',\n      'Status': 'New'\n    }\n  }]\n};\n\nconst result = await $helpers.httpRequest({\n  method: 'POST',\n  url: `https://api.airtable.com/v0/${creds.AIRTABLE_BASE_ID}/Field%20Sales%20Tasks`,\n  headers: {\n    'Authorization': `Bearer ${creds.AIRTABLE_API_KEY}`,\n    'Content-Type': 'application/json'\n  },\n  body: airtableBody,\n});\n\nreturn [{ json: { ...item, airtable_result: result } }];"
       }
     }
   ],
@@ -800,7 +800,7 @@
         ],
         [
           {
-            "node": "No Actions — Skip",
+            "node": "No Actions \u2014 Skip",
             "type": "main",
             "index": 0
           }
@@ -836,14 +836,14 @@
         ],
         [
           {
-            "node": "Build Escalation Body",
+            "node": "Escalate to Airtable",
             "type": "main",
             "index": 0
           }
         ],
         [
           {
-            "node": "Build Field Sales Body",
+            "node": "Field Sales Task to Airtable",
             "type": "main",
             "index": 0
           }
@@ -900,33 +900,11 @@
         ]
       ]
     },
-    "Create Airtable Escalation": {
-      "main": [
-        [
-          {
-            "node": "Mark Escalation Done",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Move to Campaign (Instantly)": {
       "main": [
         [
           {
             "node": "Mark Campaign Done",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Create Airtable Field Sales Task": {
-      "main": [
-        [
-          {
-            "node": "Mark Airtable Task Done",
             "type": "main",
             "index": 0
           }
@@ -1021,22 +999,22 @@
         ]
       ]
     },
-    "Build Escalation Body": {
+    "Escalate to Airtable": {
       "main": [
         [
           {
-            "node": "Create Airtable Escalation",
+            "node": "Mark Escalation Done",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Build Field Sales Body": {
+    "Field Sales Task to Airtable": {
       "main": [
         [
           {
-            "node": "Create Airtable Field Sales Task",
+            "node": "Mark Airtable Task Done",
             "type": "main",
             "index": 0
           }
