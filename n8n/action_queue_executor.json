@@ -374,7 +374,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\"records\": [{\"fields\": {\"Customer Name\": ($json.first_name || '') + ' ' + ($json.last_name || ''), \"Phone\": $json.phone || '', \"Email\": $json.email || '', \"Priority\": (($json.payload?.urgency || 'medium') === 'high') ? 'Hot' : 'Warm', \"Reason\": $json.payload?.notes || 'Escalated by Orchestrator Agent', \"Suggested Action\": $json.payload?.suggested_copy || '', \"Status\": \"New\", \"Action Type\": \"field_sales_call\", \"Confidence Score\": 0.9}}]}) }}",
+        "jsonBody": "={{ {\"records\": [{\"fields\": {\"Customer Name\": ($json.first_name || \"\") + \" \" + ($json.last_name || \"\"),\"Phone\": $json.phone || \"\",\"Email\": $json.email || \"\",\"Priority\": ($json.payload && $json.payload.urgency === \"high\") ? \"Hot\" : \"Warm\",\"Reason\": ($json.payload && $json.payload.notes) ? $json.payload.notes : \"Escalated by Orchestrator Agent\",\"Suggested Action\": ($json.payload && $json.payload.suggested_copy) ? $json.payload.suggested_copy : \"\",\"Status\": \"New\",\"Action Type\": \"field_sales_call\",\"Confidence Score\": 0.9}}]} }}",
         "options": {}
       }
     },
@@ -494,7 +494,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({\"records\": [{\"fields\": {\"Customer Name\": $json.payload?.customer_name || '', \"Phone\": $json.payload?.phone || '', \"Email\": $json.payload?.email || '', \"Priority\": $json.payload?.priority || 'Warm', \"Reason\": $json.payload?.reason || '', \"Suggested Action\": $json.payload?.suggested_action || '', \"Action Type\": $json.payload?.action_type || '', \"Lifecycle Stage\": $json.payload?.lifecycle_stage || '', \"Total Orders\": $json.payload?.total_orders || 0, \"Last Order\": $json.payload?.last_order || '', \"Postgres Opportunity ID\": $json.payload?.postgres_opportunity_id || '', \"Status\": \"New\"}}]}) }}",
+        "jsonBody": "={{ {\"records\": [{\"fields\": {\"Customer Name\": ($json.payload && $json.payload.customer_name) ? $json.payload.customer_name : \"\",\"Phone\": ($json.payload && $json.payload.phone) ? $json.payload.phone : \"\",\"Email\": ($json.payload && $json.payload.email) ? $json.payload.email : \"\",\"Priority\": ($json.payload && $json.payload.priority) ? $json.payload.priority : \"Warm\",\"Reason\": ($json.payload && $json.payload.reason) ? $json.payload.reason : \"\",\"Suggested Action\": ($json.payload && $json.payload.suggested_action) ? $json.payload.suggested_action : \"\",\"Action Type\": ($json.payload && $json.payload.action_type) ? $json.payload.action_type : \"\",\"Lifecycle Stage\": ($json.payload && $json.payload.lifecycle_stage) ? $json.payload.lifecycle_stage : \"\",\"Total Orders\": ($json.payload && $json.payload.total_orders) ? $json.payload.total_orders : 0,\"Last Order\": ($json.payload && $json.payload.last_order) ? $json.payload.last_order : \"\",\"Postgres Opportunity ID\": ($json.payload && $json.payload.postgres_opportunity_id) ? $json.payload.postgres_opportunity_id : \"\",\"Status\": \"New\"}}]} }}",
         "options": {}
       }
     },
