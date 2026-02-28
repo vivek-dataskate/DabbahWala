@@ -287,8 +287,6 @@ def airtable_escalate(payload: dict, x_admin_secret: str | None = Header(default
         "Reason": (p.get("notes") or "Escalated by Orchestrator")[:2000],
         "Suggested Action": (p.get("suggested_copy") or "")[:500],
         "Status": "New",
-        "Action Type": "field_sales_call",
-        "Confidence Score": 0.9,
     }
     result = _airtable_post("Field%20Sales%20Tasks", fields, x_admin_secret)
     logger.info("airtable/escalate: created record for contact_id=%s", payload.get("contact_id"))
@@ -310,11 +308,6 @@ def airtable_field_sales_task(payload: dict, x_admin_secret: str | None = Header
         "Priority": p.get("priority", "Warm"),
         "Reason": (p.get("reason") or "")[:2000],
         "Suggested Action": (p.get("suggested_action") or "")[:500],
-        "Action Type": p.get("action_type", ""),
-        "Lifecycle Stage": p.get("lifecycle_stage", ""),
-        "Total Orders": p.get("total_orders", 0),
-        "Last Order": p.get("last_order", ""),
-        "Postgres Opportunity ID": str(p.get("postgres_opportunity_id", "")),
         "Status": "New",
     }
     result = _airtable_post("Field%20Sales%20Tasks", fields, x_admin_secret)
