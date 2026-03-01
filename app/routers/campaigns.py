@@ -103,6 +103,30 @@ def mark_executed(queue_id: int):
         return {"status": "ok"}
 
 
+@router.post("/bulk-executed")
+def bulk_executed(body: dict):
+    """
+    Mark a batch of action_queue push_instantly_lead rows as done.
+    Called by the lifecycle_cycle_cron n8n workflow after processing each batch.
+    Accepts {queue_ids: [int, ...]}.
+    """
+    queue_ids = body.get("queue_ids") or []
+    if not queue_ids:
+        return {"marked": 0}
+    with get_cursor() as cur:
+        cur.execute(
+            """
+            UPDATE action_queue
+            SET status = 'done', executed_at = now()
+            WHERE id = ANY(%s)
+              AND action_type = 'push_instantly_lead'
+            """,
+            (queue_ids,),
+        )
+        marked = cur.rowcount
+    return {"marked": marked}
+
+
 @router.post("/push-lead")
 def push_lead(body: PushLeadRequest):
     """

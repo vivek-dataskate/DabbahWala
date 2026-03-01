@@ -38,6 +38,7 @@ Validates that all required tables, stored functions, and seed data are present.
 | `agent_tables_exist` | All 5 agent pipeline tables present |
 | `stored_functions_exist` | 5 required stored functions exist |
 | `campaign_routing_seeded` | `campaign_routing` table has ≥5 rows |
+| `bulk_executed_endpoint` | `POST /api/campaigns/bulk-executed` with empty list → 200 `{"marked": 0}` |
 | `n8n_workflow_count` | n8n instance has ≥22 workflows |
 
 **Core tables checked:** `contacts`, `events`, `orders`, `order_items`, `telnyx_messages`, `telnyx_calls`, `delivery_status`, `engagement_rollups`, `menu_catalog`, `menu_catalog_history`, `opportunities`
