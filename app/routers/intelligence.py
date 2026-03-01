@@ -25,7 +25,6 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from app.db import get_cursor
-from app.routers.campaigns import push_lead_to_instantly
 
 logger = logging.getLogger(__name__)
 
@@ -319,16 +318,9 @@ def _phase_route(cur, signals: dict) -> tuple:
             'priority': 'hot', 'reason': 'Reorder intent in transcript',
         })
 
-    # Route 5: App customers -> push into their lifecycle campaign + SMS
+    # Route 5: App customers -> create SMS opportunity
+    # (evaluate_rules() handles the Instantly campaign push via action_queue when lifecycle changes)
     for contact in signals.get('app_customers_for_conversion', [])[:25]:
-        push_lead_to_instantly(
-            email=contact.get('email', ''),
-            first_name=contact.get('first_name', ''),
-            last_name=contact.get('last_name', ''),
-            phone=contact.get('phone', ''),
-            campaign_name=contact.get('default_campaign', ''),
-            contact_id=contact['id'],
-        )
         campaign_moves += 1
 
         cur.execute(
