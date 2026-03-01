@@ -334,7 +334,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "url": "=https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
         "options": {}
       },
       "id": "mark-sms-done",
@@ -381,7 +381,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "url": "=https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
         "options": {}
       },
       "id": "mark-escalation-done",
@@ -443,7 +443,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
+        "url": "=https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
         "options": {}
       },
       "id": "mark-campaign-done",
