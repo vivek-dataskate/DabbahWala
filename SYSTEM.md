@@ -177,7 +177,6 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 |-------|---------|
 | `rules` | Lifecycle rule predicates + actions (SQL-driven) |
 | `campaign_routing` | **Single source of truth** for campaigns — lifecycle segment → Instantly campaign ID/name, email template file, performance stats (leads, opens, replies, etc.); `contacts.current_campaign` is always derived from this table via `lifecycle_segment` JOIN |
-| `campaign_queue` | Pending campaign moves |
 | `campaign_push_log` | Audit log of every push_instantly_lead attempt — queue_id, email, campaign, success/failure, status_code, response_body |
 | `agent_playbook` | User-configured rules (synced from Airtable daily at 6 AM) |
 | `sms_templates` | SMS A/B testing variants |
@@ -213,7 +212,7 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 
 | Function | Purpose |
 |----------|---------|
-| `run_lifecycle_cycle()` | Rule engine — evaluates predicates, transitions segments, queues campaigns |
+| `run_lifecycle_cycle()` | Rule engine — evaluates predicates, transitions segments, writes `push_instantly_lead` rows directly into `action_queue` |
 | `refresh_engagement_rollups()` | Recalculate 7d/30d engagement metrics from events |
 | `ingest_event()` | Event ingestion with audit trail and type validation |
 | `get_contact_detail()` | Full contact profile with all history |
@@ -223,7 +222,6 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 | `get_campaign_performance()` | Campaign stats (opens, clicks, orders) |
 | `generate_daily_report()` | Aggregate metrics for a date |
 | `create_opportunity()` | Opportunity creation with deduplication |
-| `get_pending_campaign_moves()` | Returns pending campaign_queue rows joined with contacts — includes `contact_first_name`, `contact_last_name` for Instantly lead creation |
 
 ---
 
@@ -245,7 +243,7 @@ Airtable ──→  n8n Menu Catalog Sync (daily)  ──→  menu_catalog table
 | `prospects.py` | `/api/prospects` | `GET /template` (new-contact CSV template), `POST /upload-csv` (bulk add new contacts), `GET /update-template` (update CSV template + enqueues Drive upload), `POST /update-csv` (bulk update existing contacts — sets name, address, priority_override, sales_notes by email/phone match), `POST /add` (single manual entry) |
 | `contacts.py` | `/api/contacts` | `PATCH /{id}/priority`, `PATCH /{id}/notes` |
 | `opportunities.py` | `/api/opportunities` | `GET /detect`, `POST /`, `GET /pending`, `POST /{id}/dispatched`, `POST /{id}/outcome` |
-| `campaigns.py` | `/api/campaigns` | `POST /push-lead` (enqueue push_instantly_lead into action_queue — the Postgres injection entry point), `GET /pending` (pending action_queue push_instantly_lead items with contact first/last name), `GET /active-contacts` (contacts with active campaign derived from lifecycle_segment via campaign_routing JOIN — for Instantly seed), `GET /active-contacts-stats` (diagnostic — filter exclusion counts + campaign distribution), `POST /log-push` (record Instantly push result in campaign_push_log), `GET /push-log` (read campaign_push_log — filter by success), `POST /{id}/executed` (mark single campaign_queue row executed), `POST /bulk-executed` (mark batch of action_queue push_instantly_lead rows as done — called by lifecycle_cycle_cron n8n workflow), `GET /analytics`, `GET /templates`, `GET /templates/{name}`, `PUT /templates/{name}`, `POST /templates/{name}/rewrite`, `POST /setup-instantly` |
+| `campaigns.py` | `/api/campaigns` | `POST /push-lead` (enqueue push_instantly_lead into action_queue), `GET /pending` (pending action_queue push_instantly_lead items), `GET /active-contacts` (contacts with active campaign derived from lifecycle_segment via campaign_routing JOIN — for Instantly seed), `GET /active-contacts-stats` (diagnostic — filter exclusion counts + campaign distribution), `POST /log-push` (record Instantly push result in campaign_push_log), `GET /push-log` (read campaign_push_log — filter by success), `GET /analytics`, `GET /templates`, `GET /templates/{name}`, `PUT /templates/{name}`, `POST /templates/{name}/rewrite`, `POST /setup-instantly` |
 | `sms.py` | `/api/telnyx` | `POST /message` (auto-creates contact + stores message for unknown inbound numbers so Observer has full context), `POST /call`, `POST /field-agent-message` (renamed from `telnyx.py`) |
 | `webhooks.py` | `/api/webhooks` | `POST /instantly` (Instantly email events), `POST /telnyx` (Telnyx inbound SMS push webhook), `POST /shipday` / `GET /shipday` (Shipday delivery status), `POST /sync-campaigns`, `GET /campaigns`, `POST /campaign-stats` |
 | `delivery.py` | `/api/delivery` | `POST /status` |
@@ -393,7 +391,7 @@ The Contact Sweep scans every contact in the database each hour to find behaviou
 | **PROFILE** | Call `refresh_engagement_rollups()` to recalculate every contact's rolling 7-day and 30-day engagement metrics (`opens_7d`, `clicks_7d`, etc.). These metrics are what all signal detection queries read. | No |
 | **SIGNAL** | Run 7 SQL functions that identify contacts matching specific behavioural patterns (SQL pattern matching only — not Claude). | No |
 | **ROUTE** | For each contact found by SIGNAL, call `create_opportunity()` — a SQL stored function — to write a row to the `opportunities` table with the action, priority, and suggested message. | No |
-| **DISPATCH** | Call `run_lifecycle_cycle()` (Stage Engine) to run SQL lifecycle rules and ensure stage transitions are up to date. Count pending opportunities and campaign moves for the cycle summary. | No |
+| **DISPATCH** | Call `run_lifecycle_cycle()` (Stage Engine) to run SQL lifecycle rules. `evaluate_rules()` writes `push_instantly_lead` rows directly into `action_queue` (with `instantly_campaign_id` resolved); the Action Queue Executor n8n workflow picks these up. | No |
 
 ### The 7 SQL Signal Types
 
@@ -437,7 +435,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **[Reports]** | Daily Outcome Report | Daily 8:30 AM | `POST /api/agents/report/outcome` → Claude HTML + CSV → enqueued to `action_queue` as `send_email_report` → SMTP |
 | **[Intelligence]** | AI Stack | Every 3 hours | `POST /api/agents/cycle/run-daily-sweep` — dormant contacts (cap 200, 72 h cooldown); 4-layer Claude pipeline (Observer→Advisor→Orchestrator→Reports) |
 | **[Intelligence]** | Contact Sweep | Hourly | `POST /api/intelligence/run-cycle` — full 5-phase sweep (COLLECT→PROFILE→SIGNAL→ROUTE→DISPATCH) |
-| **[Intelligence]** | Stage Runner | Hourly | `POST /api/lifecycle/run` — Stage Engine: pure SQL rules that move contacts between lifecycle stages |
+| **[Intelligence]** | Stage Runner | Every 15 min | `POST /api/lifecycle/run` — Stage Engine: pure SQL rules that move contacts between lifecycle stages and write `push_instantly_lead` rows directly to `action_queue` |
 | **[Intelligence]** | Lapsed Re-engagement | Daily (random offset) | Persistent re-engagement for lapsed contacts |
 | **[Growth]** | Weekly Growth Agent | Every Mon 7:30 AM | Fetch credentials → refresh baseline → measure due experiments (adaptive early cutoff at 30 events) → Claude designs+launches new experiment (agent picks `measure_days`) → build HTML report → `POST /api/internal/send-email` |
 | **[Growth]** | Goal Agent | Daily 9:00 AM | `POST /api/goal-agent/run` — 4-phase proactive loop: HYPOTHESIZE → EXPERIMENT → MEASURE → HARVEST |
