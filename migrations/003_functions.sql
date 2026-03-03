@@ -110,6 +110,7 @@ DECLARE
     v_prev_lifecycle lifecycle_segment;
     v_prev_campaign  campaign_name;
     v_new_campaign   campaign_name;
+    v_instantly_id   TEXT;
     v_updated_count  INT := 0;
 BEGIN
     UPDATE contacts
@@ -119,7 +120,8 @@ BEGIN
       AND (p_contact_id IS NULL OR id = p_contact_id);
 
     FOR v_contact IN
-        SELECT c.id, c.email, c.lifecycle_segment, c.email_nurture_enabled,
+        SELECT c.id, c.email, c.first_name, c.last_name, c.phone,
+               c.lifecycle_segment, c.email_nurture_enabled,
                c.email_promo_enabled, c.sms_promo_enabled, c.sms_level,
                c.cooling_until, c.total_orders, c.last_order_at,
                COALESCE(r.opens_7d, 0) AS opens_7d, COALESCE(r.clicks_7d, 0) AS clicks_7d,
@@ -176,15 +178,39 @@ BEGIN
                     WHERE id = v_contact.id;
 
                     IF v_rule.set_lifecycle IS NOT NULL THEN
-                        SELECT default_campaign INTO v_new_campaign
+                        SELECT default_campaign, instantly_campaign_id
+                          INTO v_new_campaign, v_instantly_id
                         FROM campaign_routing WHERE lifecycle_segment = v_rule.set_lifecycle;
                     ELSE
-                        v_new_campaign := v_prev_campaign;
+                        v_new_campaign   := v_prev_campaign;
+                        v_instantly_id   := NULL;
                     END IF;
 
                     IF v_new_campaign IS DISTINCT FROM v_prev_campaign THEN
-                        INSERT INTO campaign_queue (contact_id, from_campaign, to_campaign)
-                        VALUES (v_contact.id, v_prev_campaign, v_new_campaign);
+                        -- Write directly to action_queue; skip placeholder emails and
+                        -- segments with no Instantly campaign (e.g. cooling, optout).
+                        IF v_instantly_id IS NOT NULL
+                           AND v_contact.email IS NOT NULL
+                           AND v_contact.email NOT LIKE '%@app.placeholder.local'
+                        THEN
+                            INSERT INTO action_queue (contact_id, action_type, payload)
+                            SELECT v_contact.id::INTEGER,
+                                   'push_instantly_lead',
+                                   jsonb_build_object(
+                                       'instantly_campaign_id', v_instantly_id,
+                                       'campaign_name',         v_new_campaign::TEXT,
+                                       'email',                 v_contact.email,
+                                       'first_name',            COALESCE(v_contact.first_name, ''),
+                                       'last_name',             COALESCE(v_contact.last_name,  ''),
+                                       'phone',                 COALESCE(v_contact.phone,      '')
+                                   )
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM action_queue aq2
+                                WHERE  aq2.contact_id  = v_contact.id::INTEGER
+                                  AND  aq2.action_type = 'push_instantly_lead'
+                                  AND  aq2.status      = 'pending'
+                            );
+                        END IF;
                         v_changes := v_changes || jsonb_build_object('campaign',
                             jsonb_build_object('from', v_prev_campaign::text, 'to', v_new_campaign::text));
                     END IF;
@@ -263,7 +289,10 @@ DECLARE v_updated INT; v_queued INT;
 BEGIN
     PERFORM refresh_engagement_rollups();
     SELECT evaluate_rules() INTO v_updated;
-    SELECT count(*) INTO v_queued FROM campaign_queue WHERE status = 'pending';
+    -- campaigns_queued now counts pending push_instantly_lead rows in action_queue
+    SELECT count(*) INTO v_queued
+    FROM action_queue
+    WHERE action_type = 'push_instantly_lead' AND status = 'pending';
     RETURN QUERY SELECT v_updated, v_queued;
 END;
 $$;

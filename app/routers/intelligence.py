@@ -408,87 +408,6 @@ def _phase_dispatch(cur) -> dict:
     return stats
 
 
-def _drain_campaign_queue() -> int:
-    """
-    Convert every pending campaign_queue row (written by the Stage Engine's
-    evaluate_rules()) into a push_instantly_lead action_queue entry via the
-    single centralized push_lead_to_instantly() function.
-
-    Marks the campaign_queue row 'executed' once enqueued so it is never
-    double-processed.  Skips placeholder emails and APP_TO_DIRECT (no Instantly
-    campaign exists for that label).
-    """
-    # Mark rows that can never be drained (no real email, or APP_TO_DIRECT) as failed
-    # so they don't accumulate as pending forever.
-    with get_cursor() as cur:
-        cur.execute("""
-            UPDATE campaign_queue cq
-            SET status = 'failed', executed_at = now()
-            WHERE cq.status = 'pending'
-              AND (
-                cq.to_campaign = 'APP_TO_DIRECT'
-                OR NOT EXISTS (
-                    SELECT 1 FROM contacts c
-                    WHERE c.id = cq.contact_id
-                      AND c.email IS NOT NULL
-                      AND c.email NOT LIKE '%@app.placeholder.local'
-                )
-              )
-        """)
-        skipped = cur.rowcount
-    if skipped:
-        logger.info(
-            "drain_campaign_queue: marked %d undrainable rows as failed (no real email or APP_TO_DIRECT)",
-            skipped,
-        )
-
-    with get_cursor(commit=False) as cur:
-        cur.execute("""
-            SELECT cq.id AS queue_id, cq.to_campaign,
-                   c.id AS contact_id, c.email, c.first_name, c.last_name, c.phone
-            FROM campaign_queue cq
-            JOIN contacts c ON c.id = cq.contact_id
-            WHERE cq.status = 'pending'
-              AND c.email IS NOT NULL
-              AND c.email NOT LIKE '%@app.placeholder.local'
-              AND cq.to_campaign != 'APP_TO_DIRECT'
-            ORDER BY cq.created_at
-        """)
-        rows = [dict(r) for r in cur.fetchall()]
-
-    drained = 0
-    for row in rows:
-        queued = push_lead_to_instantly(
-            email=row['email'],
-            first_name=row['first_name'] or '',
-            last_name=row['last_name'] or '',
-            phone=row['phone'] or '',
-            campaign_name=row['to_campaign'],
-            contact_id=row['contact_id'],
-        )
-        if queued:
-            with get_cursor() as cur:
-                cur.execute(
-                    "UPDATE campaign_queue SET status='executed', executed_at=now() WHERE id=%s",
-                    (row['queue_id'],),
-                )
-            drained += 1
-        else:
-            # Campaign not in routing table — mark failed so it doesn't loop forever
-            with get_cursor() as cur:
-                cur.execute(
-                    "UPDATE campaign_queue SET status='failed', executed_at=now() WHERE id=%s",
-                    (row['queue_id'],),
-                )
-            logger.warning(
-                "drain_campaign_queue: no Instantly campaign for %s (contact_id=%s) — marked failed",
-                row['to_campaign'], row['contact_id'],
-            )
-    if drained:
-        logger.info("drain_campaign_queue: enqueued %d push_instantly_lead actions", drained)
-    return drained
-
-
 # ---------------------------------------------------------------------------
 # MAIN ENDPOINT — Full Contact Sweep
 # ---------------------------------------------------------------------------
@@ -496,9 +415,11 @@ def _drain_campaign_queue() -> int:
 def run_intelligence_cycle():
     """
     Run the complete Contact Sweep.
-    Called hourly by n8n. Returns all actions that need execution.
+    Called daily by n8n. Returns all actions that need execution.
 
     Flow: COLLECT -> PROFILE -> SIGNAL -> ROUTE -> DISPATCH
+    evaluate_rules() (inside DISPATCH) writes push_instantly_lead rows directly
+    to action_queue; the Action Queue Executor n8n workflow picks them up.
     (Entirely rule-based — no Claude calls. AI Stack runs separately via agents.py.)
     """
     with get_cursor(commit=True) as cur:
@@ -514,13 +435,8 @@ def run_intelligence_cycle():
         # Phase 4: Route
         route_stats, actions = _phase_route(cur, raw_signals)
 
-        # Phase 5: Dispatch (runs Stage Engine which may write to campaign_queue)
+        # Phase 5: Dispatch (runs Stage Engine; evaluate_rules writes to action_queue)
         dispatch_stats = _phase_dispatch(cur)
-
-    # Drain anything the Stage Engine wrote to campaign_queue into action_queue.
-    # Runs after commit so push_lead_to_instantly() sees the committed rows.
-    drained = _drain_campaign_queue()
-    dispatch_stats['campaign_moves_enqueued'] = drained
 
     return CycleResult(
         timestamp=datetime.utcnow().isoformat(),
@@ -539,18 +455,8 @@ def get_pending_actions():
     Returns campaign moves, SMS to send, and sales calls to make.
     """
     with get_cursor(commit=False) as cur:
-        # Pending campaign moves
-        cur.execute("""
-            SELECT cq.id as queue_id, c.email, c.phone, c.first_name, c.last_name,
-                   cq.from_campaign, cq.to_campaign,
-                   cr.instantly_campaign_id, cr.instantly_campaign_name
-            FROM campaign_queue cq
-            JOIN contacts c ON c.id = cq.contact_id
-            LEFT JOIN campaign_routing cr ON cr.lifecycle_segment = c.lifecycle_segment
-            WHERE cq.status = 'pending'
-            ORDER BY cq.created_at
-        """)
-        campaign_moves = [dict(r) for r in cur.fetchall()]
+        # campaign_queue removed — campaign moves go directly to action_queue
+        campaign_moves = []
 
         # Pending opportunities (grouped by action type)
         cur.execute("""
