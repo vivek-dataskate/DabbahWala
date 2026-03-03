@@ -347,38 +347,6 @@
       ]
     },
     {
-      "id": "create-airtable-escalation",
-      "name": "Create Airtable Escalation",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1320,
-        320
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Field%20Sales%20Tasks",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "raw",
-        "options": {},
-        "rawBody": "={{ $json._body }}"
-      }
-    },
-    {
       "parameters": {
         "method": "POST",
         "url": "=https://dabbahwala-latest.onrender.com/api/agents/action-queue/{{ $('Split Actions').item.json.id }}/done",
@@ -465,38 +433,6 @@
         880,
         400
       ]
-    },
-    {
-      "id": "create-airtable-task",
-      "name": "Create Airtable Field Sales Task",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        1320,
-        720
-      ],
-      "parameters": {
-        "method": "POST",
-        "url": "=https://api.airtable.com/v0/{{ $('Get Credentials').first().json.AIRTABLE_BASE_ID }}/Field%20Sales%20Tasks",
-        "authentication": "none",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{ $('Get Credentials').first().json.AIRTABLE_API_KEY }}"
-            },
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "raw",
-        "options": {},
-        "rawBody": "={{ $json._body }}"
-      }
     },
     {
       "parameters": {
