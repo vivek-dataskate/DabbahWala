@@ -414,22 +414,29 @@ def run_intelligence_cycle():
     to action_queue; the Action Queue Executor n8n workflow picks them up.
     (Entirely rule-based — no Claude calls. AI Stack runs separately via agents.py.)
     """
+    logger.info("run_intelligence_cycle — starting COLLECT→PROFILE→SIGNAL→ROUTE→DISPATCH")
     with get_cursor(commit=True) as cur:
         # Phase 1: Collect
         collect_stats = _phase_collect(cur)
+        logger.info("intelligence COLLECT — %s", collect_stats)
 
         # Phase 2: Profile
         profile_stats = _phase_profile(cur)
+        logger.info("intelligence PROFILE — %s", profile_stats)
 
         # Phase 3: Signal
         signal_counts, raw_signals = _phase_signal(cur)
+        logger.info("intelligence SIGNAL — %s", signal_counts)
 
         # Phase 4: Route
         route_stats, actions = _phase_route(cur, raw_signals)
+        logger.info("intelligence ROUTE — %s", route_stats)
 
         # Phase 5: Dispatch (runs Stage Engine; evaluate_rules writes to action_queue)
         dispatch_stats = _phase_dispatch(cur)
+        logger.info("intelligence DISPATCH — %s", dispatch_stats)
 
+    logger.info("run_intelligence_cycle — done")
     return CycleResult(
         timestamp=datetime.utcnow().isoformat(),
         collect=collect_stats,

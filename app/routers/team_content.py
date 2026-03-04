@@ -11,6 +11,7 @@ Sync flows:
   n8n (Google Drive poll) -> POST /api/team-content/sync -> Postgres
   n8n (Form submission)   -> POST /api/team-content/submit -> Postgres + Airtable
 """
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Request
@@ -18,6 +19,7 @@ from pydantic import BaseModel
 
 from app.db import get_cursor
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -51,6 +53,7 @@ async def sync_from_google_docs(request: Request):
     """
     body = await request.json()
     documents = body.get("documents", [])
+    logger.info("sync_from_google_docs — received %d documents", len(documents))
 
     created = 0
     updated = 0
@@ -111,6 +114,10 @@ async def sync_from_google_docs(request: Request):
                 )
                 created += 1
 
+    logger.info(
+        "sync_from_google_docs — done: synced=%d created=%d updated=%d skipped=%d",
+        len(documents), created, updated, skipped,
+    )
     return {
         "synced": len(documents),
         "created": created,
@@ -133,6 +140,7 @@ def submit_team_input(submission: TeamContentSubmission):
         f"{datetime.utcnow().strftime('%b %d %Y')}"
     )
 
+    logger.info("submit_team_input — type=%s author=%r", submission.content_type, submission.author)
     with get_cursor(commit=True) as cur:
         cur.execute(
             """INSERT INTO team_content
@@ -144,6 +152,7 @@ def submit_team_input(submission: TeamContentSubmission):
         )
         row = cur.fetchone()
 
+    logger.info("submit_team_input — stored id=%d type=%s", row["id"], submission.content_type)
     return {
         "id": row["id"],
         "status": "stored",

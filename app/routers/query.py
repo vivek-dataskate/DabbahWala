@@ -8,6 +8,7 @@ Two-tier system:
 Called by n8n form workflow. Returns formatted text answers.
 """
 import json
+import logging
 import os
 import re
 import traceback
@@ -19,6 +20,7 @@ from pydantic import BaseModel
 
 from app.db import get_cursor
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -1700,6 +1702,7 @@ async def handle_query(req: QueryRequest):
     date_from = req.date_from
     date_to = req.date_to
 
+    logger.info("handle_query — category=%s question_len=%d", category, len(question))
     try:
         if category == "customer_lookup":
             answer, data = _handle_customer_lookup(question, email, phone, name)
@@ -1749,15 +1752,18 @@ async def handle_query(req: QueryRequest):
         elif category == "free_form":
             answer, data = await _handle_free_form(question)
         else:
+            logger.warning("handle_query — unknown category=%s", category)
             answer = (
                 f"Unknown category: {category}. "
                 f"Available: {', '.join(CATEGORIES.keys())}"
             )
             data = {"available_categories": CATEGORIES}
     except Exception as exc:
+        logger.error("handle_query — error for category=%s: %s", category, exc, exc_info=True)
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Query failed: {exc}")
 
+    logger.debug("handle_query — category=%s answer_len=%d", category, len(answer))
     return QueryResponse(
         category=category,
         question=question or f"[{CATEGORIES.get(category, category)}]",

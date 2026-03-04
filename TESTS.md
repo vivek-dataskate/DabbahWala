@@ -1,4 +1,55 @@
-# DabbahWala — E2E Test Registry
+# DabbahWala — Test Registry
+
+## Unit Tests (`tests/`)
+
+Pytest-based unit tests using FastAPI `TestClient` and mocked DB cursors (no real DB or network).
+Run with: `pytest tests/ -v` or `bash scripts/run_tests.sh`
+
+| File | Router Covered | Tests |
+|------|----------------|-------|
+| `test_agent.py` | `agent.py` | 12 — build_contact_profile (not-found/full), get_full_system_prompt (no-rules/with-rules), call_claude no-key, analyze-contacts (exception-handled/empty/with-candidate/empty-profile), analyze-single (404/success/invalid-json) |
+| `test_agents.py` | `agents.py` | 48 — cycle run, report data, action queue CRUD, goals, run-all-lapsed, run-all, activity/outcome reports, do-not-contact, _fetch_playbook_rules, _filter_playbook, _fetch_contact 404, _lookup_contact_id (phone/email/name), _get_or_create_contact (existing/no-phone/creates-new/exception), run-all/lapsed/daily-sweep/all-contacts no-contacts + with-contacts, _fetch_outcome_data, _rows_to_csv, cycle/run error handling |
+| `test_auth.py` | `auth.py` | 26 — session create/decode/tamper/expire, login, Google OAuth redirect, callback, auth/me, logout |
+| `test_broadcasts.py` | `broadcasts.py` | 19 — create, delay-alert, queue, list, pending-recipients, recipients sent/failed, get job, validation |
+| `test_campaigns.py` | `campaigns.py` | 35 — pending, log-push, push-log, bulk-executed, active-contacts, stats, analytics, templates CRUD, rewrite (Claude), bulk-push, repair-push, push_lead_to_instantly, _get_routing_rows/row, analytics error handling |
+| `test_chatbot.py` | `chatbot.py` | 35 — ask, empty question, no key, history, suggest, reindex, _split_chunks, _compute_docs_hash, _last_indexed_at, _relevant_chunks, _lookup_canned, _find_cached_answer, _save_interaction, _save_canned, _clear_canned, _save_last_indexed_at, _save_docs_hash, _get_stored_docs_hash, _similar_history |
+| `test_config.py` | `config.py` | 20 — GET /api/credentials (no-secret/wrong/missing/valid), _check_admin_secret, POST send-email (no-SMTP/wrong-secret/STARTTLS/SSL/SMTP-error), POST drive/upload (wrong/success/fail), GET drive/files, GET docs/{id} |
+| `test_competitor_agent.py` | `competitor_agent.py` | 5 — run no key, run mocked, list runs, list experiments |
+| `test_contacts.py` | `contacts.py` | 4 — priority high/do_not_contact, invalid priority, update notes |
+| `test_daily_orders.py` | `daily_orders.py` | 27 — process CSV, empty CSV, new contacts, phone match, skip dups, download CSV, summary, normalize_phone/name/dish, _parse_delivery_slot |
+| `test_delivery.py` | `delivery.py` | 8 — record by email/phone, neither, unknown phone, stored proc args, missing status, proc 404 |
+| `test_events.py` | `events.py` | 4 — ingest with email/phone, no contact, missing event_type |
+| `test_field_agent.py` | `field_agent.py` | 8 — analyze-call 404/success, daily-brief empty/success, reviews, scorecard, pending-calls |
+| `test_goal_agent.py` | `goal_agent.py` | 37 — hypothesize, experiment, measure, harvest, run (all phases), experiments, signals, runs, _tool_call exception, _execute_cohort_sql (unsafe SQL/exception/valid), _enqueue_experiment_actions (no-phone/exception), _count_experiment_conversions, _check_and_mark_conversions, _save_discovered_signal (unsafe/exception/success), _run_conclusion_agent, _conclude_experiment, _phase_measure with experiment, /run phase exception |
+| `test_growth_agent.py` | `growth_agent.py` | 14 — run-cycle launch/skip (small cohort/empty design), measure, experiments, insights, baseline |
+| `test_intelligence.py` | `intelligence.py` | 22 — run-cycle 5 phases, pending-actions, ingest-instantly-events, _phase_collect, _phase_profile, _phase_signal, _phase_dispatch |
+| `test_lifecycle.py` | `lifecycle.py` | 3 — run returns counts, zero contacts, DB error |
+| `test_menu.py` | `menu.py` | 19 — active/inactive items, history 404/empty, sync new/update/discard/error, _to_airtable_fields, _from_airtable_record |
+| `test_n8n_workflows.py` | n8n config + seams | 294 — config integrity (26 expected workflows), JSON structure (31 files), Python API seams, live n8n (62 skipped w/o key) |
+| `test_opportunities.py` | `opportunities.py` | 9 — detect all 4 types, create, pending, dispatched, outcome |
+| `test_orders.py` | `orders.py` | 29 — ingest-orders, sync-status, top-calls, import pipeline, sync-feedback, feedback-stats, _sync_one_order (JSON/dict/None), run-migration 404, pipeline-status |
+| `test_playbook.py` | `playbook.py` | 11 — list rules, for-prompt, create, update, delete, airtable sync |
+| `test_prospects.py` | `prospects.py` | 16 — template, update-template, add prospect, add duplicate, missing name, upload-csv (add/update/skip), update-csv (update/skip/invalid) |
+| `test_query.py` | `query.py` | 49 — all 20 category handlers, tone endpoint, customer_lookup (phone/name/multiple), communication_history, ground_team_notes, ad_copies, submit_input, team_notes, sms/email performance, activity/outcome report, broadcast_history, free_form no-key, pipeline_snapshot |
+| `test_reports.py` | `reports.py` | 5 — get existing, get missing→404, generate, invalid date |
+| `test_schedules.py` | `schedules.py` | 22 — auth required, list (mocked n8n), update interval/cron/invalid, _parse_schedule (all fields), _build_interval (all fields) |
+| `test_shipday_sync.py` | `shipday_sync.py` / `orders.py` | 29 — classify_sentiment, fetch/store communications, feedback sync endpoint/stats, run_feedback_sync |
+| `test_sms.py` | `sms.py` | 23 — inbound/outbound message, auto-create contact, delivery staff skip, call, field-agent message, pending, _resolve_email (email/phone/404/400), contact-not-found in stored proc |
+| `test_team_content.py` | `team_content.py` | 9 — sync new/existing/empty, submit, browse, search |
+| `test_webhooks.py` | `webhooks.py` | 25 — list campaigns, campaign-stats, Instantly event/unknown, Telnyx inbound, Shipday auth/delivered/failed/ping |
+
+**Total unit tests: 857 passing, 62 skipped (live API — activate with env vars), 67% code coverage**
+
+To run with live API tests:
+```bash
+N8N_API_KEY=xxx CONNECTIVITY_TESTS=1 TELNYX_API_KEY=xxx INSTANTLY_API_KEY=xxx AIRTABLE_API_KEY=xxx \
+  pytest tests/ -m "n8n_live or external_connectivity"
+LIVE_DW_API_TESTS=1 pytest tests/ -m live_dw_api
+```
+
+---
+
+## E2E Test Registry
 
 This file is the **canonical reference** for all end-to-end tests in the DabbahWala test harness.
 
@@ -231,6 +282,24 @@ Tests the query engine and RAG chatbot.
 | `competitor_agent_list_runs` | `GET /api/competitor-agent/runs` returns 200 with `runs` key |
 | `competitor_agent_list_experiments` | `GET /api/competitor-agent/experiments` returns 200 with `experiments` key |
 | `goal_hypothesis_hash_schema` | `goal_experiments.hypothesis_hash` column and unique index exist (migration 058) |
+
+---
+
+## Group 16 — Team Content, Reports Generate & Playbook CRUD (`16_content_reports_playbook`)
+
+Tests the team content submission/sync/browse endpoints, the SQL daily report generate endpoint, and the full playbook rule lifecycle (create → update → delete).
+
+| Test Name | What It Checks |
+|-----------|----------------|
+| `team_content_submit` | `POST /api/team-content/submit` stores an observation and returns `{status: stored, id}` |
+| `team_content_browse` | `GET /api/team-content/browse?content_type=observation` returns `{content, count}` |
+| `team_content_sync` | `POST /api/team-content/sync` ingests a simulated Google Docs document |
+| `reports_generate_endpoint` | `POST /api/reports/daily/{date}` calls the `generate_daily_report` stored proc |
+| `playbook_rules_list` | `GET /api/playbook/rules` returns list of active rules |
+| `playbook_rule_create` | `POST /api/playbook/rules` creates a test rule and returns `{id, status: created}` |
+| `playbook_rule_update` | `PUT /api/playbook/rules/{id}` updates the test rule and returns `{status: updated}` |
+| `playbook_rule_delete` | `DELETE /api/playbook/rules/{id}` soft-deletes the test rule; verifies it leaves active list |
+| `playbook_rules_for_prompt` | `GET /api/playbook/rules/for-prompt` returns `{rule_count, prompt_section}` |
 
 ---
 

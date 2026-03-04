@@ -14,6 +14,7 @@ This agent runs after the rule-based intelligence cycle as a second pass,
 finding nuanced opportunities that rules miss.
 """
 import json
+import logging
 import os
 
 import httpx
@@ -22,6 +23,7 @@ from pydantic import BaseModel
 
 from app.db import get_cursor
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
@@ -332,8 +334,10 @@ async def analyze_contacts(limit: int = 30):
         candidates = [dict(r) for r in cur.fetchall()]
 
     if not candidates:
+        logger.info("analyze_contacts — no candidates found, nothing to do")
         return AgentResult(contacts_analyzed=0, opportunities_created=0, actions=[], reasoning_samples=[])
 
+    logger.info("analyze_contacts — found %d candidate contacts", len(candidates))
     actions = []
     reasoning_samples = []
     opps_created = 0
@@ -345,6 +349,7 @@ async def analyze_contacts(limit: int = 30):
         with get_cursor(commit=False) as cur:
             profile = build_contact_profile(cur, cid)
         if not profile:
+            logger.warning("analyze_contacts — no profile found for contact_id=%d, skipping", cid)
             continue
 
         # Ask Claude to analyze
@@ -352,6 +357,7 @@ async def analyze_contacts(limit: int = 30):
         profile_str = json.dumps(profile, default=str, indent=2)
         user_prompt = f"Analyze this DabbahWala customer and decide if we should reach out:\n\n{profile_str}"
 
+        logger.debug("analyze_contacts — calling Claude for contact_id=%d", cid)
         try:
             response = await call_claude(get_full_system_prompt(), user_prompt)
             # Parse JSON response
@@ -363,6 +369,7 @@ async def analyze_contacts(limit: int = 30):
                     clean = clean[:-3]
             analysis = json.loads(clean.strip())
         except (json.JSONDecodeError, Exception) as e:
+            logger.error("analyze_contacts — Claude response parse error for contact_id=%d: %s", cid, e)
             reasoning_samples.append({
                 'contact_id': cid, 'error': str(e), 'raw_response': response[:500] if 'response' in locals() else ''
             })
@@ -378,6 +385,10 @@ async def analyze_contacts(limit: int = 30):
 
         # Create opportunity if Claude says to act
         if analysis.get('should_act') and analysis.get('action_type'):
+            logger.info(
+                "analyze_contacts — creating opportunity contact_id=%d action=%s priority=%s confidence=%.2f",
+                cid, analysis.get('action_type'), analysis.get('priority'), analysis.get('confidence', 0.0),
+            )
             action_type = analysis['action_type']
             # Map to our enum
             opp_action = {
@@ -409,6 +420,10 @@ async def analyze_contacts(limit: int = 30):
                 'confidence': confidence,
             })
 
+    logger.info(
+        "analyze_contacts — done: analyzed=%d opportunities_created=%d",
+        len(candidates), opps_created,
+    )
     return AgentResult(
         contacts_analyzed=len(candidates),
         opportunities_created=opps_created,
