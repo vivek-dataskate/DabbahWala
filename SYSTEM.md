@@ -53,7 +53,7 @@ DabbahWala is a fresh Indian food delivery service in Atlanta. This backend syst
 |-----------|----------|-------|
 | Web service | Render (Starter) — Oregon | Auto-deploys on push to `main` |
 | PostgreSQL 16 (Supabase) | pooler.supabase.com — transaction mode (port 6543) | Schema: `dabbahwala`; search_path set via connection startup option |
-| n8n automation | Self-hosted `digitalworker.dataskate.io` | 25 workflows |
+| n8n automation | Self-hosted `digitalworker.dataskate.io` | 26 active-scheduled + 1 manual |
 | CI/CD | GitHub Actions | — |
 
 ### External Services
@@ -409,7 +409,7 @@ The Contact Sweep scans every contact in the database each hour to find behaviou
 
 ## 8. n8n Workflow Layer
 
-**26 workflows on `digitalworker.dataskate.io` — all active-scheduled**
+**27 workflows on `digitalworker.dataskate.io` — 26 active-scheduled, 1 manual-only ([System] Connectivity Check)**
 
 Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/`.
 
@@ -427,6 +427,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **[SMS]** | Dispatch Queue | Every 10 min | Poll action_queue for `send_sms` → Telnyx API → mark done |
 | **[Broadcast]** | Dispatch | Every 1 hour | Dispatch queued broadcasts (SMS via Telnyx API, email via `/api/internal/send-email`); fixed email branch + messaging_profile_id |
 | **[Email Campaigns]** | Performance Tracker | Hourly | Fetch Instantly analytics → `POST /api/webhooks/campaign-stats` |
+| **[Email Campaigns]** | Campaign Sync | Every 6 hours | Sync Instantly campaign list and metadata to `campaign_routing` |
 | **[Email Campaigns]** | Campaign Setup | Daily midnight | Create missing Instantly campaigns (no-op if all exist) |
 | **[Chatbot]** | Docs Sync | Every 30 min | List Drive folder → read Google Docs via `/api/internal/docs/{id}` → `POST /api/team-content/sync` |
 | **[Chatbot]** | Docs Reindex | Weekly Mon 2 AM | Refresh chatbot document index |
@@ -442,6 +443,7 @@ Workflow IDs tracked in `n8n/config.json`. All files version-controlled in `n8n/
 | **[Growth]** | Competitor Research | Every Mon 6:30 AM | `POST /api/competitor-agent/run` — parse .eml + scrape competitor sites + generate hypotheses → inject into `goal_experiments` |
 | **[System]** | Action Queue | Every 30 min | Route action_queue rows to Telnyx / Instantly / Airtable / Drive / `/api/internal/send-email` |
 | **[System]** | Feature Tests | Daily 5 AM | Sequential chain G1→G14, each node green/red independently; Summarize + email report to core@dabbahwala.com |
+| **[System]** | Connectivity Check | Manual only | Ping all 6 external services (FastAPI, Telnyx, Airtable, Instantly, Shipday, Google) — green/red per node |
 
 ### n8n API Notes
 
@@ -569,9 +571,10 @@ On every merge to `main`:
 2. `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
 
 **Migration rules:**
-- Files in `migrations/` numbered sequentially (next: **060**)
+- Consolidated baseline: `001_schema_types.sql` → `005_seed.sql` (idempotent, re-run safely on every deploy)
+- Additive files: `006_*.sql`, `007_*.sql`, etc. for one-time or destructive changes (next: **008**)
 - Always use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS`
-- Never modify existing migrations — always create a new one
+- Prefer editing the consolidated files (001–005) over creating new numbered files — see `CLAUDE.md` § Database Migrations
 - Schema: `dabbahwala`
 
 
@@ -591,15 +594,15 @@ On every merge to `main`:
 | Metric | Count |
 |--------|-------|
 | API endpoints | ~88+ |
-| Database migrations | 65 |
+| Migration files | 9 (5 consolidated baseline + 4 additive; next: 008) |
 | Database tables | 22+ |
 | Stored functions | 15+ |
-| n8n workflows | 30 |
+| n8n workflows | 26 active-scheduled + 1 manual-only |
 | MCP tools | 35+ |
 | Claude calls per contact cycle | 8 (3 + 4 + 1) |
 | Signal types detected | 7 |
 | Lifecycle segments | 8 |
-| Email campaigns | 5 |
+| Email campaigns | 5 active lifecycle campaigns |
 | E2E test cases | 55+ |
 
 ---
