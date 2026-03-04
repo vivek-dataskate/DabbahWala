@@ -49,7 +49,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 ## Database Migrations
 - All migrations live in `migrations/` and are numbered sequentially
-- Next available migration number: **007**
+- Next available migration number: **008**
 - Use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for idempotency
 
 ### Migration strategy — update existing files when possible
@@ -106,7 +106,7 @@ Only create a new numbered file (e.g. `006_*.sql`) for changes that **cannot be 
   - Categories: exclusion, priority, inference, decision, messaging, general
 
 ### n8n Workflow Status (2026-02-26)
-- **26 total workflows**: all active-scheduled (9 deleted total — all manual-only forms and one-shot imports removed)
+- **27 total workflows**: 26 active-scheduled + 1 manual-only (`[System] Connectivity Check`) — 9 deleted total (manual forms and one-shot imports removed)
 - All workflows use **centralized credentials**: single "DW Admin Secret" HTTP Header Auth → `GET /api/credentials` bootstrap
 - All workflows renamed to **12-feature taxonomy** format: `[Feature Group] Descriptive Name`
 - Full ID mapping in `n8n/config.json`
@@ -149,7 +149,7 @@ Only create a new numbered file (e.g. `006_*.sql`) for changes that **cannot be 
 | [System] Feature Tests | `zlKQKfJ18QGIwogq` | Daily 5 AM |
 | [System] Connectivity Check | `ipSHdFUZMj2D0r0t` | Manual only |
 
-**All 26 workflows are active-scheduled. No manual-only or deactivated workflows remain.**
+**26 workflows are active-scheduled. `[System] Connectivity Check` is manual-only (execute on demand from n8n).**
 
 - Credential IDs: only `DW Admin Secret` (HTTP Header Auth) remains; all others removed from n8n
 - All other integration keys fetched at runtime via `GET /api/credentials` (requires `ADMIN_SECRET` Render env var)

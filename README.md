@@ -6,9 +6,9 @@ Automated, AI-driven marketing orchestration for DabbahWala — a fresh Indian f
 
 | Document | Contents |
 |----------|---------|
-| [LIFECYCLE.md](LIFECYCLE.md) | **Start here** — plain-language explanation of how the lifecycle engine, intelligence engine, and AI pipeline work together to convert customers. Includes the customer journey, opportunity lifecycle, feedback loop, and why all three engines are necessary. |
-| [SYSTEM.md](SYSTEM.md) | Full technical reference — stack, schema, API layer, agent pipeline, n8n workflows, deployment |
-| [FEATURES.md](FEATURES.md) | Business features and the assets (code, DB tables, workflows) that power each one |
+| [SYSTEM.md](SYSTEM.md) | **Start here** — full technical reference: stack, schema, API layer, three-engine architecture, agent pipeline, n8n workflows, deployment |
+| [GUIDE.md](GUIDE.md) | Operator's guide — daily checklist, customer journeys, feature how-tos, troubleshooting |
+| [TESTS.md](TESTS.md) | E2E test registry — all test groups, what each test checks, how to add new tests |
 | [CLAUDE.md](CLAUDE.md) | Git workflow, credentials, deployment notes for Claude Code sessions |
 
 ## Quick Start
@@ -33,10 +33,10 @@ uvicorn app.main:app --reload
   FastAPI  (dabbahwala-latest.onrender.com)
       ├─ 4-layer Claude agent pipeline → action_queue
       ├─ 5-phase intelligence cycle → opportunities
-      └─ 10-category marketing query interface
+      └─ 14-category marketing query interface
       │
       ▼
-  n8n  (digitalworker.dataskate.io) — 22 active workflows
+  n8n  (digitalworker.dataskate.io) — 26 active workflows
       ├─ Action Queue Executor → Telnyx / Instantly / Airtable
       ├─ Broadcast Dispatch → SMS / email
       └─ Reporting → daily HTML + CSV emails
@@ -46,11 +46,11 @@ uvicorn app.main:app --reload
 
 | Metric | Value |
 |--------|-------|
-| API endpoints | 85+ |
-| Database tables | 21+ |
-| Migrations | 055 (next: 056) |
-| n8n workflows | 22 active |
+| API endpoints | 88+ |
+| Database tables | 22+ |
+| Migrations | 9 files (5 consolidated + 4 additive; next: 008) |
+| n8n workflows | 26 active-scheduled + 1 manual |
 | Claude calls per contact cycle | 8 |
 | Lifecycle segments | 8 |
-| Instantly campaigns | 5 |
-| MCP tools (Claude Desktop) | 30+ |
+| Instantly campaigns | 5 active lifecycle campaigns |
+| MCP tools (Claude Desktop) | 35+ |
