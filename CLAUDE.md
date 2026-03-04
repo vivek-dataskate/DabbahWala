@@ -24,15 +24,15 @@ Before opening any PR, review the branch diff (`git diff main...HEAD`) and updat
 
 | Changed | Update |
 |---------|--------|
-| Schema, stored procs, migrations | `SYSTEM.md` § Database Schema |
-| New/modified API routes or routers | `SYSTEM.md` § API Layer |
-| Agent pipeline logic | `SYSTEM.md` § Claude AI Agent Pipeline |
-| n8n workflow added/changed | `SYSTEM.md` § n8n Workflow Layer + § Feature Cross-Reference |
-| External service integration | `SYSTEM.md` § External Service Integrations |
+| Schema, stored procs, migrations | `OVERVIEW.md` § Database |
+| New/modified API routes or routers | `OVERVIEW.md` § API Layer |
+| Agent pipeline logic | `OVERVIEW.md` § The Five Agents |
+| n8n workflow added/changed | `OVERVIEW.md` § n8n Workflow Layer |
+| External service integration | `OVERVIEW.md` § External Services |
 | Next migration number used | `CLAUDE.md` § Database Migrations (increment the number) |
 | n8n workflow count changed | `CLAUDE.md` § n8n Workflow Status |
 | Any new/modified feature (always) | `TESTS.md` + `app/services/test_harness_service.py` |
-| New customer journey, system function, or feature how-to | `GUIDE.md` — add/update the relevant section (customer journeys §2, system functions §3, feature how-tos §4) |
+| New customer journey, user story, or how-to | `OVERVIEW.md` § Customer Journeys / User Stories / Operations |
 
 If nothing in those categories changed, docs are fine as-is — no update needed.
 Commit doc updates in the same branch before opening the PR.
@@ -49,7 +49,7 @@ If the env var is empty, read it from that file and use it directly in API calls
 
 ## Database Migrations
 - All migrations live in `migrations/` and are numbered sequentially
-- Next available migration number: **008**
+- Next available migration number: **009**
 - Use `CREATE TABLE IF NOT EXISTS` / `CREATE INDEX IF NOT EXISTS` for idempotency
 
 ### Migration strategy — update existing files when possible
